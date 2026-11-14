@@ -25,7 +25,7 @@ Verified product surfaces and where they live. Deep detail: `.cursor/skills/ribo
 
 - Long-form 16:9 from image or looping video; composition, frames, adjustments — `apps/frame-screensaver/`, `shared/screensaverComposition.ts`.
 - Export: Fast VFR or Optimized CFR — `renderScreensaver.ts`, `renderScreensaverHybrid.ts`, `screensaverCfr/`.
-- Optional subscribe animation overlay — `shared/screensaverSubscribeAnimation.ts`, hybrid/CFR paths.
+- Optional subscribe animation overlay with persistent PNG-sequence cache (static + per-channel dynamic) — `shared/screensaverSubscribeAnimation.ts`, `shared/subscribeAnimationCache*.ts`, `server/src/subscribeAnimationCache*.ts`, hybrid/CFR paths.
 - Multi-project IndexedDB library — `screensaverProjectLibrary.ts`.
 - Create Thumbnail / Send to Image Motion — `createThumbnail.ts`, `sendToImageMotion.ts`.
 - Background audio up to **1 GiB** via server audio-assets (`shared/screensaverAudio.ts`, `/api/screensaver/audio*`).

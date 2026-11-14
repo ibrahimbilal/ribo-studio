@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test:screensaver": "tsx --test ../shared/screensaverAudio.test.ts src/audioAssets.test.ts src/screensaverAudioMux.test.ts && tsx scripts/verify-screensaver.ts",
     "test:screensaver-subscribe": "tsx scripts/verify-screensaver-subscribe.ts",
+    "test:subscribe-animation-cache": "tsx --test ../shared/subscribeAnimationCacheKey.test.ts src/subscribeAnimationCache.test.ts",
+    "probe:subscribe-animation-format": "tsx scripts/probe-subscribe-animation-format.ts",
     "test:screensaver-cfr": "tsx --test ../shared/screensaverCfr.test.ts src/screensaverCfr/timeline.test.ts src/screensaverCfr/encodingConfig.test.ts && tsx scripts/verify-screensaver-cfr.ts",
     "test:screensaver-visual": "tsx scripts/visual-screensaver-adjust.ts",
     "bench:screensaver": "tsx scripts/bench-screensaver.ts",

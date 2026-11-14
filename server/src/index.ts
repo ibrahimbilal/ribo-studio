@@ -68,7 +68,10 @@ import { probeAudioFile, probeImage, probeMedia, probeSourceDetails, probeStill,
 import { imageUpscalerRouter, purgeImageUpscaler, sweepImageUpscaler } from './imageUpscalerRoutes'
 import { audioLooperRouter } from './audioLooperRoutes'
 import { createScreensaverAudioRouter } from './screensaverAudioRoutes'
+import { createSubscribeAnimationCacheRouter } from './subscribeAnimationCacheRoutes'
 import { getAudioAsset } from './audioAssets'
+import { materializeCachedAnimation } from './subscribeAnimationCache'
+import { isValidCacheKeyHex } from '../../shared/subscribeAnimationCache'
 import {
   SCREENSAVER_AUDIO_MAX_BYTES,
   formatScreensaverAudioLimitLabel,
@@ -662,6 +665,7 @@ app.post(
         let animationDir: string | null = null
         let animationOverlayX = 0
         let animationOverlayY = 0
+        let animationCacheKey: string | null = project.animationCacheKey
         if (project.subscribeAnimation.enabled) {
           if (project.kind !== 'image' || project.mode !== 'static') {
             throw new ClientError(400, 'Subscribe animation is only supported for static image exports.')
@@ -670,25 +674,40 @@ app.post(
             throw new ClientError(400, 'Upload the composed image again before exporting with subscribe animation.')
           }
           const expectedFrames = subscribeAnimationFrameCount(project.subscribeAnimation.durationSec)
-          if (animationFrameFiles.length !== expectedFrames) {
-            throw new ClientError(400, `Expected ${expectedFrames} animation frames, received ${animationFrameFiles.length}.`)
-          }
           animationDir = path.join(dir, 'anim')
           await mkdir(animationDir, { recursive: true })
-          animationFrameFiles.sort((a, b) => a.originalname.localeCompare(b.originalname, undefined, { numeric: true }))
-          let animWidth = 0
-          let animHeight = 0
-          for (let index = 0; index < animationFrameFiles.length; index += 1) {
-            const file = animationFrameFiles[index]!
-            const dest = path.join(animationDir, `${String(index + 1).padStart(4, '0')}.png`)
-            await rename(file.path, dest)
-            file.path = dest
-            const still = await probeStill(dest)
-            if (index === 0) {
-              animWidth = still.width
-              animHeight = still.height
-            } else if (still.width !== animWidth || still.height !== animHeight) {
-              throw new ClientError(400, 'Animation frames must share the same size.')
+          if (animationCacheKey) {
+            if (animationFrameFiles.length) {
+              throw new ClientError(400, 'Do not upload animation frames when using a cached animation.')
+            }
+            try {
+              const cached = await materializeCachedAnimation(animationCacheKey, animationDir)
+              if (cached.frameCount !== expectedFrames) {
+                throw new ClientError(400, `Cached animation has ${cached.frameCount} frames; expected ${expectedFrames}.`)
+              }
+            } catch (error) {
+              if (error instanceof ClientError) throw error
+              throw new ClientError(400, messageOf(error, 'Cached subscribe animation is missing or invalid.'))
+            }
+          } else {
+            if (animationFrameFiles.length !== expectedFrames) {
+              throw new ClientError(400, `Expected ${expectedFrames} animation frames, received ${animationFrameFiles.length}.`)
+            }
+            animationFrameFiles.sort((a, b) => a.originalname.localeCompare(b.originalname, undefined, { numeric: true }))
+            let animWidth = 0
+            let animHeight = 0
+            for (let index = 0; index < animationFrameFiles.length; index += 1) {
+              const file = animationFrameFiles[index]!
+              const dest = path.join(animationDir, `${String(index + 1).padStart(4, '0')}.png`)
+              await rename(file.path, dest)
+              file.path = dest
+              const still = await probeStill(dest)
+              if (index === 0) {
+                animWidth = still.width
+                animHeight = still.height
+              } else if (still.width !== animWidth || still.height !== animHeight) {
+                throw new ClientError(400, 'Animation frames must share the same size.')
+              }
             }
           }
           animationOverlayX = project.subscribeAnimation.overlayX
@@ -737,6 +756,7 @@ app.post(
           animationDir,
           animationOverlayX,
           animationOverlayY,
+          animationCacheKey: project.subscribeAnimation.enabled ? animationCacheKey : null,
         })
         res.json({ jobId: job.id })
       } catch (error) {
@@ -797,6 +817,7 @@ app.get('/api/jobs/:id/download', (req, res) => {
 app.use('/api/image-upscaler', imageUpscalerRouter)
 app.use('/api/audio-looper', audioLooperRouter)
 app.use('/api/screensaver', createScreensaverAudioRouter())
+app.use('/api/screensaver', createSubscribeAnimationCacheRouter())
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Not found.' })
@@ -1055,6 +1076,7 @@ interface ScreensaverProjectInput {
   cfrQuality: ScreensaverCfrQuality
   composition: ReturnType<typeof sanitizeComposition>
   subscribeAnimation: SubscribeAnimationSettings & { overlayX: number; overlayY: number }
+  animationCacheKey: string | null
 }
 
 function parseScreensaverProject(raw: unknown): ScreensaverProjectInput {
@@ -1116,6 +1138,11 @@ function parseScreensaverProject(raw: unknown): ScreensaverProjectInput {
     overlayX: Number.isFinite(overlayX) ? Math.max(0, Math.round(overlayX)) : 0,
     overlayY: Number.isFinite(overlayY) ? Math.max(0, Math.round(overlayY)) : 0,
   }
+  const animationCacheKeyRaw =
+    typeof (data as { animationCacheKey?: unknown }).animationCacheKey === 'string'
+      ? String((data as { animationCacheKey?: string }).animationCacheKey).trim()
+      : ''
+  const animationCacheKey = isValidCacheKeyHex(animationCacheKeyRaw) ? animationCacheKeyRaw : null
   return {
     filename: typeof data.filename === 'string' ? data.filename : 'screensaver',
     mediaId: String(data.mediaId),
@@ -1141,6 +1168,7 @@ function parseScreensaverProject(raw: unknown): ScreensaverProjectInput {
     cfrQuality,
     composition: sanitizeComposition(data.composition),
     subscribeAnimation: { ...subscribeAnimation, ...overlay },
+    animationCacheKey,
   }
 }
 

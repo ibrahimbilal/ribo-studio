@@ -1,11 +1,13 @@
 import { parseVideoUrl } from '../../shared/urls'
-import { parseYoutubeChannelPageUrl } from '../../shared/youtubeChannel'
+import { parseYoutubeChannelPageUrl, resolveYoutubeChannelId } from '../../shared/youtubeChannel'
 import { fetchYoutubeAvatarDataUrl } from './youtubeAvatar'
 
 export interface YoutubeChannelLookupResult {
   ok: true
   channelName: string | null
   channelUrl: string | null
+  /** Canonical YouTube channel ID (`UC…`) when resolved. */
+  channelId: string | null
   /** YouTube CDN URL only (safe for editor state and export JSON). */
   avatarUrl: string | null
   /** Proxied image for immediate client draw; not stored in project settings. */
@@ -29,6 +31,7 @@ export async function lookupYoutubeChannel(
     let avatarUrl: string | null = null
     let avatarDataUrl: string | null = null
     let subscriberCount: string | null = null
+    let channelId: string | null = youtubeChannelIdFromAuthorUrl(meta.author_url)
     if (meta.author_url) {
       const page = await fetchChannelPage(meta.author_url)
       if (page) {
@@ -36,12 +39,14 @@ export async function lookupYoutubeChannel(
         avatarUrl = assets.avatarUrl
         avatarDataUrl = assets.avatarDataUrl
         subscriberCount = page.subscriberCount
+        channelId = page.channelId ?? channelId
       }
     }
     return {
       ok: true,
       channelName: meta.author_name,
       channelUrl: meta.author_url,
+      channelId,
       avatarUrl,
       avatarDataUrl,
       subscriberCount,
@@ -60,11 +65,16 @@ export async function lookupYoutubeChannel(
     ok: true,
     channelName: page.title,
     channelUrl: channel.normalizedUrl,
+    channelId: page.channelId ?? channel.channelId,
     avatarUrl: assets.avatarUrl,
     avatarDataUrl: assets.avatarDataUrl,
     subscriberCount: page.subscriberCount,
     source: 'channel-page',
   }
+}
+
+function youtubeChannelIdFromAuthorUrl(url: string | null): string | null {
+  return resolveYoutubeChannelId({ url })
 }
 
 async function resolveAvatarAssets(
@@ -100,7 +110,7 @@ async function fetchYoutubeOembed(
 
 async function fetchChannelPage(
   pageUrl: string,
-): Promise<{ title: string | null; avatarUrl: string | null; subscriberCount: string | null } | null> {
+): Promise<{ title: string | null; avatarUrl: string | null; subscriberCount: string | null; channelId: string | null } | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10000)
   try {
@@ -114,7 +124,7 @@ async function fetchChannelPage(
     })
     if (!response.ok) return null
     const html = await response.text()
-    return parseChannelPageHtml(html)
+    return parseChannelPageHtml(html, pageUrl)
   } catch {
     return null
   } finally {
@@ -122,7 +132,10 @@ async function fetchChannelPage(
   }
 }
 
-function parseChannelPageHtml(html: string): { title: string | null; avatarUrl: string | null; subscriberCount: string | null } {
+function parseChannelPageHtml(
+  html: string,
+  pageUrl?: string,
+): { title: string | null; avatarUrl: string | null; subscriberCount: string | null; channelId: string | null } {
   const ogTitle =
     html.match(/property="og:title"\s+content="([^"]+)"/i)?.[1] ??
     html.match(/name="title"\s+content="([^"]+)"/i)?.[1] ??
@@ -135,8 +148,9 @@ function parseChannelPageHtml(html: string): { title: string | null; avatarUrl: 
     html.match(/"thumbnail"\s*:\s*\{\s*"thumbnails"\s*:\s*\[\s*\{\s*"url"\s*:\s*"([^"]+)"/)?.[1]
   const avatarUrl = avatarMatch ? safeHttpUrl(unescapeJsonUrl(avatarMatch)) : null
   const subscriberCount = parseSubscriberCountText(html)
+  const channelId = resolveYoutubeChannelId({ url: pageUrl, html })
 
-  return { title: title || null, avatarUrl, subscriberCount }
+  return { title: title || null, avatarUrl, subscriberCount, channelId }
 }
 
 function parseSubscriberCountText(html: string): string | null {

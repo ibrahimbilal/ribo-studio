@@ -10,6 +10,12 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-14
+
+### Added
+
+- Screensaver: persistent Subscribe Animation cache (transparent PNG sequences on disk, shared across projects; static templates + per–YouTube-channel dynamic channel-card assets). Background prep, cache status in Settings, and export reuse via `animationCacheKey` without re-rendering when inputs are unchanged.
+
 ## [1.1.0] — 2026-11-14
 
 ### Added

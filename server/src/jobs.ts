@@ -1,6 +1,7 @@
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import { releaseAudioAssets, retainAudioAssets } from './audioAssets'
+import { releaseSubscribeAnimationCache, retainSubscribeAnimationCache } from './subscribeAnimationCache'
 import { releaseClips, retainClips, jobsDir, outputsDir } from './storage'
 import { renderProject, type RenderRequest } from './render'
 import { renderScreensaver, type ScreensaverRenderRequest } from './renderScreensaver'
@@ -158,6 +159,7 @@ export function createScreensaverJob(
   jobs.set(id, job)
   retainClips([input.mediaId])
   if (input.audioAssetId) retainAudioAssets([input.audioAssetId])
+  if (input.animationCacheKey) retainSubscribeAnimationCache([input.animationCacheKey])
   queue.push(id)
   void pump()
   return view(job)
@@ -302,13 +304,22 @@ async function pump(): Promise<void> {
         continue
       }
       activeId = id
+      // Elapsed starts when the queue begins processing this job (not while waiting behind others).
+      if (job.encodeStarted == null) job.encodeStarted = Date.now()
+      noteTiming(job)
       try {
         const hooks = {
           cancelled: () => job.cancelRequested || job.status === 'cancelled',
           onProgress: (progress: number, message?: string) => {
             if (job.cancelRequested) return
             job.progress = progress
-            if (message) job.message = message
+            if (message) {
+              job.message = message
+              // Keep Export status Stage in sync during long preparing/render work.
+              if (job.status === 'preparing' || job.status === 'rendering') {
+                job.stage = message
+              }
+            }
             noteTiming(job)
           },
           onStats: (stats: { fps: number | null; speed: number | null }) => {
@@ -326,7 +337,11 @@ async function pump(): Promise<void> {
             job.status = status
             job.message = message
             job.stage = stageLabel(status, message)
-            if (status === 'rendering' && job.encodeStarted == null) job.encodeStarted = Date.now()
+            // Start wall clock when this job is actively processed (preparing), not only at FFmpeg render.
+            if ((status === 'preparing' || status === 'rendering') && job.encodeStarted == null) {
+              job.encodeStarted = Date.now()
+            }
+            noteTiming(job)
           },
           registerKill: (kill: () => void) => {
             job.kill = kill
@@ -413,6 +428,7 @@ async function finish(job: Job): Promise<void> {
   } else if (job.kind === 'screensaver') {
     releaseClips([job.mediaId])
     if (job.audioAssetId) releaseAudioAssets([job.audioAssetId])
+    if (job.animationCacheKey) releaseSubscribeAnimationCache([job.animationCacheKey])
   } else if (job.kind === 'image-motion') {
     releaseClips(job.mediaIds)
   }
@@ -510,11 +526,12 @@ function noteTiming(job: Job): void {
 }
 
 function stageLabel(status: JobStatus, message: string): string {
-  if (status === 'preparing') return 'Preparing media'
-  if (status === 'rendering') return 'Encoding'
-  if (status === 'verifying') return 'Validating output'
+  const detail = typeof message === 'string' ? message.trim() : ''
+  if (status === 'preparing') return detail || 'Preparing media'
+  if (status === 'rendering') return detail || 'Encoding'
+  if (status === 'verifying') return detail || 'Validating output'
   if (status === 'done') return 'Completed'
-  return message
+  return detail || message
 }
 
 export function outputFile(id: string, ext = '.mp4'): string {

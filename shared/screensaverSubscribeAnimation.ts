@@ -1,5 +1,6 @@
 import { DEFAULT_SCREENSAVER_OUTPUT } from './screensaver'
 import { isAllowedYoutubeAvatarUrl, isYoutubeAvatarDataUrl } from './youtubeAvatar'
+import { sanitizeYoutubeChannelId } from './youtubeChannelId'
 
 export const SUBSCRIBE_ANIMATION_FPS = 60
 
@@ -86,6 +87,8 @@ export interface SubscribeAnimationSettings {
   channelCardTheme: SubscribeChannelCardTheme
   /** YouTube channel or video URL used to fetch channel name / avatar. */
   channelUrl: string
+  /** Canonical YouTube channel ID (`UC…`) when resolved; used for dynamic animation cache paths. */
+  channelId: string | null
   /** Avatar for the channel card: data URL from lookup or a YouTube CDN URL. */
   channelAvatarUrl: string | null
   /** e.g. "1.23M subscribers" from YouTube lookup. */
@@ -105,6 +108,7 @@ export function defaultSubscribeAnimation(): SubscribeAnimationSettings {
     previewOnCanvas: true,
     channelCardTheme: 'light',
     channelUrl: DEFAULT_SUBSCRIBE_CHANNEL_URL,
+    channelId: null,
     channelAvatarUrl: null,
     channelSubscriberCount: null,
   }
@@ -168,6 +172,10 @@ export function sanitizeSubscribeAnimation(raw: unknown): SubscribeAnimationSett
     typeof data.channelUrl === 'string' && data.channelUrl.trim()
       ? data.channelUrl.trim().slice(0, 600)
       : defaults.channelUrl
+  const channelId =
+    data.channelId === null
+      ? null
+      : sanitizeYoutubeChannelId(data.channelId) ?? defaults.channelId
   const channelAvatarUrl =
     typeof data.channelAvatarUrl === 'string' && data.channelAvatarUrl.trim()
       ? sanitizeChannelAvatarUrl(data.channelAvatarUrl)
@@ -192,6 +200,7 @@ export function sanitizeSubscribeAnimation(raw: unknown): SubscribeAnimationSett
     previewOnCanvas,
     channelCardTheme,
     channelUrl,
+    channelId,
     channelAvatarUrl,
     channelSubscriberCount,
   }

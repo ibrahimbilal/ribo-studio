@@ -23,15 +23,21 @@ export interface JobPollUpdate {
 }
 
 export function mapJobToProgress(job: JobStatus, uploadProgress = 0.16): JobPollUpdate {
+  const jobProgress = Math.min(1, Math.max(0, Number(job.progress) || 0))
   let progress = uploadProgress
-  if (job.status === 'preparing') progress = 0.2
-  if (job.status === 'rendering') progress = 0.2 + job.progress * 0.75
+  // Preparing used to hardcode 0.2 and ignore server progress, so long CFR/hybrid
+  // setup looked stuck. Use the same encode band once the server reports progress.
+  if (job.status === 'preparing') {
+    progress = jobProgress > 0 ? 0.2 + jobProgress * 0.75 : Math.max(uploadProgress, 0.2)
+  }
+  if (job.status === 'rendering') progress = 0.2 + jobProgress * 0.75
   if (job.status === 'verifying') progress = 0.97
   if (job.status === 'done') progress = 1
   const phase = job.status === 'queued' ? 'queued' : job.status
   let encodeProgress: number | null = null
-  if (job.status === 'queued' || job.status === 'preparing') encodeProgress = 0
-  if (job.status === 'rendering') encodeProgress = Math.min(1, Math.max(0, job.progress))
+  if (job.status === 'queued') encodeProgress = 0
+  if (job.status === 'preparing') encodeProgress = jobProgress > 0 ? jobProgress : 0
+  if (job.status === 'rendering') encodeProgress = jobProgress
   if (job.status === 'verifying' || job.status === 'done') encodeProgress = 1
   return {
     phase,

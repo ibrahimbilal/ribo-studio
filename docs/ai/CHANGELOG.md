@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.1.0**).
+Version source of truth: root `package.json` (currently **1.2.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,8 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.2.0** (2026-11-14) — Screensaver subscribe animation persistent PNG cache (static/dynamic templates, SHA-256 keys, disk store, Settings cache UI, export `animationCacheKey`), YouTube `channelId` on lookup, cache tests + format probe.
+- 2026-11-14 — Screensaver subscribe animation persistent PNG cache: template static/dynamic registry, SHA-256 keys, `server/tmp/subscribe-animation-cache/`, YouTube `channelId` on lookup/settings, client background prep + Settings cache UI, export `animationCacheKey` hardlink into job anim; tests `test:subscribe-animation-cache`, format probe `probe:subscribe-animation-format` (`shared/subscribeAnimation*.ts`, `youtubeChannelId.ts`, `subscribeAnimationCache*.ts`, screensaver store/settings, docs).
 - Release **v1.1.0** (2026-11-14) — Source-Quality-First audio (planner, stream-copy Looper/Screensaver mux, source-aware bitrates, duration recovery), durable Screensaver audio-assets (1 GiB, FLAC), Looper **Send to Screensaver** (`from-looper-plan`), channel policy + probe, Ranking Delete all, Shuffle UI, ribo identifier rename, Hostinger tooling removed, launcher rename to Ribo Studio.exe.
 - 2026-11-14 — Stream-copy duration misses recover via `STREAM_COPY_TRIM` / expanded playlist concat before any lossy re-encode; probe prefers stream vs container duration (`audioDurationRecovery.ts`, `renderAudioLooper.ts`, `probe.ts`).
 - 2026-11-14 — Looper→Screensaver STREAM_COPY no longer overridden by unconditional WAV→AAC; mux honors plan (`streamCopy` / decode / lossless / lossy counters; separate source vs stream bitrates; `isPlainGain` checks both Looper and Screensaver gains) (`screensaverAudioMux.ts`, `audioProcessing.ts`, `audioProcessingPlan.ts`, `screensaverAudioMux.test.ts`).

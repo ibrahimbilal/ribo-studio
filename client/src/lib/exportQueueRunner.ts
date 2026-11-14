@@ -39,12 +39,27 @@ async function drainPrepQueue(): Promise<void> {
         continue
       }
       try {
-        const jobId = await item.submit(item.signal, item.onUpdate)
+        // Elapsed starts when this export leaves the client wait queue and begins prep/upload.
+        const processStarted = Date.now()
+        let prepareHandoffProgress = 0.16
+        const onUpdate = (patch: JobPollUpdate) => {
+          if (typeof patch.progress === 'number' && Number.isFinite(patch.progress)) {
+            prepareHandoffProgress = Math.max(prepareHandoffProgress, patch.progress)
+          }
+          const localElapsed = Math.round(((Date.now() - processStarted) / 1000) * 10) / 10
+          const serverElapsed = patch.elapsedSec
+          const elapsedSec =
+            serverElapsed != null && Number.isFinite(serverElapsed)
+              ? Math.max(serverElapsed, localElapsed)
+              : localElapsed
+          item.onUpdate({ ...patch, elapsedSec })
+        }
+        const jobId = await item.submit(item.signal, onUpdate)
         if (item.signal.aborted) {
           item.onComplete('cancelled')
           continue
         }
-        void pollJobUntilDone(jobId, item.signal, item.onUpdate)
+        void pollJobUntilDone(jobId, item.signal, onUpdate, prepareHandoffProgress)
           .then(() => {
             item.onComplete('done')
           })

@@ -15,7 +15,7 @@ Concise navigation for Ribo Studio (repo `ibrahimbilal/ribo-studio`). Deep detai
 | Dashboard | `/` | `client/src/views/` | — | — |
 | Shorts (Ranking) | `/shorts` | `client/src/apps/ranking-videos/`, `client/src/stores/project.ts`, `client/src/components/` | `shared/frame.ts`, `shared/timeline.ts` | `server/src/render.ts`, clips/export in `index.ts` |
 | Shorts (Image Motion) | `/shorts` (mode) | `client/src/apps/image-motion-shorts/` | `shared/imageMotion.ts`, `shared/imageMotionTimeline.ts` | `server/src/renderImageMotion.ts` |
-| Screensaver | `/screensaver` | `client/src/apps/frame-screensaver/` | `shared/screensaver*.ts` | `server/src/renderScreensaver*.ts`, `server/src/screensaverCfr/` |
+| Screensaver | `/screensaver` | `client/src/apps/frame-screensaver/` | `shared/screensaver*.ts`, `shared/subscribeAnimation*.ts` | `server/src/renderScreensaver*.ts`, `server/src/screensaverCfr/`, `server/src/subscribeAnimationCache*.ts` |
 | Thumbnails | `/thumbnails` | `client/src/apps/thumbnail-studio/` | `shared/thumbnail*.ts` | Browser-only export (no FFmpeg) |
 | Image Upscaler | `/upscale` | `client/src/apps/image-upscaler/` | `shared/imageUpscaler.ts` | `server/src/imageUpscaler*.ts`, `realesrgan*.ts` |
 | Audio Looper | `/looper` | `client/src/apps/audio-looper/` | `shared/audioLooper*.ts`, `shared/audioProcessingPlan.ts` | `server/src/renderAudioLooper.ts`, `audioLooperRoutes.ts`, `audioProcessing.ts` |
@@ -57,6 +57,7 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Ranking preview/export paint | `client/src/lib/drawOverlay.ts`, `format.ts`, `shared/frame.ts`, `shared/timeline.ts`, `server/src/render.ts` |
 | Ranking editor state | `client/src/stores/project.ts` |
 | Screensaver encode | `server/src/renderScreensaver.ts`, `renderScreensaverHybrid.ts`, `screensaverCfr/` |
+| Screensaver subscribe animation cache | `shared/subscribeAnimationCache*.ts`, `shared/subscribeAnimationTemplates.ts`, `server/src/subscribeAnimationCache*.ts` |
 | Screensaver background audio | `shared/screensaverAudio.ts`, `server/src/audioAssets.ts`, `screensaverAudioRoutes.ts`, `screensaverAudioMux.ts` |
 | Looper → Screensaver | `client/.../audio-looper/lib/sendToScreensaver.ts`, `LooperSendToScreensaver.vue`, `POST /api/screensaver/audio/from-looper-plan` |
 | Shared UI look | `client/src/style.css`, `client/src/components/ui/` |

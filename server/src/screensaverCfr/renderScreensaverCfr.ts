@@ -122,6 +122,8 @@ export async function renderScreensaverCfr(
   const encodeTotal = estimateEncodeUnits(timeline, job.fps)
 
   try {
+    // Segment encodes are real FFmpeg work — leave preparing so the UI can show encode %.
+    hooks.onStatus('rendering', 'Rendering artwork')
     report(hooks, WEIGHTS.prepare, 'Rendering artwork')
 
     for (const region of timeline.regions) {

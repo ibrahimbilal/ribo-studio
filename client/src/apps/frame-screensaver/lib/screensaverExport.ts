@@ -1,6 +1,10 @@
 import { cancelJob, startScreensaverExport } from '../../../lib/api'
 import { pollJobUntilDone, type JobPollUpdate } from '../../../lib/jobPoll'
 import type { ExportState } from '../../../types'
+import {
+  SCREENSAVER_PREPARE_PROGRESS_END,
+  screensaverPrepareUiProgress,
+} from './screensaverPrepareProgress'
 
 export type ScreensaverExportUpdate = JobPollUpdate & { phase?: ExportState['phase'] }
 
@@ -11,6 +15,8 @@ interface ScreensaverExportInput {
   frameBlob: Blob | null
   maskBlob: Blob | null
   animationFrameBlobs: Blob[] | null
+  /** When true, upload weight follows the animation-enabled prepare curve. */
+  animationEnabled?: boolean
   signal: AbortSignal
   onUpdate: (patch: ScreensaverExportUpdate) => void
 }
@@ -28,11 +34,32 @@ export async function submitScreensaverExport(input: ScreensaverExportInput): Pr
     })
   }
 
-  input.onUpdate({ phase: 'uploading', progress: 0.05, message: 'Sending export settings.', error: null, warning: null, downloadUrl: null })
+  const animationEnabled = Boolean(input.animationEnabled)
+  const uploadProgress = (fraction: number) =>
+    screensaverPrepareUiProgress(animationEnabled, {
+      composition: 1,
+      animation: animationEnabled ? 1 : 0,
+      upload: fraction,
+    })
+
+  input.onUpdate({
+    phase: 'uploading',
+    progress: uploadProgress(0),
+    message: 'Sending export settings.',
+    stage: 'Uploading export',
+    error: null,
+    warning: null,
+    downloadUrl: null,
+  })
   const started = await startScreensaverExport(
     body,
     (fraction) => {
-      input.onUpdate({ progress: 0.05 + fraction * 0.1 })
+      input.onUpdate({
+        phase: 'uploading',
+        progress: uploadProgress(fraction),
+        message: 'Uploading export files.',
+        stage: 'Uploading export',
+      })
     },
     input.signal,
   )
@@ -40,6 +67,12 @@ export async function submitScreensaverExport(input: ScreensaverExportInput): Pr
     await cancelJob(started.jobId)
     throw new DOMException('The export was cancelled.', 'AbortError')
   }
+  input.onUpdate({
+    phase: 'queued',
+    progress: SCREENSAVER_PREPARE_PROGRESS_END,
+    message: 'Export queued on the renderer.',
+    stage: 'Queued',
+  })
   return started.jobId
 }
 
@@ -48,7 +81,7 @@ export async function runScreensaverExport(input: ScreensaverExportInput): Promi
   try {
     await pollJobUntilDone(jobId, input.signal, (patch) => {
       input.onUpdate(patch as ScreensaverExportUpdate)
-    }, 0.16)
+    }, SCREENSAVER_PREPARE_PROGRESS_END)
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       input.onUpdate({ phase: 'cancelled', message: 'Export cancelled.', error: null })

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Eye, RotateCcw, SquareSplitHorizontal, Trash2, X } from '@lucide/vue'
 import { ADJUSTMENT_FIELDS } from '@shared/screensaverAdjust'
 import { FRAME_FILE_LIMIT } from '@shared/screensaverFrames'
 import { DURATION_PRESETS, SCREENSAVER_OUTPUTS, type ScreensaverCfrQuality, type ScreensaverRenderMode } from '@shared/screensaver'
 import { SUBSCRIBE_ANIMATION_DURATION_SEC, SUBSCRIBE_ANIMATION_FPS, SUBSCRIBE_ANIMATION_POSITIONS, SUBSCRIBE_ANIMATION_STYLES, SUBSCRIBE_CHANNEL_CARD_THEMES, MAX_SUBSCRIBE_EDGE_DISTANCE, MIN_SUBSCRIBE_EDGE_DISTANCE, MIN_SUBSCRIBE_SIZE_PERCENT, MAX_SUBSCRIBE_SIZE_PERCENT, defaultSubscribeSizePercent, type SubscribeAnimationStyle } from '@shared/screensaverSubscribeAnimation'
+import type { SubscribeAnimationCachePrepStatus } from '@shared/subscribeAnimationCache'
 import AdvancedAudioControls from '../../../components/audio/AdvancedAudioControls.vue'
 import AudioFileField from '../../../components/audio/AudioFileField.vue'
 import FileDropZone from '../../../components/FileDropZone.vue'
@@ -12,6 +13,7 @@ import SettingsAccordion from '../../../components/SettingsAccordion.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
 import SliderField from '../../../components/SliderField.vue'
 import ToggleSwitch from '../../../components/ToggleSwitch.vue'
+import { formatBytes } from '../../../lib/format'
 import { webGl2Available } from '../lib/render/createScreensaverRenderer'
 import type { PreviewRendererMode } from '../lib/previewRendererPreference'
 import { useScreensaverStore } from '../stores/screensaver'
@@ -20,6 +22,13 @@ import { positionLabel } from '../lib/subscribeAnimation/subscribeAnimationLayou
 
 const store = useScreensaverStore()
 const channelUrlDraft = ref(store.subscribeAnimation.channelUrl)
+watch(
+  () => store.subscribeAnimation.channelUrl,
+  (url) => {
+    channelUrlDraft.value = url
+  },
+  { immediate: true },
+)
 function onSubscribeStyleChange(event: Event) {
   const style = (event.target as HTMLSelectElement).value as SubscribeAnimationStyle
   store.replaceSubscribeAnimation({
@@ -27,6 +36,27 @@ function onSubscribeStyleChange(event: Event) {
     sizePercent: defaultSubscribeSizePercent(style),
     edgeDistance: 0,
   })
+}
+
+function onSubscribeChannelSelect(event: Event) {
+  const channelId = (event.target as HTMLSelectElement).value.trim()
+  if (!channelId) return
+  void store.selectSubscribeChannel(channelId)
+}
+
+function subscribeCacheStatusLabel(status: SubscribeAnimationCachePrepStatus): string {
+  switch (status) {
+    case 'ready':
+      return 'Ready'
+    case 'queued':
+      return 'Queued'
+    case 'preparing':
+      return 'Preparing animation'
+    case 'failed':
+      return 'Failed'
+    default:
+      return 'Not prepared'
+  }
 }
 
 const previewRendererActiveLabel = computed(() => {
@@ -160,6 +190,24 @@ const inspectorTabs = [
                         >
                           <option v-for="item in SUBSCRIBE_CHANNEL_CARD_THEMES" :key="item" :value="item">{{ item === 'light' ? 'Light' : 'Dark' }}</option>
                         </select>
+                        <label class="mt-3 block text-xs text-zinc-500">Channel</label>
+                        <select
+                          class="field mt-1"
+                          :value="store.subscribeAnimation.channelId ?? ''"
+                          :disabled="store.subscribeChannelOptions.length === 0"
+                          @change="onSubscribeChannelSelect"
+                        >
+                          <option v-if="store.subscribeChannelOptions.length === 0" value="">
+                            Fetch a channel to save it here
+                          </option>
+                          <option
+                            v-for="channel in store.subscribeChannelOptions"
+                            :key="channel.channelId"
+                            :value="channel.channelId"
+                          >
+                            {{ channel.channelName }}
+                          </option>
+                        </select>
                         <label class="mt-3 block text-xs text-zinc-500">YouTube channel or video URL</label>
                         <div class="mt-1 flex gap-2">
                           <input
@@ -178,7 +226,7 @@ const inspectorTabs = [
                             {{ store.subscribeChannelLookupLoading ? 'Loading…' : 'Fetch' }}
                           </button>
                         </div>
-                        <p class="mt-1 text-xs text-zinc-500">Fetch loads channel name, avatar, and subscriber count when YouTube returns them.</p>
+                        <p class="mt-1 text-xs text-zinc-500">Fetch adds or updates a channel in the list. The selected channel is remembered for new projects.</p>
                         <p
                           v-if="store.subscribeAnimation.channelName"
                           class="mt-2 text-xs text-zinc-400"
@@ -188,6 +236,15 @@ const inspectorTabs = [
                         </p>
                       </div>
                     </div>
+                  </div>
+                  <div class="mt-3 flex items-center justify-between gap-3">
+                    <span class="text-xs text-zinc-500">Animation cache</span>
+                    <span
+                      class="text-xs"
+                      :class="store.subscribeAnimationCacheStatus === 'ready' ? 'text-emerald-400' : store.subscribeAnimationCacheStatus === 'failed' ? 'text-red-400' : 'text-zinc-400'"
+                    >
+                      {{ subscribeCacheStatusLabel(store.subscribeAnimationCacheStatus) }}
+                    </span>
                   </div>
                   <label class="mt-3 block text-xs text-zinc-500">Start time (seconds)</label>
                   <input
@@ -235,6 +292,85 @@ const inspectorTabs = [
                     />
                   </div>
                   <p class="mt-1 text-xs text-zinc-500">Loops on the main canvas so you can tune position, size, and edge distance while editing.</p>
+                  <div class="mt-4 border-t border-zinc-800 pt-3">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-xs font-medium text-zinc-300">Subscribe Animation Cache</span>
+                      <button
+                        class="btn btn-ghost cursor-pointer text-xs"
+                        type="button"
+                        :disabled="store.subscribeCacheBusy"
+                        @click="void store.refreshSubscribeCacheStats()"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <p class="mt-2 text-xs text-zinc-500">
+                      <template v-if="store.subscribeCacheStats">
+                        {{ formatBytes(store.subscribeCacheStats.totalBytes) }}
+                        · {{ store.subscribeCacheStats.staticCount }} static
+                        · {{ store.subscribeCacheStats.channelCount }} channels
+                        · {{ store.subscribeCacheStats.dynamicCount }} dynamic
+                      </template>
+                      <template v-else>
+                        Persistent across projects and restarts.
+                      </template>
+                    </p>
+                    <div
+                      v-if="store.subscribeCacheStats?.channels?.length"
+                      class="mt-2 max-h-28 space-y-1 overflow-y-auto text-xs text-zinc-500"
+                    >
+                      <div
+                        v-for="channel in store.subscribeCacheStats.channels"
+                        :key="channel.channelId"
+                        class="flex justify-between gap-2"
+                      >
+                        <span class="truncate">{{ channel.channelName || channel.channelId }}</span>
+                        <span class="shrink-0">{{ formatBytes(channel.bytes) }} · {{ channel.animationCount }}</span>
+                      </div>
+                    </div>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      <button
+                        class="btn btn-ghost cursor-pointer text-xs"
+                        type="button"
+                        :disabled="store.subscribeCacheBusy"
+                        @click="void store.prepareStaticSubscribeAnimations()"
+                      >
+                        Prepare static
+                      </button>
+                      <button
+                        class="btn btn-ghost cursor-pointer text-xs"
+                        type="button"
+                        :disabled="store.subscribeCacheBusy || !store.subscribeAnimation.enabled"
+                        @click="void store.rebuildSelectedSubscribeAnimation()"
+                      >
+                        Rebuild selected
+                      </button>
+                      <button
+                        class="btn btn-ghost cursor-pointer text-xs"
+                        type="button"
+                        :disabled="store.subscribeCacheBusy"
+                        @click="void store.clearSubscribeAnimationCacheScope('static')"
+                      >
+                        Clear static
+                      </button>
+                      <button
+                        class="btn btn-ghost cursor-pointer text-xs"
+                        type="button"
+                        :disabled="store.subscribeCacheBusy || !store.subscribeAnimation.channelId"
+                        @click="void store.clearSubscribeAnimationCacheScope('channel')"
+                      >
+                        Clear channel
+                      </button>
+                      <button
+                        class="btn btn-ghost cursor-pointer text-xs text-red-400"
+                        type="button"
+                        :disabled="store.subscribeCacheBusy"
+                        @click="void store.clearSubscribeAnimationCacheScope('all')"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

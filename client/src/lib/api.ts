@@ -114,6 +114,7 @@ export interface YoutubeChannelLookupResult {
   ok: true
   channelName: string | null
   channelUrl: string | null
+  channelId: string | null
   avatarUrl: string | null
   avatarDataUrl: string | null
   subscriberCount: string | null
@@ -379,6 +380,131 @@ export async function listRecoverableJobs(): Promise<JobStatus[]> {
 
 export async function cancelJob(id: string): Promise<void> {
   await fetch(`/api/jobs/${id}/cancel`, { method: 'POST' }).catch(() => undefined)
+}
+
+export interface SubscribeAnimationCacheEntry {
+  cacheKey: string
+  kind: 'static' | 'dynamic'
+  templateId: string
+  channelId: string | null
+  frameCount: number
+  width: number
+  height: number
+  fileSize: number
+  createdAt: number
+  lastUsedAt: number
+  ready: true
+}
+
+export interface SubscribeAnimationCacheStats {
+  totalBytes: number
+  staticCount: number
+  dynamicCount: number
+  channelCount: number
+  channels: Array<{
+    channelId: string
+    channelName: string | null
+    bytes: number
+    animationCount: number
+    lastUsedAt: number | null
+  }>
+  maxBytes: number
+}
+
+export async function fetchSubscribeAnimationCacheStatus(
+  cacheKey: string,
+): Promise<{ ready: boolean; entry?: SubscribeAnimationCacheEntry }> {
+  const response = await fetch(`/api/screensaver/subscribe-animation-cache/status?key=${encodeURIComponent(cacheKey)}`)
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as { ready: boolean; entry?: SubscribeAnimationCacheEntry }
+}
+
+export async function fetchSubscribeAnimationCacheStats(): Promise<SubscribeAnimationCacheStats> {
+  const response = await fetch('/api/screensaver/subscribe-animation-cache/stats')
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as SubscribeAnimationCacheStats
+}
+
+export async function prepareStaticSubscribeAnimationHints(
+  candidates: Array<{ cacheKey: string; templateId: string }>,
+): Promise<{ missing: Array<{ cacheKey: string; templateId: string }> }> {
+  const response = await fetch('/api/screensaver/subscribe-animation-cache/prepare-static', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ candidates }),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as { missing: Array<{ cacheKey: string; templateId: string }> }
+}
+
+export async function upsertSubscribeAnimationChannel(meta: {
+  channelId: string
+  channelName: string | null
+  channelUrl: string | null
+  subscriberCount: string | null
+  avatarContentHash: string | null
+  avatarUrl: string | null
+}): Promise<void> {
+  const response = await fetch('/api/screensaver/subscribe-animation-cache/channels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(meta),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+}
+
+export interface SubscribeAnimationChannelCacheMeta {
+  channelId: string
+  channelName: string | null
+  channelUrl: string | null
+  subscriberCount: string | null
+  avatarContentHash: string | null
+  avatarUrl: string | null
+  updatedAt: number
+  fromCache?: boolean
+}
+
+export async function fetchSubscribeAnimationChannel(
+  channelId: string,
+): Promise<SubscribeAnimationChannelCacheMeta | null> {
+  const response = await fetch(`/api/screensaver/subscribe-animation-cache/channels/${encodeURIComponent(channelId)}`)
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as SubscribeAnimationChannelCacheMeta
+}
+
+export async function listSubscribeAnimationChannels(): Promise<SubscribeAnimationChannelCacheMeta[]> {
+  const response = await fetch('/api/screensaver/subscribe-animation-cache/channels')
+  if (!response.ok) throw new Error(await readError(response))
+  const data = (await response.json()) as { channels?: SubscribeAnimationChannelCacheMeta[] }
+  return Array.isArray(data.channels) ? data.channels : []
+}
+
+export async function uploadSubscribeAnimationCacheEntry(options: {
+  meta: Record<string, unknown>
+  frames: Blob[]
+  signal?: AbortSignal
+}): Promise<SubscribeAnimationCacheEntry> {
+  const body = new FormData()
+  body.append('meta', JSON.stringify(options.meta))
+  options.frames.forEach((blob, index) => {
+    body.append('frames', blob, `frame-${String(index).padStart(4, '0')}.png`)
+  })
+  return sendForm('/api/screensaver/subscribe-animation-cache/entries', body, undefined, options.signal)
+}
+
+export async function clearSubscribeAnimationCache(scope: {
+  scope: 'all' | 'static' | 'channel' | 'entry'
+  channelId?: string
+  cacheKey?: string
+}): Promise<{ removed: number }> {
+  const response = await fetch('/api/screensaver/subscribe-animation-cache/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(scope),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as { removed: number }
 }
 
 function sendForm<T>(url: string, body: FormData, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<T> {

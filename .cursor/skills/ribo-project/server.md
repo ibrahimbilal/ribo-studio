@@ -27,8 +27,9 @@ Progress on the client: overlays/upload are local; queued/preparing/rendering/ve
 | GET | `/api/clips/:id` | metadata if the file is still registered |
 | DELETE | `/api/clips/:id` | remove unless a render holds it |
 | POST | `/api/import-url` | `{ url }` → title lookup, `canDownload: false` |
-| POST | `/api/youtube-channel-lookup` | `{ url }` → channel name, avatar (data URL when proxied), subscribers |
+| POST | `/api/youtube-channel-lookup` | `{ url }` → channel name, avatar (data URL when proxied), subscribers, canonical `channelId` when resolved |
 | GET | `/api/youtube-channel-avatar` | `?url=` — proxy YouTube CDN avatar images (allowlisted hosts) |
+| GET/POST | `/api/screensaver/subscribe-animation-cache/*` | Persistent subscribe-animation PNG cache (status, stats, entries, channels, clear); survives tab-close purge |
 | POST | `/api/export` | `project` JSON + overlays + optional music, 40 MB each, up to 31 files |
 | POST | `/api/image-motion/media` | one JPG/PNG/WebP, max 80 MB → clip registry `origin: image-motion` |
 | POST | `/api/image-motion/export` | `project` JSON + optional music; segments reference uploaded `serverId`s |
@@ -76,6 +77,7 @@ Unknown `/api` routes return 404 JSON. If `client/dist/index.html` exists, Expre
 - `outputs/<id>.mp4` — finished ranking/screensaver files.
 - `outputs/<id>.mp3|wav|flac` — finished Audio Looper files. Tab-close purge skips non-mp4 outputs.
 - `audio-assets/` and `audio-assets.json` — Screensaver background audio (uploads + adopted looper outputs). Retained while a screensaver render holds `audioAssetId`. Tab-close purge does **not** wipe this folder.
+- `subscribe-animation-cache/` and `subscribe-animation-cache.json` — persistent subscribe-animation PNG sequences (static + per-channel dynamic). Retained while a screensaver render holds `animationCacheKey`. Tab-close purge does **not** wipe this folder; LRU sweep from `sweepStorage`.
 - `upscaler/<jobId>/` — Image Upscaler inputs and outputs. Removed on boot, on purge, and after the job TTL (2 hours). Not part of the FFmpeg queue.
 
 Sweep every 10 minutes: outputs older than 2 hours, jobs and incoming older than 6 hours, clips and unreferenced audio-assets older than 7 days (unless a render holds them).

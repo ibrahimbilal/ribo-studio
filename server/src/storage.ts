@@ -42,6 +42,8 @@ export async function ensureStorage(): Promise<void> {
   await loadRegistry()
   const { ensureAudioAssets } = await import('./audioAssets')
   await ensureAudioAssets()
+  const { ensureSubscribeAnimationCache } = await import('./subscribeAnimationCache')
+  await ensureSubscribeAnimationCache()
 }
 
 export function getClip(id: string): StoredClip | undefined {
@@ -182,6 +184,8 @@ export async function sweepStorage(): Promise<void> {
   await purgeOrphanClipFiles()
   const { sweepAudioAssets } = await import('./audioAssets')
   await sweepAudioAssets(7 * 24 * 60 * 60 * 1000)
+  const { sweepSubscribeAnimationCacheLru } = await import('./subscribeAnimationCache')
+  await sweepSubscribeAnimationCacheLru()
 }
 
 export function safeVideoExt(name: string): string {

@@ -39,6 +39,18 @@ import {
   validateSubscribeAnimation,
   type SubscribeAnimationSettings,
 } from '@shared/screensaverSubscribeAnimation'
+import {
+  applyChannelPreferenceToSettings,
+  defaultSubscribeAnimationWithPreference,
+  getSelectedSubscribeChannelId,
+  listSubscribeChannelPreferences,
+  mergeSubscribeChannelsFromServer,
+  rememberSubscribeChannelFromSettings,
+  selectSubscribeChannelPreference,
+  type SubscribeChannelPreference,
+} from '../lib/subscribeAnimation/subscribeAnimationChannelPreference'
+import type { SubscribeAnimationCachePrepStatus } from '@shared/subscribeAnimationCache'
+import { isDynamicSubscribeAnimationStyle } from '@shared/subscribeAnimationTemplates'
 import { defineStore } from 'pinia'
 import { storeToRefs } from 'pinia'
 import { computed, ref, toRaw, watch } from 'vue'
@@ -90,9 +102,20 @@ import type { ScreensaverRendererBackend } from '../lib/render/types'
 import { ensureServerUploadCleanupOnClose } from '../../../lib/serverUploadCleanup'
 import { DUPLICATE_EXPORT_MESSAGE, screensaverExportFingerprint } from '../../../lib/exportFingerprint'
 import { submitScreensaverExport } from '../lib/screensaverExport'
+import { screensaverPrepareUiProgress } from '../lib/screensaverPrepareProgress'
 import { subscribeAnimationOverlayOnOutput } from '../lib/subscribeAnimation/subscribeAnimationLayout'
-import { renderSubscribeAnimationFrames } from '../lib/subscribeAnimation/subscribeAnimationExportFrames'
 import { ingestSubscribeChannelAvatar, preloadSubscribeChannelAvatar } from '../lib/subscribeAnimation/subscribeAnimationChannelAvatar'
+import { resolveSubscribeAvatarContentHash } from '../lib/subscribeAnimation/subscribeAnimationAvatarHash'
+import {
+  getOrRenderSubscribeAnimation,
+  onSubscribeCacheStatusChange,
+  prepareDefaultStaticAnimations,
+  queueSubscribeAnimationPrepare,
+  rebuildSubscribeAnimation,
+  markSubscribeCacheReady,
+  resolveCurrentSubscribeCacheKey,
+  subscribeCacheStatus,
+} from '../lib/subscribeAnimation/subscribeAnimationCachePrep'
 import type { SavedScreensaverProject } from '../types'
 
 function loadHtmlImage(url: string): Promise<HTMLImageElement> {
@@ -307,8 +330,22 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     if (state === 'uploading' || state === 'validating' || state === 'error' || state === 'missing') return true
     return audioHasLocalFile.value
   })
-  const subscribeAnimation = ref<SubscribeAnimationSettings>(defaultSubscribeAnimation())
+  const subscribeAnimation = ref<SubscribeAnimationSettings>(defaultSubscribeAnimationWithPreference())
   const subscribeChannelLookupLoading = ref(false)
+  const subscribeChannelOptions = ref<SubscribeChannelPreference[]>(listSubscribeChannelPreferences())
+  const subscribeCacheKey = ref<string | null>(null)
+  const subscribeCacheStatusTick = ref(0)
+  const subscribeCacheStats = ref<api.SubscribeAnimationCacheStats | null>(null)
+  const subscribeCacheBusy = ref(false)
+
+  const subscribeAnimationCacheStatus = computed((): SubscribeAnimationCachePrepStatus => {
+    void subscribeCacheStatusTick.value
+    return subscribeCacheStatus(subscribeCacheKey.value)
+  })
+
+  onSubscribeCacheStatusChange(() => {
+    subscribeCacheStatusTick.value += 1
+  })
 
   const liveExportState = computed(() =>
     pickDisplayExportState(exportQueue.jobs.value.filter((job) => job.projectId === projectId.value)),
@@ -942,6 +979,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     applyingProject = false
     if (frameNotice.value) await persistMeta()
     await projectLibrary.saveScreensaverActiveId(saved.id).catch(() => undefined)
+    void hydrateSubscribeChannel()
     return true
   }
 
@@ -999,6 +1037,9 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       void loadFrames()
       for (const event of peekScreensaverRenderEvents()) applyRenderEvent(event)
       if (pending && pending !== projectId.value) await openProject(pending)
+      void prepareDefaultStaticAnimations(outputWidth.value).catch(() => undefined)
+      void refreshSubscribeCacheStats()
+      void hydrateSubscribeChannel()
     }
   }
 
@@ -1133,7 +1174,10 @@ export const useScreensaverStore = defineStore('screensaver', () => {
         : compositionForFit(saved.fit, saved.width, saved.height, saved.outputWidth, saved.outputHeight, saved.backgroundColor)
     subscribeAnimation.value = saved.subscribeAnimation
       ? sanitizeSubscribeAnimation(saved.subscribeAnimation)
-      : defaultSubscribeAnimation()
+      : defaultSubscribeAnimationWithPreference()
+    if (subscribeAnimation.value.channelId) {
+      rememberSubscribeChannelFromSettings(subscribeAnimation.value)
+    }
     history.value = [cloneComposition(composition.value)]
     historyIndex.value = 0
     uploadState.value = saved.serverId ? 'uploading' : saved.mediaKind ? 'error' : 'empty'
@@ -1375,7 +1419,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
         defaults.outputHeight,
         defaults.backgroundColor,
       ),
-      subscribeAnimation: sanitizeSubscribeAnimation(defaultSubscribeAnimation()),
+      subscribeAnimation: sanitizeSubscribeAnimation(defaultSubscribeAnimationWithPreference()),
     }
     await projectLibrary.saveScreensaverProjectRecord(payload)
     await projectLibrary.saveScreensaverRenderState(id, draftRender())
@@ -1581,7 +1625,32 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     frameImage.value = null
     autoStill.value = null
     autoMotion.value = null
-    subscribeAnimation.value = defaultSubscribeAnimation()
+    subscribeAnimation.value = defaultSubscribeAnimationWithPreference()
+    refreshSubscribeChannelOptions()
+    void hydrateSubscribeChannel()
+  }
+
+  function refreshSubscribeChannelOptions(): void {
+    subscribeChannelOptions.value = listSubscribeChannelPreferences()
+  }
+
+  async function syncSubscribeChannelsFromServer(): Promise<void> {
+    try {
+      const remote = await api.listSubscribeAnimationChannels()
+      mergeSubscribeChannelsFromServer(
+        remote.map((channel) => ({
+          channelId: channel.channelId,
+          channelName: channel.channelName,
+          channelUrl: channel.channelUrl,
+          subscriberCount: channel.subscriberCount,
+          avatarUrl: channel.avatarUrl,
+          updatedAt: channel.updatedAt,
+        })),
+      )
+      refreshSubscribeChannelOptions()
+    } catch {
+      refreshSubscribeChannelOptions()
+    }
   }
 
   function isPristineDraft(): boolean {
@@ -1799,6 +1868,149 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     subscribeAnimation.value = sanitizeSubscribeAnimation({ ...subscribeAnimation.value, ...value })
   }
 
+  /** Apply the localStorage-selected channel, then warm avatar + animation cache. */
+  async function hydrateSubscribeChannel(): Promise<void> {
+    await syncSubscribeChannelsFromServer()
+    const selectedId = getSelectedSubscribeChannelId()
+    const pref = selectedId ? selectSubscribeChannelPreference(selectedId) : null
+    if (pref) {
+      subscribeAnimation.value = applyChannelPreferenceToSettings(subscribeAnimation.value, pref)
+    }
+    refreshSubscribeChannelOptions()
+    const current = subscribeAnimation.value
+    if (!current.channelId) return
+    try {
+      const meta = await api.fetchSubscribeAnimationChannel(current.channelId)
+      if (meta) {
+        const next = sanitizeSubscribeAnimation({
+          ...current,
+          channelName: meta.channelName ?? current.channelName,
+          channelUrl: meta.channelUrl ?? current.channelUrl,
+          channelAvatarUrl: meta.avatarUrl ?? current.channelAvatarUrl,
+          channelSubscriberCount: meta.subscriberCount ?? current.channelSubscriberCount,
+        })
+        subscribeAnimation.value = next
+        // Keep the same selected channel; only refresh stored metadata.
+        rememberSubscribeChannelFromSettings(next)
+      }
+    } catch {
+      // Keep the selected localStorage channel as-is.
+    }
+    refreshSubscribeChannelOptions()
+    await preloadSubscribeChannelAvatar(subscribeAnimation.value.channelAvatarUrl)
+    await refreshSubscribeCacheKey()
+    void ensureSelectedSubscribeAnimationPrepared(8)
+  }
+
+  async function selectSubscribeChannel(channelId: string): Promise<void> {
+    const pref = selectSubscribeChannelPreference(channelId)
+    if (!pref) {
+      toast('That channel is no longer saved.', 'info')
+      refreshSubscribeChannelOptions()
+      return
+    }
+    // Persist selection immediately so refresh / New project restore this channel.
+    rememberSubscribeChannelFromSettings(
+      applyChannelPreferenceToSettings(subscribeAnimation.value, pref),
+    )
+    subscribeAnimation.value = applyChannelPreferenceToSettings(subscribeAnimation.value, pref)
+    refreshSubscribeChannelOptions()
+    void persistMeta()
+    await hydrateSubscribeChannel()
+  }
+
+  async function refreshSubscribeCacheKey(): Promise<string | null> {
+    try {
+      const { key } = await resolveCurrentSubscribeCacheKey(subscribeAnimation.value, outputWidth.value)
+      subscribeCacheKey.value = key
+      const status = await api.fetchSubscribeAnimationCacheStatus(key)
+      if (status.ready) markSubscribeCacheReady(key)
+      return key
+    } catch {
+      return null
+    }
+  }
+
+  async function ensureSelectedSubscribeAnimationPrepared(priority = 5): Promise<void> {
+    if (!subscribeAnimation.value.enabled) return
+    if (mediaKind.value && mediaKind.value !== 'image') return
+    if (isDynamicSubscribeAnimationStyle(subscribeAnimation.value.style) && !subscribeAnimation.value.channelId) {
+      await refreshSubscribeCacheKey()
+      return
+    }
+    try {
+      await queueSubscribeAnimationPrepare(subscribeAnimation.value, outputWidth.value, { priority })
+      await refreshSubscribeCacheKey()
+    } catch {
+      // Background prep failures are non-blocking.
+    }
+  }
+
+  async function refreshSubscribeCacheStats(): Promise<void> {
+    try {
+      subscribeCacheStats.value = await api.fetchSubscribeAnimationCacheStats()
+      await syncSubscribeChannelsFromServer()
+    } catch {
+      subscribeCacheStats.value = null
+      refreshSubscribeChannelOptions()
+    }
+  }
+
+  async function prepareStaticSubscribeAnimations(): Promise<void> {
+    subscribeCacheBusy.value = true
+    try {
+      await prepareDefaultStaticAnimations(outputWidth.value)
+      await refreshSubscribeCacheStats()
+      toast('Static subscribe animations are preparing in the background.', 'info')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not prepare static animations.')
+    } finally {
+      subscribeCacheBusy.value = false
+    }
+  }
+
+  async function rebuildSelectedSubscribeAnimation(): Promise<void> {
+    subscribeCacheBusy.value = true
+    try {
+      await rebuildSubscribeAnimation(subscribeAnimation.value, outputWidth.value)
+      await refreshSubscribeCacheKey()
+      await refreshSubscribeCacheStats()
+      toast('Selected subscribe animation is rebuilding.', 'info')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not rebuild the animation cache.')
+    } finally {
+      subscribeCacheBusy.value = false
+    }
+  }
+
+  async function clearSubscribeAnimationCacheScope(scope: 'all' | 'static' | 'channel'): Promise<void> {
+    const labels = {
+      all: 'Clear all subscribe animation caches?',
+      static: 'Clear all static subscribe animation caches?',
+      channel: 'Clear the cache for the selected YouTube channel?',
+    }
+    if (!window.confirm(labels[scope])) return
+    if (scope === 'channel' && !subscribeAnimation.value.channelId) {
+      toast('Fetch a YouTube channel first.', 'info')
+      return
+    }
+    subscribeCacheBusy.value = true
+    try {
+      await api.clearSubscribeAnimationCache({
+        scope,
+        channelId: scope === 'channel' ? subscribeAnimation.value.channelId ?? undefined : undefined,
+      })
+      subscribeCacheKey.value = null
+      await refreshSubscribeCacheKey()
+      await refreshSubscribeCacheStats()
+      toast('Subscribe animation cache cleared.', 'success')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not clear the cache.')
+    } finally {
+      subscribeCacheBusy.value = false
+    }
+  }
+
   async function fetchSubscribeChannelFromUrl(rawUrl?: string) {
     const target = (rawUrl ?? subscribeAnimation.value.channelUrl).trim()
     if (!target) {
@@ -1809,15 +2021,46 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     try {
       const result = await api.lookupYoutubeChannel(target)
       await ingestSubscribeChannelAvatar(result.avatarUrl, result.avatarDataUrl)
+      const avatarContentHash = await resolveSubscribeAvatarContentHash(result.avatarUrl)
+      if (result.channelId) {
+        try {
+          await api.upsertSubscribeAnimationChannel({
+            channelId: result.channelId,
+            channelName: result.channelName,
+            channelUrl: result.channelUrl,
+            subscriberCount: result.subscriberCount,
+            avatarContentHash,
+            avatarUrl: result.avatarUrl,
+          })
+        } catch {
+          // Channel metadata cache is best-effort.
+        }
+      }
       replaceSubscribeAnimation({
         channelUrl: result.channelUrl ?? target,
+        channelId: result.channelId,
         channelName: result.channelName ?? subscribeAnimation.value.channelName,
         channelAvatarUrl: result.avatarUrl,
         channelSubscriberCount: result.subscriberCount,
       })
+      rememberSubscribeChannelFromSettings(subscribeAnimation.value)
+      refreshSubscribeChannelOptions()
       toast(result.channelName ? `Loaded ${result.channelName}.` : 'Channel info updated.', 'success')
+      if (result.channelId && subscribeAnimation.value.style === 'channel-card') {
+        void ensureSelectedSubscribeAnimationPrepared(10)
+      }
     } catch (error) {
-      toast(error instanceof Error ? error.message : 'Could not load channel info.')
+      if (subscribeAnimation.value.channelId) {
+        toast(
+          error instanceof Error
+            ? `${error.message} Keeping the selected channel.`
+            : 'Could not refresh YouTube. Keeping the selected channel.',
+          'info',
+        )
+        void ensureSelectedSubscribeAnimationPrepared(10)
+      } else {
+        toast(error instanceof Error ? error.message : 'Could not load channel info.')
+      }
     } finally {
       subscribeChannelLookupLoading.value = false
     }
@@ -1827,6 +2070,26 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     () => subscribeAnimation.value.channelAvatarUrl,
     (url) => {
       void preloadSubscribeChannelAvatar(url)
+    },
+  )
+
+  watch(
+    () => [
+      subscribeAnimation.value.enabled,
+      subscribeAnimation.value.style,
+      subscribeAnimation.value.sizePercent,
+      subscribeAnimation.value.edgeDistance,
+      subscribeAnimation.value.channelId,
+      subscribeAnimation.value.channelName,
+      subscribeAnimation.value.channelSubscriberCount,
+      subscribeAnimation.value.channelCardTheme,
+      subscribeAnimation.value.channelAvatarUrl,
+      outputWidth.value,
+    ],
+    () => {
+      void refreshSubscribeCacheKey().then(() => {
+        if (subscribeAnimation.value.enabled) void ensureSelectedSubscribeAnimationPrepared(5)
+      })
     },
   )
 
@@ -2069,32 +2332,71 @@ export const useScreensaverStore = defineStore('screensaver', () => {
         toast,
         onError: (text) => toast(text, 'error'),
         submit: async (signal, onUpdate) => {
-          onUpdate({
-            phase: 'preparing',
-            progress: 0.02,
-            message: 'Preparing composition',
-            stage: 'Preparing composition',
-          })
+          const animationEnabled = snapshotAnimSettings.enabled && kind === 'image'
+          const reportPrepare = (
+            steps: { composition: number; animation: number; upload: number },
+            message: string,
+            stage: string,
+          ) => {
+            onUpdate({
+              phase: 'preparing',
+              progress: screensaverPrepareUiProgress(animationEnabled, steps),
+              message,
+              stage,
+            })
+          }
+
+          reportPrepare({ composition: 0, animation: 0, upload: 0 }, 'Preparing composition', 'Preparing composition')
           if (snapshotAudioAssetId) {
             const meta = await api.fetchScreensaverAudioMeta(snapshotAudioAssetId)
             if (!meta) throw new Error('The background audio file is no longer available. Choose the audio again before exporting.')
           }
+          reportPrepare({ composition: 0.35, animation: 0, upload: 0 }, 'Preparing composition', 'Preparing composition')
           const blobs = await buildExportBlobsForSnapshot(snapshot)
           if (signal.aborted) throw new DOMException('The export was cancelled.', 'AbortError')
+          reportPrepare({ composition: 1, animation: 0, upload: 0 }, 'Composition ready', 'Preparing composition')
+
           let animationFrameBlobs: Blob[] | null = null
-          if (snapshotAnimSettings.enabled && kind === 'image') {
+          if (animationEnabled) {
             await preloadSubscribeChannelAvatar(snapshotAnimSettings.channelAvatarUrl)
-            animationFrameBlobs = await renderSubscribeAnimationFrames(snapshotAnimSettings, snapshot.outputWidth, (done, total) => {
-              onUpdate({
-                progress: 0.02 + (done / total) * 0.12,
-                message: `Rendering subscribe animation (${done}/${total}).`,
-                stage: 'Preparing animation',
-              })
-            })
+            reportPrepare(
+              { composition: 1, animation: 0.05, upload: 0 },
+              'Resolving subscribe animation cache.',
+              'Preparing animation',
+            )
+            const prepared = await getOrRenderSubscribeAnimation(
+              snapshotAnimSettings,
+              snapshot.outputWidth,
+              (done, total) => {
+                const fraction = total > 0 ? done / total : 1
+                reportPrepare(
+                  { composition: 1, animation: Math.max(0.05, fraction), upload: 0 },
+                  `Rendering subscribe animation (${done}/${total}).`,
+                  'Preparing animation',
+                )
+              },
+              signal,
+            )
             if (signal.aborted) throw new DOMException('The export was cancelled.', 'AbortError')
-            const animBytes = animationFrameBlobs.reduce((sum, blob) => sum + blob.size, 0)
-            if (animBytes > SUBSCRIBE_ANIMATION_UPLOAD_BUDGET_BYTES) {
-              throw new Error('Subscribe animation frames are too large. Lower the size and try again.')
+            if (prepared.cacheKey) {
+              projectJson.animationCacheKey = prepared.cacheKey
+              animationFrameBlobs = null
+              reportPrepare(
+                { composition: 1, animation: 1, upload: 0 },
+                'Subscribe animation cache ready.',
+                'Preparing animation',
+              )
+            } else {
+              animationFrameBlobs = prepared.frames
+              const animBytes = (animationFrameBlobs ?? []).reduce((sum, blob) => sum + blob.size, 0)
+              if (animBytes > SUBSCRIBE_ANIMATION_UPLOAD_BUDGET_BYTES) {
+                throw new Error('Subscribe animation frames are too large. Lower the size and try again.')
+              }
+              reportPrepare(
+                { composition: 1, animation: 1, upload: 0 },
+                'Subscribe animation frames ready.',
+                'Preparing animation',
+              )
             }
           }
           return submitScreensaverExport({
@@ -2102,6 +2404,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
             animationFrameBlobs,
             projectJson,
             audioFile: snapshotAudioFile,
+            animationEnabled,
             signal,
             onUpdate,
           })
@@ -2496,6 +2799,11 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     consumeShellTabRequest,
     subscribeAnimation,
     subscribeChannelLookupLoading,
+    subscribeChannelOptions,
+    selectSubscribeChannel,
+    subscribeAnimationCacheStatus,
+    subscribeCacheStats,
+    subscribeCacheBusy,
     exportState,
     exporting,
     activeExportCount,
@@ -2529,6 +2837,10 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     replaceComposition,
     replaceSubscribeAnimation,
     fetchSubscribeChannelFromUrl,
+    prepareStaticSubscribeAnimations,
+    rebuildSelectedSubscribeAnimation,
+    clearSubscribeAnimationCacheScope,
+    refreshSubscribeCacheStats,
     commitComposition,
     uploadFrames,
     selectFrame,

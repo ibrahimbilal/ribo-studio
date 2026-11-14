@@ -57,6 +57,8 @@ export interface ScreensaverRenderRequest {
   animationDir?: string | null
   animationOverlayX?: number
   animationOverlayY?: number
+  /** Persistent subscribe-animation cache key retained for the job lifetime. */
+  animationCacheKey?: string | null
 }
 
 export interface ScreensaverRenderHooks {
@@ -81,7 +83,8 @@ export async function renderScreensaver(
   hooks: ScreensaverRenderHooks,
 ): Promise<{ outputPath: string; bytes: number; duration: number; warning: string | null }> {
   if (hooks.cancelled()) throw new RenderCancelled()
-  hooks.onStatus('preparing', 'Preparing media')
+  hooks.onStatus('preparing', 'Selecting encoder')
+  hooks.onProgress(0.02, 'Selecting encoder')
   const job = normalize(raw)
   const still = job.mediaKind === 'image' || Boolean(job.compositionPath)
   const encoderTier =
@@ -95,11 +98,14 @@ export async function renderScreensaver(
     still,
   })
   hooks.onEncode?.({ encoder: chosen.label, hardware: chosen.hardware, encoderId: chosen.id })
+  hooks.onProgress(0.06, 'Encoder ready')
   try {
     return await renderWithEncoder(job, chosen, hooks, null)
   } catch (error) {
     if (job.encoder !== 'auto' || chosen.id === 'libx264' || hooks.cancelled() || error instanceof RenderCancelled) throw error
     const detail = error instanceof Error ? error.message : 'The hardware encoder failed.'
+    hooks.onStatus('preparing', 'Retrying with CPU encoder')
+    hooks.onProgress(0.04, 'Retrying with CPU encoder')
     const cpu = await selectEncoder({
       choice: 'cpu',
       profile: job.profile,
@@ -109,6 +115,7 @@ export async function renderScreensaver(
       still,
     })
     hooks.onEncode?.({ encoder: cpu.label, hardware: false, encoderId: cpu.id })
+    hooks.onProgress(0.06, 'Encoder ready')
     const result = await renderWithEncoder(job, cpu, hooks, null)
     return { ...result, warning: joinWarning(result.warning, `${chosen.label} failed (${detail}). Used CPU encoding instead.`) }
   }
@@ -618,6 +625,7 @@ function normalize(raw: ScreensaverRenderRequest & { id: string }): NormalizedJo
     animationDir: raw.animationDir ?? null,
     animationOverlayX: raw.animationOverlayX ?? 0,
     animationOverlayY: raw.animationOverlayY ?? 0,
+    animationCacheKey: raw.animationCacheKey ?? null,
   }
 }
 

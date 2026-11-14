@@ -1,7 +1,7 @@
 {
   "name": "ribo-studio",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "workspaces": [
     "client",
     "server"
@@ -31,6 +31,8 @@
     "typecheck": "npm run typecheck -w client && npm run typecheck -w server",
     "test:screensaver": "npm run test:screensaver -w server",
     "test:screensaver-subscribe": "npm run test:screensaver-subscribe -w server",
+    "test:subscribe-animation-cache": "npm run test:subscribe-animation-cache -w server",
+    "probe:subscribe-animation-format": "npm run probe:subscribe-animation-format -w server",
     "test:screensaver-cfr": "npm run test:screensaver-cfr -w server",
     "test:screensaver-visual": "npm run test:screensaver-visual -w server",
     "bench:screensaver-compose": "npm run bench:screensaver-compose -w server",
