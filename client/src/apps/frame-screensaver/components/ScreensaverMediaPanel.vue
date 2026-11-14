@@ -21,9 +21,6 @@ function onFiles(files: File[]) {
       formats="JPG, PNG, WebP, MP4, MOV, WebM"
       @files="onFiles"
     />
-    <p v-if="store.activeProjectCard?.audioMissing" class="rounded-md border border-amber-900/70 bg-amber-950/40 px-2 py-1.5 text-xs text-amber-200">
-      The background audio file is no longer available. Choose the audio again before exporting.
-    </p>
     <p v-if="store.frameNotice" class="rounded-md border border-amber-900/70 bg-amber-950/40 px-2 py-1.5 text-xs text-amber-200">
       {{ store.frameNotice }}
     </p>

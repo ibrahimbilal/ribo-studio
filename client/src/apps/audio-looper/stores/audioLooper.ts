@@ -20,9 +20,12 @@ import {
   type AudioLooperLoopMode,
   type AudioLooperSettings,
 } from '@shared/audioLooper'
+import { audioChannelLabel, resolveOutputChannels } from '@shared/audioLooperChannels'
 import { assertPlaylistTimeline, playlistCrossfadeLimit, playlistPeriod, playlistRepeats } from '@shared/audioLooperPlaylist'
+import { snapMp3BitrateKbps } from '@shared/audioProcessingPlan'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { probeLooperAudio } from '../../../lib/api'
 import { audioFormatLabel } from '../../../lib/media'
 import { formatBytes, formatClock } from '../../../lib/format'
 import { DUPLICATE_EXPORT_MESSAGE, stableExportFingerprint } from '../../../lib/exportFingerprint'
@@ -49,7 +52,10 @@ export interface LooperTrack {
   objectUrl: string
   duration: number | null
   channels: number | null
+  channelLayout: string | null
   sampleRate: number | null
+  codec: string | null
+  bitrate: number | null
   waveform: WaveformMeta | null
   trimStart: number
   trimEnd: number | null
@@ -110,6 +116,14 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
   const platform = usePlatformStore()
   const persisted = loadPersisted()
   const exportQueue = useManagedExportJobs()
+
+  /** Most recent finished loop export that still has a downloadable server output. */
+  const readyExport = computed(() => {
+    const done = exportQueue.jobs.value.filter(
+      (job) => job.state.phase === 'done' && job.state.jobId && job.state.downloadUrl,
+    )
+    return done.length ? done[done.length - 1]! : null
+  })
   const tracks = ref<LooperTrack[]>([])
   const manualOrder = ref<string[]>([])
   const playbackOrder = ref<string[]>([])
@@ -187,6 +201,38 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
   const durationPresetKey = computed(() => String(targetDurationSeconds.value))
   const durationLabel = computed(() => formatDurationLabel(targetDurationSeconds.value))
 
+  /** Average bitrate from file size ÷ duration (Web Audio sampleRate is often the context rate, not the file). */
+  function estimateBitrateKbps(track: LooperTrack): number | null {
+    const seconds = track.duration != null && track.duration > 0 ? track.duration : trimmedLength(track)
+    if (!(seconds > 0) || !(track.fileSize > 0)) return null
+    return Math.max(1, Math.round((track.fileSize * 8) / seconds / 1000))
+  }
+
+  function trackBitrateBps(track: LooperTrack): number {
+    if (track.bitrate != null && track.bitrate > 0) return track.bitrate
+    const kbps = estimateBitrateKbps(track)
+    return kbps != null && kbps > 0 ? kbps * 1000 : 0
+  }
+
+  /** Suggested MP3 bitrate from the highest reliable source bitrate (ladder 128–320). */
+  const suggestedMp3Bitrate = computed((): AudioLooperBitrate => {
+    const rates = readyTracks.value.map(trackBitrateBps).filter((bps) => bps > 0)
+    if (rates.length === 0) return 320
+    return snapMp3BitrateKbps(Math.max(...rates))
+  })
+
+  const hasSourceBitrate = computed(() => readyTracks.value.some((track) => trackBitrateBps(track) > 0))
+
+  const mp3BitrateHint = computed(() => {
+    if (!hasSourceBitrate.value) {
+      return 'Defaults to 320 kbps until a track bitrate is known.'
+    }
+    if (mp3Bitrate.value === suggestedMp3Bitrate.value) {
+      return `Auto-selected from the highest bitrate of your uploaded tracks.`
+    }
+    return `Manual override. Source match would be ${suggestedMp3Bitrate.value} kbps.`
+  })
+
   const currentSettings = computed((): AudioLooperSettings => ({
     targetDurationSeconds: targetDurationSeconds.value,
     loopMode: loopMode.value,
@@ -240,11 +286,18 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     return repeatCount(duration, targetDurationSeconds.value, loopMode.value, crossfadeSeconds.value)
   })
 
+  const outputChannels = computed(() =>
+    resolveOutputChannels(
+      readyTracks.value.map((track) => track.channels),
+      format.value,
+    ),
+  )
+
   const estimatedBytes = computed(() =>
     estimateOutputBytes(targetDurationSeconds.value, format.value, {
       bitrate: mp3Bitrate.value,
-      sampleRate: isPlaylist.value ? 48000 : (sourceSampleRate.value ?? undefined),
-      channels: isPlaylist.value ? 2 : (sourceChannels.value ?? undefined),
+      sampleRate: sourceSampleRate.value ?? undefined,
+      channels: outputChannels.value,
     }),
   )
 
@@ -263,10 +316,13 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
       : loopMode.value === 'seamless'
         ? 'Seamless'
         : 'Simple'
-    return `${durationLabel.value} · ${mode} · ${format.value.toUpperCase()}`
+    const base = `${durationLabel.value} · ${mode} · ${format.value.toUpperCase()}`
+    const label = readyExport.value?.state.processingLabel
+    return label ? `${base} · ${label}` : base
   })
 
-  const exportBlocker = computed(() => {
+  /** Shared readiness for Export and Send-to-Screensaver (excludes duplicate-export lock). */
+  const sendBlocker = computed(() => {
     if (!platform.serverOnline) return 'The renderer is offline.'
     if (tracks.value.length === 0) return 'Choose an audio file to loop.'
     if (playbackTracks.value.some((track) => track.status === 'reading')) return 'Wait for the audio duration to load.'
@@ -274,6 +330,11 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     if (failed) return failed.error ?? 'Remove the track that could not be read.'
     if (readyTracks.value.length === 0) return 'Wait for the audio duration to load.'
     if (settingsError.value) return settingsError.value
+    return null
+  })
+
+  const exportBlocker = computed(() => {
+    if (sendBlocker.value) return sendBlocker.value
     if (
       lastEnqueuedExportFingerprint.value &&
       lastEnqueuedExportFingerprint.value === currentExportFingerprint.value
@@ -307,6 +368,15 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     clearMixPreview()
   })
 
+  // Auto-select MP3 bitrate from uploaded sources when their bitrates become known.
+  watch(
+    suggestedMp3Bitrate,
+    (suggested) => {
+      if (mp3Bitrate.value !== suggested) mp3Bitrate.value = suggested
+    },
+    { immediate: true },
+  )
+
   function trimmedLength(track: LooperTrack | null | undefined): number {
     if (!track?.duration || track.duration <= 0) return 0
     const end = Math.min(track.trimEnd ?? track.duration, track.duration)
@@ -314,15 +384,28 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     return Math.max(0, end - start)
   }
 
+  function channelLabel(track: LooperTrack | null): string {
+    return audioChannelLabel(track?.channels, track?.channelLayout)
+  }
+
+  function formatLabel(track: LooperTrack | null): string {
+    if (!track) return ''
+    return audioFormatLabel(track.fileName)
+  }
+
   function metaLabel(track: LooperTrack | null): string {
     if (!track) return ''
     const parts: string[] = []
-    parts.push(audioFormatLabel(track.fileName))
     parts.push(formatBytes(track.fileSize))
     const length = trimmedLength(track)
     if (length > 0) parts.push(formatClock(length))
     else if (track.duration != null) parts.push(formatClock(track.duration))
-    if (track.sampleRate) parts.push(`${Math.round(track.sampleRate / 1000)} kHz`)
+    const kbps = track.bitrate != null && track.bitrate > 0
+      ? Math.max(1, Math.round(track.bitrate / 1000))
+      : estimateBitrateKbps(track)
+    if (kbps != null) parts.push(`${kbps} kbps`)
+    const channels = channelLabel(track)
+    if (channels) parts.push(channels)
     return parts.join(' · ')
   }
 
@@ -367,7 +450,10 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
         objectUrl: URL.createObjectURL(file),
         duration: null,
         channels: null,
+        channelLayout: null,
         sampleRate: null,
+        codec: null,
+        bitrate: null,
         waveform: null,
         trimStart: 0,
         trimEnd: null,
@@ -401,20 +487,49 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
       applyDuration(current, meta.duration)
       current.status = 'ready'
       current.error = null
+      // Prefer ffprobe bitrate over size-based estimate when the renderer is online.
+      void enrichTrackProbe(id, token)
       return
     }
+    // Large or undecodable-in-browser files: duration from the media element, channels from ffprobe.
     const duration = await durationFromElement(current.objectUrl)
     if (loadTokens.get(id) !== token) return
-    const again = tracks.value.find((item) => item.id === id)
+    let again = tracks.value.find((item) => item.id === id)
     if (!again) return
-    if (duration != null) {
-      applyDuration(again, duration)
+    if (duration != null) applyDuration(again, duration)
+    const probed = await enrichTrackProbe(id, token)
+    if (loadTokens.get(id) !== token) return
+    again = tracks.value.find((item) => item.id === id)
+    if (!again) return
+    if (again.duration != null || probed) {
       again.status = 'ready'
       again.error = null
       return
     }
     again.status = 'error'
     again.error = 'This file could not be read as audio.'
+  }
+
+  /** FFprobe when Web Audio skipped the file (size/decode). Never infers channels from the extension. */
+  async function enrichTrackProbe(id: string, token: number): Promise<boolean> {
+    if (!platform.serverOnline) return false
+    const track = tracks.value.find((item) => item.id === id)
+    if (!track) return false
+    try {
+      const details = await probeLooperAudio(track.file)
+      if (loadTokens.get(id) !== token) return false
+      const current = tracks.value.find((item) => item.id === id)
+      if (!current) return false
+      if (details.channels > 0) current.channels = details.channels
+      current.channelLayout = details.channelLayout
+      if (details.sampleRate > 0) current.sampleRate = details.sampleRate
+      current.codec = details.codec
+      if (details.bitrate > 0) current.bitrate = details.bitrate
+      if (details.duration > 0) applyDuration(current, details.duration)
+      return details.channels > 0 || details.duration > 0
+    } catch {
+      return false
+    }
   }
 
   function applyDuration(track: LooperTrack, seconds: number): void {
@@ -489,12 +604,6 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     lastEnqueuedExportFingerprint.value = null
   }
 
-  function restoreOrder(): void {
-    playbackOrder.value = manualOrder.value.slice()
-    shuffled.value = false
-    lastEnqueuedExportFingerprint.value = null
-  }
-
   function setTrim(id: string, start: number, end: number): void {
     const track = tracks.value.find((item) => item.id === id)
     if (!track?.duration) return
@@ -556,11 +665,35 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     fadeOutSeconds.value = defaults.fadeOutSeconds
     volumePercent.value = defaults.volumePercent
     format.value = defaults.format
-    mp3Bitrate.value = defaults.mp3Bitrate
     playlistCrossfade.value = false
     playlistCrossfadeSeconds.value = defaults.playlistCrossfadeSeconds
     normalizeLoudness.value = false
     clearTracks()
+  }
+
+  function buildExportSettings(): AudioLooperSettings {
+    const files = readyTracks.value
+    if (files.length === 0) throw new Error('Add at least one audio track first.')
+    const single = files.length === 1 ? files[0] : null
+    const settings = normalizeSettings(currentSettings.value, {
+      sourceDuration: single ? trimmedLength(single) : undefined,
+    })
+    if (files.length >= 2) {
+      assertPlaylistTimeline(
+        files.map((track) => trimmedLength(track)),
+        settings.playlistCrossfade,
+        settings.playlistCrossfadeSeconds,
+      )
+    }
+    settings.tracks = alignExportTrims(
+      files.map((track) => ({
+        id: track.id,
+        trimStart: track.trimStart,
+        trimEnd: track.trimEnd ?? track.duration ?? 0,
+      })),
+      files.map((track) => track.duration ?? 0),
+    )
+    return settings
   }
 
   function startExport(): void {
@@ -569,25 +702,7 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     if (files.length === 0) return
     let settings: AudioLooperSettings
     try {
-      const single = files.length === 1 ? files[0] : null
-      settings = normalizeSettings(currentSettings.value, {
-        sourceDuration: single ? trimmedLength(single) : undefined,
-      })
-      if (files.length >= 2) {
-        assertPlaylistTimeline(
-          files.map((track) => trimmedLength(track)),
-          settings.playlistCrossfade,
-          settings.playlistCrossfadeSeconds,
-        )
-      }
-      settings.tracks = alignExportTrims(
-        files.map((track) => ({
-          id: track.id,
-          trimStart: track.trimStart,
-          trimEnd: track.trimEnd ?? track.duration ?? 0,
-        })),
-        files.map((track) => track.duration ?? 0),
-      )
+      settings = buildExportSettings()
     } catch (error) {
       platform.toast(error instanceof Error ? error.message : 'Check the loop settings.', 'error')
       return
@@ -681,6 +796,8 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     volumePercent,
     format,
     mp3Bitrate,
+    suggestedMp3Bitrate,
+    mp3BitrateHint,
     playlistCrossfade,
     playlistCrossfadeSeconds,
     playlistLimit,
@@ -710,10 +827,12 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     maxCrossfade,
     sourceMetaLabel,
     exportStatusLabel,
+    sendBlocker,
     exportBlocker,
     exportState: exportQueue.exportState,
     exporting: exportQueue.exporting,
     activeExportCount: exportQueue.activeExportCount,
+    readyExport,
     seamlessAvailable: SEAMLESS_AVAILABLE,
     trackLimit: MAX_AUDIO_LOOPER_TRACKS,
     addFiles,
@@ -725,19 +844,22 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     clearFile: clearTracks,
     reorder,
     shuffleTracks,
-    restoreOrder,
     setTrim,
     resetTrim,
     claimPreview,
     setSequenceTrack,
     displayName,
     metaLabel,
+    formatLabel,
+    channelLabel,
+    estimateBitrateKbps,
     trimmedLength,
     setDurationPreset,
     setCustomDurationMinutes,
     setLoopMode,
     setPlaylistCrossfade,
     newProject,
+    buildExportSettings,
     startExport,
     previewMix,
     clearMixPreview,

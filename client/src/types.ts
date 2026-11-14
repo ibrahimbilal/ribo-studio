@@ -143,6 +143,8 @@ export interface ExportState {
   etaSec?: number | null
   stage?: string | null
   encodeProgress?: number | null
+  processingLabel?: string | null
+  lossyEncodeCount?: number | null
 }
 
 export interface PersistedClip {

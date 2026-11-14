@@ -32,7 +32,7 @@ Verified architectural rules. Do not reverse these without an explicit product d
 
 ## Limits (summary)
 
-17. Ranking: ≤30 clips, ≤20 min each, ≤30 min sequence, ≥0.3s trim, ≤500 MB video, ≤40 MB music/overlays.
+17. Ranking: ≤30 clips, ≤20 min each, ≤30 min sequence, ≥0.3s trim, ≤500 MB video, ≤40 MB music/overlays. Screensaver background audio: ≤1 GiB (`SCREENSAVER_AUDIO_MAX_BYTES`).
 18. Do not write secrets into source. Optional AI Lite env vars stay in `.env` (gitignored).
 
 ## Deep reference

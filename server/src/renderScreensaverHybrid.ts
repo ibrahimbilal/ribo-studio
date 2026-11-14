@@ -4,8 +4,8 @@ import { SCREENSAVER_CFR_TIMESCALE } from '../../shared/screensaver'
 import { SUBSCRIBE_ANIMATION_FPS, type SubscribeAnimationSettings } from '../../shared/screensaverSubscribeAnimation'
 import type { EncoderId } from './encoders'
 import { n, RenderCancelled, spawnFfmpeg, verifyVideoOutput } from './ffmpegUtil'
-import { audioFilterLine } from './screensaverGraph'
 import type { ScreensaverRenderHooks } from './renderScreensaver'
+import { muxScreensaverAudio } from './screensaverAudioMux'
 
 /**
  * Shared MP4 track timescale for hybrid VFR segments.
@@ -23,6 +23,7 @@ export interface HybridJob {
   duration: number
   compositionPath: string
   musicPath: string | null
+  audioAssetId?: string | null
   mediaPath: string
   mediaKind: 'image' | 'video'
   audioMode: 'none' | 'source' | 'upload'
@@ -51,7 +52,15 @@ export async function renderScreensaverHybrid(
   workDir: string,
   hooks: ScreensaverRenderHooks,
   inheritedWarning: string | null,
-): Promise<{ outputPath: string; bytes: number; duration: number; warning: string | null }> {
+): Promise<{
+  outputPath: string
+  bytes: number
+  duration: number
+  warning: string | null
+  processingStrategy?: string
+  processingLabel?: string
+  lossyEncodeCount?: number
+}> {
   if (hooks.cancelled()) throw new RenderCancelled()
   hooks.onStatus('rendering', 'Encoding subscribe animation segments')
   const startSec = job.subscribeAnimation.startSec
@@ -98,11 +107,15 @@ export async function renderScreensaverHybrid(
       await concatReencode(job, encoder, concatList, videoOnly, hooks)
     }
 
-    await muxAudio(job, videoOnly, outputPath, workDir, hooks)
+    const audioMeta = await muxAudio(job, videoOnly, outputPath, workDir, hooks)
     if (hooks.cancelled()) throw new RenderCancelled()
     hooks.onStatus('verifying', 'Validating output')
     const expectAudio = wantsAudio(job)
-    return { ...(await verifyVideoOutput(outputPath, job.width, job.height, job.duration, expectAudio)), warning }
+    return {
+      ...(await verifyVideoOutput(outputPath, job.width, job.height, job.duration, expectAudio)),
+      warning,
+      ...audioMeta,
+    }
   } finally {
     await rm(segA, { force: true }).catch(() => undefined)
     await rm(segB, { force: true }).catch(() => undefined)
@@ -260,51 +273,68 @@ async function concatReencode(job: HybridJob, encoder: ChosenEncoder, listPath: 
   await spawnFfmpeg(args, job.duration, hooks)
 }
 
-async function muxAudio(job: HybridJob, videoPath: string, outputPath: string, workDir: string, hooks: ScreensaverRenderHooks): Promise<void> {
-  const args = ['-y', '-hide_banner', '-progress', 'pipe:1', '-nostats', '-i', videoPath]
+async function muxAudio(
+  job: HybridJob,
+  videoPath: string,
+  outputPath: string,
+  workDir: string,
+  hooks: ScreensaverRenderHooks,
+): Promise<{ processingStrategy?: string; processingLabel?: string; lossyEncodeCount?: number }> {
   if (!wantsAudio(job)) {
-    args.push('-map', '0:v:0', '-c:v', 'copy', '-an', '-t', n(job.duration + 0.05), '-movflags', '+faststart', outputPath)
+    const args = [
+      '-y',
+      '-hide_banner',
+      '-progress',
+      'pipe:1',
+      '-nostats',
+      '-i',
+      videoPath,
+      '-map',
+      '0:v:0',
+      '-c:v',
+      'copy',
+      '-an',
+      '-t',
+      n(job.duration + 0.05),
+      '-movflags',
+      '+faststart',
+      outputPath,
+    ]
     await spawnFfmpeg(args, job.duration, hooks)
-    return
+    return { lossyEncodeCount: 0 }
   }
-
-  const lines: string[] = []
-  if (job.audioMode === 'upload' && job.musicPath) {
-    if (job.loopAudio) args.push('-stream_loop', '-1')
-    args.push('-i', job.musicPath)
-    lines.push(
-      audioFilterLine({
-        inputLabel: '1:a',
-        volume: job.audioVolume,
-        fadeIn: job.audioFadeIn,
-        fadeOut: job.audioFadeOut,
-        duration: job.duration,
-        loopSamples: false,
-      }),
-    )
-  } else if (job.audioMode === 'source' && job.sourceHasAudio) {
-    args.push('-stream_loop', '-1', '-i', job.mediaPath)
-    lines.push(
-      audioFilterLine({
-        inputLabel: '1:a',
-        volume: job.audioVolume,
-        fadeIn: job.audioFadeIn,
-        fadeOut: job.audioFadeOut,
-        duration: job.duration,
-        loopSamples: false,
-      }),
-    )
+  const meta = await muxScreensaverAudio({
+    job: {
+      id: job.id,
+      duration: job.duration,
+      audioMode: job.audioMode,
+      audioVolume: job.audioVolume,
+      audioFadeIn: job.audioFadeIn,
+      audioFadeOut: job.audioFadeOut,
+      loopAudio: job.loopAudio,
+      musicPath: job.musicPath,
+      audioAssetId: job.audioAssetId,
+      sourceHasAudio: job.sourceHasAudio,
+      mediaKind: job.mediaKind,
+      mediaPath: job.mediaPath,
+    },
+    videoPath,
+    outputPath,
+    workDir,
+    durationSec: job.duration,
+    hooks,
+    copyVideo: true,
+  })
+  return {
+    processingStrategy: meta.processingStrategy,
+    processingLabel: meta.processingLabel,
+    lossyEncodeCount: meta.lossyEncodeCount,
   }
-
-  const filterPath = path.join(workDir, 'hybrid-audio.txt')
-  await writeFile(filterPath, lines.join(';\n'))
-  args.push('-filter_complex_script', filterPath, '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-t', n(job.duration + 0.05), '-movflags', '+faststart', outputPath)
-  await spawnFfmpeg(args, job.duration, hooks)
 }
 
 function wantsAudio(job: HybridJob): boolean {
   if (job.audioVolume <= 0.001) return false
-  if (job.audioMode === 'upload') return Boolean(job.musicPath)
+  if (job.audioMode === 'upload') return Boolean(job.musicPath || job.audioAssetId)
   if (job.audioMode === 'source') return job.sourceHasAudio && job.mediaKind === 'video'
   return false
 }

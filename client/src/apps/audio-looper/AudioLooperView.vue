@@ -5,6 +5,7 @@ import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
 import AppStudioExportBar from '../../components/ui/AppStudioExportBar.vue'
 import LooperExportBar from './components/LooperExportBar.vue'
 import LooperPreview from './components/LooperPreview.vue'
+import LooperSendToScreensaver from './components/LooperSendToScreensaver.vue'
 import LooperSettings from './components/LooperSettings.vue'
 import LooperSourcePanel from './components/LooperSourcePanel.vue'
 import { useAudioLooperStore } from './stores/audioLooper'
@@ -45,9 +46,10 @@ watch(hasSource, (has) => {
           Add audio in the source panel.
         </div>
       </div>
-      <AppStudioExportBar
-        :status="store.exportStatusLabel"
-      >
+      <AppStudioExportBar :status="store.exportStatusLabel">
+        <template #actions>
+          <LooperSendToScreensaver />
+        </template>
         <LooperExportBar />
       </AppStudioExportBar>
     </div>

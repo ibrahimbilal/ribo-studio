@@ -9,8 +9,8 @@ import {
 } from '../../../shared/screensaverSubscribeAnimation'
 import type { EncoderId } from '../encoders'
 import { n, RenderCancelled, spawnFfmpeg, verifyVideoOutput } from '../ffmpegUtil'
-import { audioFilterLine } from '../screensaverGraph'
 import type { ScreensaverRenderHooks } from '../renderScreensaver'
+import { muxScreensaverAudio } from '../screensaverAudioMux'
 import {
   cfrLibx264Args,
   resolveCfrEncodeSettings,
@@ -41,6 +41,7 @@ export interface CfrJob {
   duration: number
   compositionPath: string
   musicPath: string | null
+  audioAssetId?: string | null
   mediaPath: string
   mediaKind: 'image' | 'video'
   audioMode: 'none' | 'source' | 'upload'
@@ -86,7 +87,15 @@ export async function renderScreensaverCfr(
   workDir: string,
   hooks: ScreensaverRenderHooks,
   inheritedWarning: string | null,
-): Promise<{ outputPath: string; bytes: number; duration: number; warning: string | null }> {
+): Promise<{
+  outputPath: string
+  bytes: number
+  duration: number
+  warning: string | null
+  processingStrategy?: string
+  processingLabel?: string
+  lossyEncodeCount?: number
+}> {
   if (hooks.cancelled()) throw new RenderCancelled()
   hooks.onStatus('preparing', 'Preparing timeline')
   report(hooks, 0, 'Preparing timeline')
@@ -188,7 +197,7 @@ export async function renderScreensaverCfr(
     if (hooks.cancelled()) throw new RenderCancelled()
     hooks.onStatus('rendering', 'Processing audio')
     report(hooks, WEIGHTS.prepare + WEIGHTS.encode + WEIGHTS.assemble, 'Processing audio')
-    await muxAudio(job, videoOnly, outputPath, workDir, timeline.durationSeconds, hooks)
+    const audioMeta = await muxAudio(job, videoOnly, outputPath, workDir, timeline.durationSeconds, hooks)
 
     if (hooks.cancelled()) throw new RenderCancelled()
     hooks.onStatus('verifying', 'Validating output')
@@ -216,7 +225,7 @@ export async function renderScreensaverCfr(
         `Optimized CFR encoded ${framesEncoded} unique frames for ${timeline.totalFrames} output frames.`,
       )
     }
-    return { ...verified, warning }
+    return { ...verified, warning, ...audioMeta }
   } finally {
     await rm(path.join(workDir, 'cfr-video.mp4'), { force: true }).catch(() => undefined)
     await rm(path.join(workDir, 'cfr-segments.ffconcat'), { force: true }).catch(() => undefined)
@@ -424,10 +433,16 @@ async function muxAudio(
   workDir: string,
   durationSec: number,
   hooks: ScreensaverRenderHooks,
-): Promise<void> {
-  const args = ['-y', '-hide_banner', '-progress', 'pipe:1', '-nostats', '-i', videoPath]
+): Promise<{ processingStrategy?: string; processingLabel?: string; lossyEncodeCount?: number }> {
   if (!wantsAudio(job)) {
-    args.push(
+    const args = [
+      '-y',
+      '-hide_banner',
+      '-progress',
+      'pipe:1',
+      '-nostats',
+      '-i',
+      videoPath,
       '-map',
       '0:v:0',
       '-c:v',
@@ -438,68 +453,42 @@ async function muxAudio(
       '-movflags',
       '+faststart',
       outputPath,
-    )
+    ]
     await spawnFfmpeg(args, durationSec, hooks)
-    return
+    return { lossyEncodeCount: 0 }
   }
-
-  const lines: string[] = []
-  if (job.audioMode === 'upload' && job.musicPath) {
-    if (job.loopAudio) args.push('-stream_loop', '-1')
-    args.push('-i', job.musicPath)
-    lines.push(
-      audioFilterLine({
-        inputLabel: '1:a',
-        volume: job.audioVolume,
-        fadeIn: job.audioFadeIn,
-        fadeOut: job.audioFadeOut,
-        duration: durationSec,
-        loopSamples: false,
-      }),
-    )
-  } else if (job.audioMode === 'source' && job.sourceHasAudio) {
-    args.push('-stream_loop', '-1', '-i', job.mediaPath)
-    lines.push(
-      audioFilterLine({
-        inputLabel: '1:a',
-        volume: job.audioVolume,
-        fadeIn: job.audioFadeIn,
-        fadeOut: job.audioFadeOut,
-        duration: durationSec,
-        loopSamples: false,
-      }),
-    )
-  }
-
-  const filterPath = path.join(workDir, 'cfr-audio.txt')
-  await writeFile(filterPath, lines.join(';\n'))
-  args.push(
-    '-filter_complex_script',
-    filterPath,
-    '-map',
-    '0:v:0',
-    '-map',
-    '[aout]',
-    '-c:v',
-    'copy',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
-    '-ar',
-    '48000',
-    '-t',
-    n(durationSec + 0.02),
-    '-movflags',
-    '+faststart',
+  const meta = await muxScreensaverAudio({
+    job: {
+      id: job.id,
+      duration: durationSec,
+      audioMode: job.audioMode,
+      audioVolume: job.audioVolume,
+      audioFadeIn: job.audioFadeIn,
+      audioFadeOut: job.audioFadeOut,
+      loopAudio: job.loopAudio,
+      musicPath: job.musicPath,
+      audioAssetId: job.audioAssetId,
+      sourceHasAudio: job.sourceHasAudio,
+      mediaKind: job.mediaKind,
+      mediaPath: job.mediaPath,
+    },
+    videoPath,
     outputPath,
-  )
-  await spawnFfmpeg(args, durationSec, hooks)
+    workDir,
+    durationSec,
+    hooks,
+    copyVideo: true,
+  })
+  return {
+    processingStrategy: meta.processingStrategy,
+    processingLabel: meta.processingLabel,
+    lossyEncodeCount: meta.lossyEncodeCount,
+  }
 }
 
 function wantsAudio(job: CfrJob): boolean {
   if (job.audioVolume <= 0.001) return false
-  if (job.audioMode === 'upload') return Boolean(job.musicPath)
+  if (job.audioMode === 'upload') return Boolean(job.musicPath || job.audioAssetId)
   if (job.audioMode === 'source') return job.sourceHasAudio && job.mediaKind === 'video'
   return false
 }

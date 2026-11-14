@@ -174,10 +174,14 @@ export function formatDurationLabel(seconds: number): string {
 
 /**
  * Approximate file size in bytes.
- * Still and motion rates at 1920×1080, and the still rate at 3840×2160, come from the
- * 8-second libx264 CRF 20 baseline on 2026-10-22 (see `.cursor/skills/ribo-project/screensaver.md`). Other sizes scale
- * those 1080p bytes/sec by pixel count. This is an extrapolation, not a guarantee.
- * Audio adds 192 kbit/s when a track is present.
+ *
+ * Legacy Fast VFR still rates (1080p / 4K) come from the 8-second libx264 CRF 20 baseline
+ * on 2026-10-22 (see `.cursor/skills/ribo-project/screensaver.md`).
+ *
+ * Optimized CFR 4K60 stills store a packet for every output frame (stream-copied repeats still
+ * occupy space). Measured real-artwork Balanced CRF 20 ≈ 3.0 Mbit/s video (~5.4 GB / 4 h);
+ * use that band for 4K CFR estimates instead of the old 1 fps still baseline.
+ * Audio adds the provided bitrate (default 320 kbit/s high-quality fallback). Extrapolation only.
  */
 export function estimateOutputBytes(
   width: number,
@@ -185,14 +189,28 @@ export function estimateOutputBytes(
   durationSec: number,
   hasAudio: boolean,
   kind: 'still' | 'motion' = 'motion',
+  options?: { renderingMode?: ScreensaverRenderMode | null; fps?: number; audioBitrateBps?: number },
 ): number {
   const pixels = Math.max(1, width * height)
   const fullHd = 1920 * 1080
   const still1080 = 48156 / 8
   const still4k = 120820 / 8
   const motion1080 = 313403 / 8
+  const cfr = options?.renderingMode === 'optimized-cfr'
+  const fps = options?.fps ?? 30
   let videoPerSecond = kind === 'motion' ? motion1080 * (pixels / fullHd) : still1080 * (pixels / fullHd)
-  if (kind === 'still' && pixels >= 3840 * 2160 * 0.9) videoPerSecond = still4k
-  const audioPerSecond = hasAudio ? 192_000 / 8 : 0
+  if (kind === 'still' && pixels >= 3840 * 2160 * 0.9) {
+    if (cfr && fps >= 50) {
+      // ~3.0 Mbit/s measured class for photographic 4K60 Balanced CFR (not testsrc).
+      videoPerSecond = (3_000_000 / 8)
+    } else {
+      videoPerSecond = still4k
+    }
+  } else if (cfr && kind === 'still') {
+    // Scale the 4K60 measured band by pixel count and fps vs 60.
+    videoPerSecond = (3_000_000 / 8) * (pixels / (3840 * 2160)) * (Math.max(24, fps) / 60)
+  }
+  const audioBps = options?.audioBitrateBps && options.audioBitrateBps > 0 ? options.audioBitrateBps : 320_000
+  const audioPerSecond = hasAudio ? audioBps / 8 : 0
   return Math.round((videoPerSecond + audioPerSecond) * Math.max(0, durationSec))
 }

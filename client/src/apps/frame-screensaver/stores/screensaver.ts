@@ -45,7 +45,15 @@ import { computed, ref, toRaw, watch } from 'vue'
 import * as api from '../../../lib/api'
 import * as idb from '../../../lib/idb'
 import { titleFromFileName } from '../../../lib/format'
-import { readImageFile, readVideoFile, validateAudioFile, validateImageFile, validateScreensaverVideoFile } from '../../../lib/media'
+import {
+  readImageFile,
+  readVideoFile,
+  validateImageFile,
+  validateScreensaverAudioFile,
+  validateScreensaverVideoFile,
+} from '../../../lib/media'
+import type { ScreensaverAudioAvailability } from '@shared/screensaverAudio'
+import { SCREENSAVER_AUDIO_MAX_BYTES } from '@shared/screensaverAudio'
 import { idleExport, pickDisplayExportState } from '../../../lib/exportState'
 import { useManagedExportJobs } from '../../../lib/managedExportJobs'
 import { pageWasReloaded } from '../../../lib/pageNavigation'
@@ -132,9 +140,17 @@ interface ScreensaverProjectSummary {
   frameId: string
   audioMode: ScreensaverAudioMode
   audioFileName: string | null
+  audioAssetId: string | null
+  audioFileSize: number | null
+  audioDurationSec: number | null
   configFingerprint: string
   render: ScreensaverRenderState
 }
+
+export type ScreensaverAudioCardStatus = ScreensaverAudioAvailability
+
+/** Prefer server asset for large files; keep a local IDB copy when under this size. */
+const AUDIO_IDB_CACHE_MAX_BYTES = 64 * 1024 * 1024
 
 interface SourceUploadStatus {
   state: 'uploading' | 'ready' | 'error'
@@ -184,12 +200,15 @@ function defaultProject(): Omit<SavedScreensaverProject, 'version'> {
     loopType: 'hard',
     crossfadeSeconds: 1,
     audioMode: 'none',
-    audioVolume: 0.7,
-    audioFadeIn: 2,
-    audioFadeOut: 3,
+    audioVolume: 1,
+    audioFadeIn: 0,
+    audioFadeOut: 0,
     loopAudio: true,
     backgroundColor: '#000000',
     audioFileName: null,
+    audioAssetId: null,
+    audioFileSize: null,
+    audioDurationSec: null,
     renderingMode: DEFAULT_SCREENSAVER_RENDER_MODE,
     cfrQuality: DEFAULT_SCREENSAVER_CFR_QUALITY,
     profile: 'balanced',
@@ -262,14 +281,32 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   const loopType = ref<ScreensaverLoop>('hard')
   const crossfadeSeconds = ref(1)
   const audioMode = ref<ScreensaverAudioMode>('none')
-  const audioVolume = ref(0.7)
-  const audioFadeIn = ref(2)
-  const audioFadeOut = ref(3)
+  const audioVolume = ref(1)
+  const audioFadeIn = ref(0)
+  const audioFadeOut = ref(0)
   const loopAudio = ref(true)
   const backgroundColor = ref('#000000')
   const audioUrl = ref<string | null>(null)
   const audioFileName = ref<string | null>(null)
   const audioFileSize = ref<number | null>(null)
+  const audioDurationSec = ref<number | null>(null)
+  const audioAssetId = ref<string | null>(null)
+  const audioAvailability = ref<ScreensaverAudioAvailability>('idle')
+  const audioUploadProgress = ref(0)
+  const audioError = ref<string | null>(null)
+  let audioUploadAbort: AbortController | null = null
+  const settingsInspector = ref<'content' | 'output' | 'sound' | 'style'>('content')
+  /** One-shot request so the shell can switch to the Settings mobile/desktop column. */
+  const shellTabRequest = ref<'source' | 'preview' | 'settings' | null>(null)
+  /** True when a browser File is held (manual pick / IDB restore) — not Looper transfer. */
+  const audioHasLocalFile = ref(false)
+
+  /** Show Settings FileStatusBox for uploads; hide it for Send-to-Screensaver transfers. */
+  const showAudioStatusBox = computed(() => {
+    const state = audioAvailability.value
+    if (state === 'uploading' || state === 'validating' || state === 'error' || state === 'missing') return true
+    return audioHasLocalFile.value
+  })
   const subscribeAnimation = ref<SubscribeAnimationSettings>(defaultSubscribeAnimation())
   const subscribeChannelLookupLoading = ref(false)
 
@@ -296,7 +333,12 @@ export const useScreensaverStore = defineStore('screensaver', () => {
         ...item,
         mediaLabel: mediaCountLabel(item.mediaKind),
         sourceMissing: item.mediaKind != null && !sourceIds.value.includes(item.id),
-        audioMissing: item.audioMode === 'upload' && !audioIds.value.includes(item.id),
+        audioMissing:
+          item.audioMode === 'upload' &&
+          (item.id === projectId.value
+            ? audioAvailability.value === 'missing'
+            : !audioIds.value.includes(item.id) && !item.audioAssetId),
+        audio: audioView(item),
         frameMissing: frameIsMissing(item.frameId),
         outputMissing: item.render.outputMissing,
         live: isLiveRenderStatus(item.render.status),
@@ -321,6 +363,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       durationSeconds.value,
       hasOutAudio,
       mode.value === 'static' ? 'still' : 'motion',
+      { renderingMode: renderingMode.value, fps: fps.value },
     )
   })
 
@@ -351,6 +394,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       audioFadeOut: audioFadeOut.value,
       loopAudio: loopAudio.value,
       backgroundColor: backgroundColor.value,
+      audioAssetId: audioAssetId.value,
       profile: profile.value,
       encoder: encoder.value,
       renderingMode: renderingMode.value,
@@ -381,8 +425,16 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     if (durationSeconds.value < MIN_DURATION_SECONDS || durationSeconds.value > MAX_DURATION_SECONDS) {
       return `Duration must be between ${formatDurationLabel(MIN_DURATION_SECONDS)} and ${formatDurationLabel(MAX_DURATION_SECONDS)}.`
     }
-    if (audioMode.value === 'upload' && (!audioUrl.value || !audioFile)) {
-      return 'Upload background audio or choose another audio option.'
+    if (audioMode.value === 'upload') {
+      if (audioAvailability.value === 'uploading' || audioAvailability.value === 'validating') {
+        return 'Wait for background audio to finish uploading.'
+      }
+      if (audioAvailability.value === 'missing' || audioAvailability.value === 'error') {
+        return 'The background audio file is no longer available. Choose the audio again before exporting.'
+      }
+      if (audioAvailability.value !== 'available' || (!audioAssetId.value && !audioFile)) {
+        return 'Upload background audio or choose another audio option.'
+      }
     }
     if (audioMode.value === 'source' && !hasAudio.value) return 'This video has no audio. Choose another audio option.'
     if (
@@ -426,6 +478,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       loopAudio,
       backgroundColor,
       audioFileName,
+      audioAssetId,
       profile,
       encoder,
       renderingMode,
@@ -496,8 +549,47 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       frameId: project.composition?.frameId ?? 'none',
       audioMode: project.audioMode,
       audioFileName: project.audioFileName,
+      audioAssetId: project.audioAssetId ?? null,
+      audioFileSize: project.audioFileSize ?? null,
+      audioDurationSec: project.audioDurationSec ?? null,
       configFingerprint: project.configFingerprint ?? '',
       render,
+    }
+  }
+
+  function audioView(item: ScreensaverProjectSummary) {
+    const wantsAudio = item.audioMode === 'upload' || Boolean(item.audioFileName) || Boolean(item.audioAssetId)
+    if (!wantsAudio) {
+      return {
+        present: false as const,
+        state: 'idle' as ScreensaverAudioCardStatus,
+        progress: 0,
+        error: null as string | null,
+        fileName: null as string | null,
+        fileSize: null as number | null,
+        durationSec: null as number | null,
+      }
+    }
+    if (item.id === projectId.value) {
+      return {
+        present: true as const,
+        state: audioAvailability.value,
+        progress: audioUploadProgress.value,
+        error: audioError.value,
+        fileName: audioFileName.value || item.audioFileName,
+        fileSize: audioFileSize.value ?? item.audioFileSize,
+        durationSec: audioDurationSec.value ?? item.audioDurationSec,
+      }
+    }
+    const missing = !audioIds.value.includes(item.id) && !item.audioAssetId
+    return {
+      present: true as const,
+      state: (missing ? 'missing' : 'available') as ScreensaverAudioCardStatus,
+      progress: missing ? 0 : 1,
+      error: missing ? 'The background audio file is no longer available.' : null,
+      fileName: item.audioFileName,
+      fileSize: item.audioFileSize,
+      durationSec: item.audioDurationSec,
     }
   }
 
@@ -696,24 +788,83 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     }
 
     const savedAudioName = audioFileName.value
-    const wantsUpload = audioMode.value === 'upload' || Boolean(savedAudioName)
+    const savedAssetId = audioAssetId.value
+    const wantsUpload = audioMode.value === 'upload' || Boolean(savedAudioName) || Boolean(savedAssetId)
+    if (!wantsUpload) {
+      clearBackgroundAudioInMemory()
+      audioAvailability.value = 'idle'
+      return
+    }
+    audioAvailability.value = 'validating'
+    audioError.value = null
     const audio = await projectLibrary.loadScreensaverProjectFile(id, 'audio')
-    if (audio && wantsUpload) {
+    if (audio) {
       clearBackgroundAudioInMemory()
       audioFile = new File([audio.blob], audio.name, { type: audio.type || 'audio/mpeg' })
+      audioHasLocalFile.value = true
       audioUrl.value = URL.createObjectURL(audioFile)
       audioFileName.value = audio.name
       audioFileSize.value = audioFile.size
       audioMode.value = 'upload'
       rememberId(audioIds, id)
+      if (savedAssetId) {
+        try {
+          const meta = await api.fetchScreensaverAudioMeta(savedAssetId)
+          if (meta) {
+            audioAssetId.value = meta.id
+            audioFileSize.value = meta.size
+            audioDurationSec.value = meta.duration
+            audioAvailability.value = 'available'
+            return
+          }
+        } catch {
+          // Fall through — local blob still works for this session / export via re-upload.
+        }
+      }
+      // Local blob is enough to export; re-upload asset if missing.
+      if (!audioAssetId.value) {
+        try {
+          audioAvailability.value = 'uploading'
+          const uploaded = await api.uploadScreensaverAudio(audioFile, (fraction) => {
+            audioUploadProgress.value = fraction
+          })
+          audioAssetId.value = uploaded.id
+          audioFileSize.value = uploaded.size
+          audioDurationSec.value = uploaded.duration
+        } catch (error) {
+          audioError.value = error instanceof Error ? error.message : 'Audio upload failed.'
+          audioAvailability.value = 'available'
+          return
+        }
+      }
+      audioAvailability.value = 'available'
       return
     }
-    clearBackgroundAudioInMemory()
-    if (wantsUpload) {
-      audioMode.value = 'upload'
-      audioFileName.value = savedAudioName
-      forgetId(audioIds, id)
+    if (savedAssetId) {
+      try {
+        const meta = await api.fetchScreensaverAudioMeta(savedAssetId)
+        if (meta) {
+          clearBackgroundAudioInMemory()
+          audioAssetId.value = meta.id
+          audioFileName.value = meta.name
+          audioFileSize.value = meta.size
+          audioDurationSec.value = meta.duration
+          audioUrl.value = api.screensaverAudioUrl(meta.id)
+          audioMode.value = 'upload'
+          audioAvailability.value = 'available'
+          forgetId(audioIds, id)
+          return
+        }
+      } catch {
+        // Treat as missing below.
+      }
     }
+    clearBackgroundAudioInMemory()
+    audioMode.value = 'upload'
+    audioFileName.value = savedAudioName
+    audioAssetId.value = savedAssetId
+    forgetId(audioIds, id)
+    audioAvailability.value = 'missing'
   }
 
   async function refreshRenderRecord(id: string, render: ScreensaverRenderState): Promise<ScreensaverRenderState> {
@@ -964,6 +1115,13 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     loopAudio.value = saved.loopAudio
     backgroundColor.value = saved.backgroundColor
     audioFileName.value = saved.audioFileName
+    audioAssetId.value = saved.audioAssetId ?? null
+    audioFileSize.value = saved.audioFileSize ?? null
+    audioDurationSec.value = saved.audioDurationSec ?? null
+    audioAvailability.value =
+      saved.audioMode === 'upload' || saved.audioFileName || saved.audioAssetId ? 'validating' : 'idle'
+    audioError.value = null
+    audioUploadProgress.value = 0
     profile.value = isScreensaverProfile(saved.profile) ? saved.profile : 'balanced'
     encoder.value = isEncoderChoice(saved.encoder) ? saved.encoder : 'cpu'
     // Older saves omit renderingMode — keep Fast VFR; do not migrate to Optimized CFR.
@@ -1014,6 +1172,9 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       loopAudio: loopAudio.value,
       backgroundColor: backgroundColor.value,
       audioFileName: audioFileName.value,
+      audioAssetId: audioAssetId.value,
+      audioFileSize: audioFileSize.value,
+      audioDurationSec: audioDurationSec.value,
       profile: profile.value,
       encoder: encoder.value,
       renderingMode: renderingMode.value,
@@ -1400,7 +1561,12 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     loopAudio.value = defaults.loopAudio
     backgroundColor.value = defaults.backgroundColor
     audioFileName.value = defaults.audioFileName
-    audioFileSize.value = null
+    audioFileSize.value = defaults.audioFileSize ?? null
+    audioDurationSec.value = defaults.audioDurationSec ?? null
+    audioAssetId.value = defaults.audioAssetId ?? null
+    audioAvailability.value = 'idle'
+    audioUploadProgress.value = 0
+    audioError.value = null
     profile.value = 'balanced'
     encoder.value = 'cpu'
     renderingMode.value = DEFAULT_SCREENSAVER_RENDER_MODE
@@ -1472,42 +1638,147 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   }
 
   function clearBackgroundAudioInMemory() {
-    if (audioUrl.value) URL.revokeObjectURL(audioUrl.value)
+    if (audioUrl.value && audioUrl.value.startsWith('blob:')) URL.revokeObjectURL(audioUrl.value)
     audioFile = null
+    audioHasLocalFile.value = false
     audioUrl.value = null
     audioFileName.value = null
     audioFileSize.value = null
+    audioDurationSec.value = null
   }
 
   async function setAudioFile(file: File) {
-    const problem = validateAudioFile(file)
+    const problem = validateScreensaverAudioFile(file)
     if (problem) {
       toast(problem)
       return
     }
-    try {
-      if (projectId.value) {
-        await projectLibrary.saveScreensaverProjectFile(projectId.value, 'audio', file)
-        rememberId(audioIds, projectId.value)
-      }
-    } catch {
-      toast('Could not save audio locally. It will work until you refresh.', 'info')
+    if (file.size > SCREENSAVER_AUDIO_MAX_BYTES) {
+      toast(`Background audio must be ${Math.round(SCREENSAVER_AUDIO_MAX_BYTES / (1024 * 1024 * 1024))} GiB or smaller.`)
+      return
     }
-    clearBackgroundAudioInMemory()
-    audioFile = file
-    audioUrl.value = URL.createObjectURL(file)
-    audioFileName.value = file.name
-    audioFileSize.value = file.size
+    audioUploadAbort?.abort()
+    const abort = new AbortController()
+    audioUploadAbort = abort
+    const previousAssetId = audioAssetId.value
+    audioAvailability.value = 'uploading'
+    audioUploadProgress.value = 0
+    audioError.value = null
     audioMode.value = 'upload'
+    try {
+      if (!serverOnline.value) await platform.refreshServer()
+      if (!serverOnline.value) throw new Error('The renderer is offline.')
+      const uploaded = await api.uploadScreensaverAudio(
+        file,
+        (fraction) => {
+          audioUploadProgress.value = fraction
+        },
+        abort.signal,
+      )
+      if (abort.signal.aborted) return
+      clearBackgroundAudioInMemory()
+      audioFile = file
+      audioHasLocalFile.value = true
+      audioUrl.value = URL.createObjectURL(file)
+      audioFileName.value = uploaded.name || file.name
+      audioFileSize.value = uploaded.size
+      audioDurationSec.value = uploaded.duration
+      audioAssetId.value = uploaded.id
+      audioAvailability.value = 'available'
+      audioUploadProgress.value = 1
+      if (projectId.value) {
+        if (file.size <= AUDIO_IDB_CACHE_MAX_BYTES) {
+          try {
+            await projectLibrary.saveScreensaverProjectFile(projectId.value, 'audio', file)
+            rememberId(audioIds, projectId.value)
+          } catch {
+            forgetId(audioIds, projectId.value)
+            toast('Could not cache audio locally. It stays on the server for this project.', 'info')
+          }
+        } else {
+          forgetId(audioIds, projectId.value)
+          void idb.deleteScreensaverKeys([idb.screensaverAudioKey(projectId.value)]).catch(() => undefined)
+        }
+      }
+      if (previousAssetId && previousAssetId !== uploaded.id) {
+        void api.deleteScreensaverAudio(previousAssetId).catch(() => undefined)
+      }
+      toast('Background audio ready.', 'success')
+    } catch (error) {
+      if (abort.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+        audioAvailability.value = previousAssetId || audioFile ? 'available' : 'idle'
+        return
+      }
+      const message = error instanceof Error ? error.message : 'Audio upload failed.'
+      audioError.value = message
+      audioAvailability.value = 'error'
+      toast(message)
+    } finally {
+      if (audioUploadAbort === abort) audioUploadAbort = null
+    }
+  }
+
+  /** Assign a server audio asset (e.g. transferred from Audio Looper) without re-uploading bytes. */
+  async function assignAudioAsset(
+    asset: api.ScreensaverAudioAsset,
+    options: { replaceConfirm?: boolean } = {},
+  ): Promise<boolean> {
+    const hasExisting =
+      audioMode.value === 'upload' &&
+      (audioAvailability.value === 'available' || Boolean(audioAssetId.value) || Boolean(audioFileName.value))
+    if (hasExisting && options.replaceConfirm !== false) {
+      const ok = window.confirm('Replace the current background audio with the Audio Looper export?')
+      if (!ok) return false
+    }
+    const previousAssetId = audioAssetId.value
+    clearBackgroundAudioInMemory()
+    audioAssetId.value = asset.id
+    audioFileName.value = asset.name
+    audioFileSize.value = asset.size
+    audioDurationSec.value = asset.duration
+    audioUrl.value = api.screensaverAudioUrl(asset.id)
+    audioHasLocalFile.value = false
+    audioMode.value = 'upload'
+    audioAvailability.value = 'available'
+    audioError.value = null
+    audioUploadProgress.value = 1
+    if (projectId.value) {
+      forgetId(audioIds, projectId.value)
+      void idb.deleteScreensaverKeys([idb.screensaverAudioKey(projectId.value)]).catch(() => undefined)
+    }
+    if (previousAssetId && previousAssetId !== asset.id) {
+      void api.deleteScreensaverAudio(previousAssetId).catch(() => undefined)
+    }
+    await persistMeta().catch(() => undefined)
+    return true
+  }
+
+  function openSoundSettings(): void {
+    settingsInspector.value = 'sound'
+    shellTabRequest.value = 'settings'
+  }
+
+  function consumeShellTabRequest(): 'source' | 'preview' | 'settings' | null {
+    const next = shellTabRequest.value
+    shellTabRequest.value = null
+    return next
   }
 
   function clearAudio() {
+    audioUploadAbort?.abort()
+    audioUploadAbort = null
+    const previousAssetId = audioAssetId.value
     clearBackgroundAudioInMemory()
+    audioAssetId.value = null
+    audioAvailability.value = 'idle'
+    audioUploadProgress.value = 0
+    audioError.value = null
     if (audioMode.value === 'upload') audioMode.value = 'none'
     if (projectId.value) {
       forgetId(audioIds, projectId.value)
       void idb.deleteScreensaverKeys([idb.screensaverAudioKey(projectId.value)]).catch(() => undefined)
     }
+    if (previousAssetId) void api.deleteScreensaverAudio(previousAssetId).catch(() => undefined)
   }
 
   function placeForSource() {
@@ -1781,7 +2052,11 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     const animSettings = structuredClone(toRaw(subscribeAnimation.value))
     const projectJson = buildExportProjectJson()
     const snapshotAnimSettings = animSettings
-    const snapshotAudioFile = audioMode.value === 'upload' ? audioFile : null
+    const snapshotAudioFile = audioMode.value === 'upload' && !audioAssetId.value ? audioFile : null
+    const snapshotAudioAssetId = audioMode.value === 'upload' ? audioAssetId.value : null
+    if (snapshotAudioAssetId) {
+      projectJson.audioAssetId = snapshotAudioAssetId
+    }
 
     const capturedProjectId = projectId.value
     if (
@@ -1800,6 +2075,10 @@ export const useScreensaverStore = defineStore('screensaver', () => {
             message: 'Preparing composition',
             stage: 'Preparing composition',
           })
+          if (snapshotAudioAssetId) {
+            const meta = await api.fetchScreensaverAudioMeta(snapshotAudioAssetId)
+            if (!meta) throw new Error('The background audio file is no longer available. Choose the audio again before exporting.')
+          }
           const blobs = await buildExportBlobsForSnapshot(snapshot)
           if (signal.aborted) throw new DOMException('The export was cancelled.', 'AbortError')
           let animationFrameBlobs: Blob[] | null = null
@@ -2205,6 +2484,16 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     audioUrl,
     audioFileName,
     audioFileSize,
+    audioDurationSec,
+    audioAssetId,
+    audioAvailability,
+    audioUploadProgress,
+    audioError,
+    showAudioStatusBox,
+    settingsInspector,
+    shellTabRequest,
+    openSoundSettings,
+    consumeShellTabRequest,
     subscribeAnimation,
     subscribeChannelLookupLoading,
     exportState,
@@ -2228,6 +2517,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     pickSource,
     hasBlockingSource,
     acceptExternalImage,
+    assignAudioAsset,
     removeSource,
     setDurationPreset,
     setCustomDurationMinutes,

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { formatDurationLabel } from '@shared/screensaver'
-import { Copy, Download, ImagePlay, ImagePlus, Info, Pencil, RotateCcw, Trash2 } from '@lucide/vue'
+import { Copy, Download, ImagePlay, ImagePlus, Info, Music, Pencil, RotateCcw, Trash2 } from '@lucide/vue'
 import { computed, ref } from 'vue'
-import { formatBytes } from '../../../lib/format'
+import { formatBytes, formatClock } from '../../../lib/format'
 import { audioFormatLabel } from '../../../lib/media'
 import AppDialog from '../../../components/ui/AppDialog.vue'
 import { SCREENSAVER_STATUS_LABEL, type ScreensaverProjectStatus } from '../lib/screensaverProjectModel'
@@ -16,7 +16,7 @@ const renameValue = ref('')
 const deleteId = ref<string | null>(null)
 const deleteAllOpen = ref(false)
 const downloadingAll = ref(false)
-const infoTip = ref<{ id: string; x: number; y: number; above: boolean } | null>(null)
+const infoTip = ref<{ id: string; kind: 'source' | 'audio'; x: number; y: number; above: boolean } | null>(null)
 
 const deleteTarget = computed(() => store.projects.find((item) => item.id === deleteId.value) ?? null)
 const downloadableCount = computed(
@@ -50,10 +50,27 @@ function uploadIconClass(state: 'uploading' | 'ready' | 'error'): string {
   return 'text-emerald-300'
 }
 
+function audioIconClass(state: string): string {
+  if (state === 'uploading' || state === 'validating') return 'text-brand'
+  if (state === 'error' || state === 'missing') return 'text-amber-200'
+  if (state === 'available') return 'text-emerald-300'
+  return 'text-zinc-400'
+}
+
 function uploadStatusLabel(project: (typeof store.projects)[number]): string {
   if (project.upload.state === 'uploading') return `Uploading ${Math.round(project.upload.progress * 100)}%`
   if (project.upload.state === 'error') return 'Upload failed'
   return 'Uploaded'
+}
+
+function audioStatusLabel(project: (typeof store.projects)[number]): string {
+  const audio = project.audio
+  if (audio.state === 'uploading') return `Uploading ${Math.round(audio.progress * 100)}%`
+  if (audio.state === 'validating') return 'Checking audio…'
+  if (audio.state === 'missing') return 'Audio missing'
+  if (audio.state === 'error') return 'Audio failed'
+  if (audio.state === 'available') return 'Audio ready'
+  return 'Background audio'
 }
 
 function uploadMeta(project: (typeof store.projects)[number]): string {
@@ -62,6 +79,15 @@ function uploadMeta(project: (typeof store.projects)[number]): string {
   if (project.upload.fileSize != null && project.upload.fileSize > 0) parts.push(formatBytes(project.upload.fileSize))
   if (project.upload.width > 0 && project.upload.height > 0) parts.push(`${project.upload.width}×${project.upload.height}`)
   if (project.upload.duration) parts.push(`${Math.round(project.upload.duration)}s`)
+  return parts.join(' · ')
+}
+
+function audioMeta(project: (typeof store.projects)[number]): string {
+  const audio = project.audio
+  const parts: string[] = []
+  if (audio.fileName) parts.push(audioFormatLabel(audio.fileName))
+  if (audio.fileSize != null && audio.fileSize > 0) parts.push(formatBytes(audio.fileSize))
+  if (audio.durationSec != null && audio.durationSec > 0) parts.push(formatClock(audio.durationSec))
   return parts.join(' · ')
 }
 
@@ -74,18 +100,19 @@ function formatUpdated(timestamp: number): string {
   })
 }
 
-function showUploadInfo(event: MouseEvent | FocusEvent, id: string) {
+function showInfoTip(event: MouseEvent | FocusEvent, id: string, kind: 'source' | 'audio') {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const above = rect.bottom + 132 > window.innerHeight
   infoTip.value = {
     id,
+    kind,
     x: Math.max(8, Math.min(rect.left, window.innerWidth - 232)),
     y: above ? rect.top - 8 : rect.bottom + 8,
     above,
   }
 }
 
-function hideUploadInfo() {
+function hideInfoTip() {
   infoTip.value = null
 }
 
@@ -156,6 +183,12 @@ async function sendToImageMotionFor(id: string) {
   if (!(await ensureProjectOpen(id))) return
   await sendScreensaverImageToImageMotion(id)
 }
+
+async function openSoundSettingsFor(id: string) {
+  hideInfoTip()
+  if (!(await ensureProjectOpen(id))) return
+  store.openSoundSettings()
+}
 </script>
 
 <template>
@@ -217,7 +250,6 @@ async function sendToImageMotionFor(id: string) {
         </div>
 
         <p v-if="project.sourceMissing" class="mt-2 text-xs text-amber-200">Source file is no longer available.</p>
-        <p v-if="project.audioMissing" class="mt-1 text-xs text-amber-200">Background audio is no longer available.</p>
         <p v-if="project.frameMissing" class="mt-1 text-xs text-amber-200">Selected frame is no longer on the server.</p>
         <p v-if="project.outputMissing" class="mt-1 text-xs text-amber-200">Rendered video is no longer available.</p>
         <p v-if="project.render.status === 'failed' && project.render.error" class="mt-1 text-xs text-red-300">{{ project.render.error }}</p>
@@ -228,12 +260,27 @@ async function sendToImageMotionFor(id: string) {
             :class="uploadIconClass(project.upload.state)"
             type="button"
             aria-label="Upload details"
-            @mouseenter="showUploadInfo($event, project.id)"
-            @mouseleave="hideUploadInfo"
-            @focus="showUploadInfo($event, project.id)"
-            @blur="hideUploadInfo"
+            @mouseenter="showInfoTip($event, project.id, 'source')"
+            @mouseleave="hideInfoTip"
+            @focus="showInfoTip($event, project.id, 'source')"
+            @blur="hideInfoTip"
           >
             <Info :size="16" />
+          </button>
+          <button
+            v-if="project.audio.present"
+            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            :class="audioIconClass(project.audio.state)"
+            type="button"
+            aria-label="Open Sound settings"
+            title="Sound settings"
+            @mouseenter="showInfoTip($event, project.id, 'audio')"
+            @mouseleave="hideInfoTip"
+            @focus="showInfoTip($event, project.id, 'audio')"
+            @blur="hideInfoTip"
+            @click="openSoundSettingsFor(project.id)"
+          >
+            <Music :size="16" />
           </button>
           <button
             class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
@@ -329,10 +376,18 @@ async function sendToImageMotionFor(id: string) {
           transform: infoTip.above ? 'translateY(-100%)' : undefined,
         }"
       >
-        <p class="font-semibold" :class="uploadIconClass(infoProject.upload.state)">{{ uploadStatusLabel(infoProject) }}</p>
-        <p v-if="infoProject.upload.fileName" class="mt-1 truncate text-zinc-100">{{ infoProject.upload.fileName }}</p>
-        <p v-if="uploadMeta(infoProject)" class="mt-1 text-zinc-500">{{ uploadMeta(infoProject) }}</p>
-        <p v-if="infoProject.upload.error" class="mt-1 text-red-300">{{ infoProject.upload.error }}</p>
+        <template v-if="infoTip.kind === 'source'">
+          <p class="font-semibold" :class="uploadIconClass(infoProject.upload.state)">{{ uploadStatusLabel(infoProject) }}</p>
+          <p v-if="infoProject.upload.fileName" class="mt-1 truncate text-zinc-100">{{ infoProject.upload.fileName }}</p>
+          <p v-if="uploadMeta(infoProject)" class="mt-1 text-zinc-500">{{ uploadMeta(infoProject) }}</p>
+          <p v-if="infoProject.upload.error" class="mt-1 text-red-300">{{ infoProject.upload.error }}</p>
+        </template>
+        <template v-else>
+          <p class="font-semibold" :class="audioIconClass(infoProject.audio.state)">{{ audioStatusLabel(infoProject) }}</p>
+          <p v-if="infoProject.audio.fileName" class="mt-1 truncate text-zinc-100">{{ infoProject.audio.fileName }}</p>
+          <p v-if="audioMeta(infoProject)" class="mt-1 text-zinc-500">{{ audioMeta(infoProject) }}</p>
+          <p v-if="infoProject.audio.error" class="mt-1 text-amber-200">{{ infoProject.audio.error }}</p>
+        </template>
       </div>
     </Teleport>
 

@@ -14,7 +14,9 @@ import {
   TEST_MIN_DURATION_SECONDS,
   type AudioLooperSettings,
 } from '../../shared/audioLooper'
+import { resolveOutputChannels } from '../../shared/audioLooperChannels'
 import { assertPlaylistTimeline, playlistPeriod } from '../../shared/audioLooperPlaylist'
+import { resolveCommonSampleRate } from '../../shared/audioProcessingPlan'
 import { checkFfmpeg } from './binaries'
 import { createAudioLooperJob, renderQueueBusy } from './jobs'
 import { probeAudioDetails, type AudioDetails } from './probe'
@@ -31,6 +33,45 @@ export function createAudioLooperRouter(): Router {
     { name: 'file', maxCount: 1 },
     { name: 'files', maxCount: MAX_AUDIO_LOOPER_TRACKS },
   ])
+
+  router.post('/probe', upload.single('file'), async (req, res) => {
+    const file = req.file
+    try {
+      if (!(await checkFfmpeg())) {
+        throw new Error('FFmpeg is missing. Reinstall dependencies with npm install, then restart the server.')
+      }
+      if (!file) throw new Error('Choose an audio file to inspect.')
+      if (file.size < 64) throw new Error('That audio file looks empty.')
+      if (file.size > DEFAULT_AUDIO_LOOPER_LIMITS.maxFileBytes) {
+        throw new Error(`Audio files must be ${DEFAULT_AUDIO_LOOPER_LIMITS.maxFileBytes / (1024 * 1024)} MB or smaller.`)
+      }
+      const details = await probeAudioDetails(file.path)
+      if (!details.codec || details.duration <= 0) {
+        throw new Error('This file does not contain a readable audio stream.')
+      }
+      res.json({
+        duration: details.duration,
+        codec: details.codec,
+        codecProfile: details.codecProfile,
+        formatName: details.formatName,
+        channels: details.channels,
+        channelLayout: details.channelLayout,
+        sampleRate: details.sampleRate,
+        sampleFmt: details.sampleFmt,
+        bitsPerSample: details.bitsPerSample,
+        streamBitrate: details.streamBitrate,
+        containerBitrate: details.containerBitrate,
+        bitrate: details.bitrate,
+        bitrateMode: details.bitrateMode,
+        size: details.size,
+      })
+    } catch (error) {
+      const status = statusOf(error)
+      res.status(status).json({ error: messageOf(error, 'The audio file could not be read.') })
+    } finally {
+      if (file?.path) await rm(file.path, { force: true }).catch(() => undefined)
+    }
+  })
 
   router.post('/export', fields, async (req, res) => {
     const files = uploadedFiles(req)
@@ -50,6 +91,9 @@ export function createAudioLooperRouter(): Router {
           sourceDuration: prepared.fileDuration,
           sourceSampleRate: prepared.sampleRate,
           sourceChannels: prepared.channels,
+          sourceCodec: prepared.sourceCodec,
+          sourceBitrate: prepared.sourceBitrate,
+          targetChannels: prepared.outputChannels,
           settings: prepared.settings,
           sources: stored.length >= 2 ? stored : undefined,
           downloadName: prepared.settings.filename,
@@ -113,8 +157,9 @@ export function createAudioLooperRouter(): Router {
           id,
           sourcePath: stored[0]?.path ?? '',
           sourceDuration: prepared.fileDuration,
-          sourceSampleRate: 48000,
-          sourceChannels: 2,
+          sourceSampleRate: prepared.sampleRate,
+          sourceChannels: prepared.channels,
+          targetChannels: prepared.outputChannels,
           settings,
           sources: stored,
         },
@@ -174,6 +219,9 @@ interface PreparedUpload {
   fileDuration: number
   sampleRate: number
   channels: number
+  outputChannels: number
+  sourceCodec: string | null
+  sourceBitrate: number
 }
 
 async function prepareUpload(files: Express.Multer.File[], settingsField: unknown): Promise<PreparedUpload> {
@@ -236,15 +284,36 @@ async function prepareUpload(files: Express.Multer.File[], settingsField: unknow
       channels: details?.channels ?? 0,
       trimStart: trim?.trimStart ?? 0,
       trimEnd: trim?.trimEnd ?? details?.duration ?? 0,
+      codec: details?.codec ?? null,
+      bitrate: details?.bitrate ?? 0,
+      streamBitrate: details?.streamBitrate,
+      containerBitrate: details?.containerBitrate,
+      channelLayout: details?.channelLayout ?? null,
     }
   })
   const first = probed[0]
+  const outputChannels = resolveOutputChannels(
+    sources.map((source) => source.channels),
+    settings.format,
+  )
+  const { rate: sampleRate } = resolveCommonSampleRate(
+    sources.map((source) => ({
+      codec: source.codec ?? null,
+      bitrate: source.bitrate ?? 0,
+      sampleRate: source.sampleRate,
+      channels: source.channels,
+      duration: source.duration,
+    })),
+  )
   return {
     settings,
     sources,
     fileDuration: first?.duration ?? 0,
-    sampleRate: files.length >= 2 ? 48000 : (first?.sampleRate ?? 0),
-    channels: files.length >= 2 ? 2 : (first?.channels ?? 0),
+    sampleRate,
+    channels: first?.channels ?? 0,
+    outputChannels,
+    sourceCodec: first?.codec ?? null,
+    sourceBitrate: first?.bitrate ?? 0,
   }
 }
 

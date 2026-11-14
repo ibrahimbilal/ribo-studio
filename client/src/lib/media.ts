@@ -1,3 +1,10 @@
+import {
+  DEFAULT_BACKGROUND_AUDIO_MAX_BYTES,
+  SCREENSAVER_AUDIO_MAX_BYTES,
+  formatScreensaverAudioLimitLabel,
+  validateScreensaverAudioFileMeta,
+} from '@shared/screensaverAudio'
+
 export interface LocalVideoMeta {
   duration: number
   width: number
@@ -15,13 +22,26 @@ export function validateVideoFile(file: File): string | null {
   return null
 }
 
-export function validateAudioFile(file: File): string | null {
+/** Ranking / Image Motion music (legacy 40 MiB). */
+export function validateAudioFile(file: File, maxBytes = DEFAULT_BACKGROUND_AUDIO_MAX_BYTES): string | null {
   const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
   const extensionOk = ['mp3', 'wav', 'm4a', 'aac', 'ogg'].includes(extension)
   const typeOk = /^audio\//.test(file.type)
   if (!extensionOk && !typeOk) return 'Background music must be an MP3, WAV, M4A, AAC, or OGG file.'
-  if (file.size > 40 * 1024 * 1024) return 'Background music must be 40 MB or smaller.'
+  if (file.size > maxBytes) {
+    return `Background music must be ${formatScreensaverAudioLimitLabel(maxBytes)} or smaller.`
+  }
   return null
+}
+
+/** Screensaver background audio (up to 1 GiB, includes FLAC). */
+export function validateScreensaverAudioFile(file: File): string | null {
+  return validateScreensaverAudioFileMeta({
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    maxBytes: SCREENSAVER_AUDIO_MAX_BYTES,
+  })
 }
 
 /** Short label for uploaded audio (extension or MIME subtype). */

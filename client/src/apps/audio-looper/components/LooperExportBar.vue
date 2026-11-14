@@ -15,6 +15,5 @@ const label = computed(() => (store.activeExportCount > 0 ? 'Queue export' : 'Ex
     :blocker="store.exportBlocker"
     hint="Progress, cancel, and download stay in the header notification panel."
     @export="store.startExport()"
-  >
-  </AppExportAction>
+  />
 </template>

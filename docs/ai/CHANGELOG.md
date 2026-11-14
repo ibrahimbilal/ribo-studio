@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.0.0** — official product baseline).
+Version source of truth: root `package.json` (currently **1.1.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -9,15 +9,24 @@ Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
 Changes since the current `package.json` version. User-facing bullets also belong under **Unreleased** in root `CHANGELOG.md`. On release, the release-manager skill / `npm run release:*` promotes the root changelog; then summarize or clear this section as appropriate.
 
-- 2026-11-13 — Full identifier rename `vvr`/`VVR_*` → `ribo`/`RIBO_*` (packages `ribo-studio`/`ribo-client`/`ribo-server`, IDB `ribo` with one-time migrate from `vvr`, env keys, Cursor `ribo-project`). Legacy `VVR_*` env and `vvr-*` storage keys still promote once.
-- 2026-11-13 — Removed Hostinger deploy/upload tooling (`hostinger-ribo-deploy` skill/rule, `pack:hostinger`, `make-deploy-archive.mjs`, `archiver` dep).
-- 2026-11-13 — Windows launcher exe renamed `Video factory.exe` → `Ribo Studio.exe` (`launcher/Launcher.csproj`, `launcher/build.mjs`, `launcher/Program.cs`).
-
 ## History
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
-- Release **v1.0.0** (2026-11-13) — Official Ribo Studio baseline: rebrand from Video's Factory, SemVer 1.0.0 (replacing legacy package metadata `3.0.0` with no Git tag), Keep a Changelog + `scripts/release.mjs`, sidebar `AppVersionLabel` / Vite `__APP_VERSION__`, `release-manager` skill. At baseline, compatibility IDs were still `vvr-app` / IDB `vvr` / `vvr-app.zip` / `VVR_*` (renamed later; see Unreleased).
+- Release **v1.1.0** (2026-11-14) — Source-Quality-First audio (planner, stream-copy Looper/Screensaver mux, source-aware bitrates, duration recovery), durable Screensaver audio-assets (1 GiB, FLAC), Looper **Send to Screensaver** (`from-looper-plan`), channel policy + probe, Ranking Delete all, Shuffle UI, ribo identifier rename, Hostinger tooling removed, launcher rename to Ribo Studio.exe.
+- 2026-11-14 — Stream-copy duration misses recover via `STREAM_COPY_TRIM` / expanded playlist concat before any lossy re-encode; probe prefers stream vs container duration (`audioDurationRecovery.ts`, `renderAudioLooper.ts`, `probe.ts`).
+- 2026-11-14 — Looper→Screensaver STREAM_COPY no longer overridden by unconditional WAV→AAC; mux honors plan (`streamCopy` / decode / lossless / lossy counters; separate source vs stream bitrates; `isPlainGain` checks both Looper and Screensaver gains) (`screensaverAudioMux.ts`, `audioProcessing.ts`, `audioProcessingPlan.ts`, `screensaverAudioMux.test.ts`).
+- 2026-11-14 — Screensaver defaults: background audio volume 100%, fade in/out 0 (was 0.7 / 2s / 3s) so plain uploads and Looper→Screensaver can stream-copy (`screensaver.ts`).
+- 2026-11-14 — Screensaver MP4 audio: prefer `aac_mf` (or LAME above ~192 kbps) so 320 kbps targets are honored; looper-plan mux keeps source bitrate/sample rate and does not re-apply baked volume/fades (`audioProcessing.ts`, `screensaverAudioMux.ts`).
+- 2026-11-14 — Source-Quality-First audio: shared planner (`shared/audioProcessingPlan.ts`), stream-copy Looper/Screensaver mux, source-aware bitrates, `lossyEncodeCount`, Looper→Screensaver recipe (`from-looper-plan`), richer ffprobe fields (`probe.ts`, `renderAudioLooper.ts`, `screensaverAudioMux.ts`, `audioAssets.ts`).
+- 2026-11-14 — Audio Looper channel policy + ffprobe metadata: preserve mono/stereo, verify export channels, `POST /api/audio-looper/probe`, job output channel fields (`shared/audioLooperChannels.ts`, `renderAudioLooper.ts`, `audioLooperRoutes.ts`, `probe.ts`, looper store).
+- 2026-11-14 — Screensaver audio: 1 GiB centralized limit + server `audio-assets` registry; availability states fix false missing warning; Looper **Send to Screensaver**; CFR size estimate for 4K60 stills (`shared/screensaverAudio.ts`, `audioAssets.ts`, `screensaverAudioRoutes.ts`, screensaver store, `LooperExportBar.vue`).
+- 2026-11-14 — Audio Looper: Shuffle moved to source column (icon-only, left of Delete all); Restore order removed (`LooperSourcePanel.vue`, `LooperSettings.vue`, `audioLooper.ts`).
+- 2026-11-14 — Ranking left panel: Delete all clips (`ClipSidebar.vue` + `project.removeAllClips`).
+- 2026-11-13 — Full identifier rename `vvr`/`VVR_*` → `ribo`/`RIBO_*` (packages `ribo-studio`/`ribo-client`/`ribo-server`, IDB `ribo` with one-time migrate from `vvr`, env keys, Cursor `ribo-project`). Legacy `VVR_*` env and `vvr-*` storage keys still promote once.
+- 2026-11-13 — Removed Hostinger deploy/upload tooling (`hostinger-ribo-deploy` skill/rule, `pack:hostinger`, `make-deploy-archive.mjs`, `archiver` dep).
+- 2026-11-13 — Windows launcher exe renamed `Video factory.exe` → `Ribo Studio.exe` (`launcher/Launcher.csproj`, `launcher/build.mjs`, `launcher/Program.cs`).
+- Release **v1.0.0** (2026-11-13) — Official Ribo Studio baseline: rebrand from Video's Factory, SemVer 1.0.0 (replacing legacy package metadata `3.0.0` with no Git tag), Keep a Changelog + `scripts/release.mjs`, sidebar `AppVersionLabel` / Vite `__APP_VERSION__`, `release-manager` skill. At baseline, compatibility IDs were still `vvr-app` / IDB `vvr` / `vvr-app.zip` / `VVR_*` (renamed in 1.1.0).
 - 2026-11-13 — Repository identity: GitHub `ibrahimbilal/ribo-studio`, display name **Ribo Studio** (legacy package/IDB/env `vvr` prefix retained at that moment).
 - 2026-11-13 — Version & release management: root Keep a Changelog, `scripts/release.mjs`, sidebar `AppVersionLabel`, Vite `__APP_VERSION__`, `release-manager` skill, always-applied versioning rule.
 - 2026-11-13 — Versioning rule aligned to SemVer + Unreleased; agents propose bumps only with approval (`.cursor/rules/versioning.mdc`, `docs/ai/CHANGELOG.md`).

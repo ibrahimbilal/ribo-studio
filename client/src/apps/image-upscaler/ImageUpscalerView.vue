@@ -67,9 +67,15 @@ watch(hasImages, (has) => {
           <Download :size="15" />
           Download all ZIP
         </button>
-        <button class="btn btn-ghost cursor-pointer" type="button" :disabled="!canSend" @click="store.requestSend(store.selected.localId)">
-          <MonitorPlay :size="15" />
-          Send to Screensaver
+        <button
+          class="btn btn-ghost cursor-pointer px-2"
+          type="button"
+          :disabled="!canSend"
+          aria-label="Send to Screensaver"
+          title="Send to Screensaver"
+          @click="store.requestSend(store.selected.localId)"
+        >
+          <MonitorPlay :size="18" aria-hidden="true" />
         </button>
       </div>
     </section>

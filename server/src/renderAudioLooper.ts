@@ -1,4 +1,4 @@
-import { copyFile, mkdir, rename, rm } from 'node:fs/promises'
+import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   LOUDNESS_TARGET_I,
@@ -8,8 +8,37 @@ import {
   volumeToFfmpeg,
   type AudioLooperSettings,
 } from '../../shared/audioLooper'
+import { pcmNormalizeFilter, resolveOutputChannels } from '../../shared/audioLooperChannels'
 import { assertPlaylistTimeline, playlistPeriod } from '../../shared/audioLooperPlaylist'
-import { n, RenderCancelled, spawnFfmpeg, verifyAudioOutput, type FfmpegHooks, type FfmpegStats } from './ffmpegUtil'
+import {
+  looperDestination,
+  maxReliableSourceBitrateBps,
+  planAudioProcessing,
+  sourceNeedsSampleAccurateTrim,
+  type AudioProcessingPlan,
+  type AudioSourceProbe,
+} from '../../shared/audioProcessingPlan'
+import {
+  AudioEncodeCounter,
+  logAudioExport,
+  logAudioPlan,
+  looperEncodeArgs,
+  streamCopyConcatArgs,
+  streamCopyLoopArgs,
+} from './audioProcessing'
+import {
+  recoverStreamCopyDuration,
+  writeExpandedPlaylistConcatList,
+} from './audioDurationRecovery'
+import {
+  n,
+  RenderCancelled,
+  spawnFfmpeg,
+  verifyAudioOutput,
+  type FfmpegHooks,
+  type FfmpegStats,
+  type VerifiedAudioOutput,
+} from './ffmpegUtil'
 import { jobsDir, outputsDir } from './storage'
 
 export interface AudioLooperPlaylistSource {
@@ -19,6 +48,11 @@ export interface AudioLooperPlaylistSource {
   channels: number
   trimStart: number
   trimEnd: number
+  codec?: string | null
+  bitrate?: number
+  streamBitrate?: number
+  containerBitrate?: number
+  channelLayout?: string | null
 }
 
 export interface AudioLooperRenderRequest {
@@ -26,6 +60,10 @@ export interface AudioLooperRenderRequest {
   sourceDuration: number
   sourceSampleRate: number
   sourceChannels: number
+  sourceCodec?: string | null
+  sourceBitrate?: number
+  /** Resolved target channel count. When omitted, derived from sources / sourceChannels. */
+  targetChannels?: number
   settings: AudioLooperSettings
   /** Two or more sources use the playlist graph. One source keeps the existing loop. */
   sources?: AudioLooperPlaylistSource[]
@@ -40,10 +78,49 @@ export interface AudioLooperRenderHooks {
   registerKill: (kill: () => void) => void
 }
 
+export type AudioLooperRenderResult = VerifiedAudioOutput & {
+  outputPath: string
+  warning: string | null
+  processingStrategy: AudioProcessingPlan['strategy']
+  processingLabel: AudioProcessingPlan['userLabel']
+  processingReason: string
+  lossyEncodeCount: number
+  reencoded: boolean
+}
+
+function toProbes(raw: AudioLooperRenderRequest): AudioSourceProbe[] {
+  if (raw.sources && raw.sources.length >= 2) {
+    return raw.sources.map((source) => ({
+      codec: source.codec ?? null,
+      bitrate: source.bitrate ?? 0,
+      streamBitrate: source.streamBitrate,
+      containerBitrate: source.containerBitrate,
+      sampleRate: source.sampleRate,
+      channels: source.channels,
+      channelLayout: source.channelLayout,
+      duration: source.duration,
+      trimStart: source.trimStart,
+      trimEnd: source.trimEnd,
+    }))
+  }
+  const track = raw.settings.tracks?.[0]
+  return [
+    {
+      codec: raw.sourceCodec ?? null,
+      bitrate: raw.sourceBitrate ?? 0,
+      sampleRate: raw.sourceSampleRate,
+      channels: raw.sourceChannels,
+      duration: raw.sourceDuration,
+      trimStart: track?.trimStart,
+      trimEnd: track?.trimEnd,
+    },
+  ]
+}
+
 export async function renderAudioLooper(
   raw: AudioLooperRenderRequest & { id: string },
   hooks: AudioLooperRenderHooks,
-): Promise<{ outputPath: string; bytes: number; duration: number; warning: string | null }> {
+): Promise<AudioLooperRenderResult> {
   if (hooks.cancelled()) throw new RenderCancelled()
   hooks.onStatus('preparing', 'Preparing audio')
 
@@ -53,26 +130,366 @@ export async function renderAudioLooper(
   await mkdir(dir, { recursive: true })
   const workPath = path.join(dir, `output${ext}`)
   const finalPath = path.join(outputsDir, `${raw.id}${ext}`)
+  const outputChannels = resolveRenderChannels(raw)
+  const counter = new AudioEncodeCounter()
+  const probes = toProbes(raw)
+  const needsLoop =
+    raw.sources && raw.sources.length >= 2
+      ? true
+      : raw.sourceDuration < target
+  const seamless = raw.settings.loopMode === 'seamless' && needsLoop && !(raw.sources && raw.sources.length >= 2)
 
-  if (raw.sources && raw.sources.length >= 2) {
-    await renderPlaylist(raw, workPath, dir, hooks)
-  } else {
-    const prepared = await maybeTrimSource(raw, dir, hooks)
-    const needsLoop = prepared.sourceDuration < target
-    const seamless = prepared.settings.loopMode === 'seamless' && needsLoop
-    if (seamless) {
-      await renderSeamless(prepared, workPath, dir, hooks)
+  let plan = planAudioProcessing({
+    sources: probes,
+    destination: looperDestination(raw.settings.format),
+    looperFormat: raw.settings.format,
+    operations: {
+      loopMode: raw.settings.loopMode,
+      volumePercent: raw.settings.volumePercent,
+      fadeInSeconds: raw.settings.fadeInSeconds,
+      fadeOutSeconds: raw.settings.fadeOutSeconds,
+      seamlessCrossfade: seamless,
+      playlistCrossfade: Boolean(raw.sources && raw.sources.length >= 2 && raw.settings.playlistCrossfade),
+      playlistCrossfadeSeconds: raw.settings.playlistCrossfadeSeconds,
+      normalizeLoudness: Boolean(raw.sources && raw.sources.length >= 2 && raw.settings.normalizeLoudness),
+      userMp3Bitrate: raw.settings.mp3Bitrate,
+    },
+  })
+  logAudioPlan(plan, probes, {
+    originalSourceBitrate: maxReliableSourceBitrateBps(probes),
+    currentStreamBitrate: probes[0]?.bitrate || 0,
+    targetEncodingBitrate: plan.targetBitrateKbps != null ? plan.targetBitrateKbps * 1000 : null,
+  })
+
+  let usedStreamCopy = false
+  try {
+    if (raw.sources && raw.sources.length >= 2) {
+      if (plan.strategy === 'STREAM_COPY') {
+        usedStreamCopy = await tryPlaylistStreamCopy(raw, workPath, dir, hooks, plan, counter, {})
+        if (!usedStreamCopy) {
+          plan = {
+            ...plan,
+            strategy: 'HIGH_QUALITY_REENCODE',
+            reason: 'Stream copy playlist fell back after compatibility or duration check.',
+            reencodeRequired: true,
+            lossyEncodeBudget: 1,
+            userLabel: 'High-Quality Re-encoding',
+          }
+          await renderPlaylist(raw, workPath, dir, hooks, outputChannels, plan, counter)
+        }
+      } else {
+        await renderPlaylist(raw, workPath, dir, hooks, outputChannels, plan, counter)
+      }
     } else {
-      hooks.onStatus('rendering', needsLoop ? 'Encoding loop' : 'Trimming audio')
-      await spawnFfmpeg(simpleArgs(prepared, workPath, needsLoop), target, wrapProgress(hooks, 0, 0.99))
+      const needsTrim = probes[0] ? sourceNeedsSampleAccurateTrim(probes[0]) : false
+      const prepared =
+        needsTrim || plan.strategy !== 'STREAM_COPY'
+          ? await maybeTrimSource(raw, dir, hooks, outputChannels)
+          : raw
+      const loopNeeded = prepared.sourceDuration < target
+      const doSeamless = prepared.settings.loopMode === 'seamless' && loopNeeded
+      if (doSeamless) {
+        await renderSeamless(prepared, workPath, dir, hooks, outputChannels, plan, counter)
+      } else if (plan.strategy === 'STREAM_COPY' && !needsTrim) {
+        hooks.onStatus('rendering', loopNeeded ? 'Copying loop' : 'Copying audio')
+        await spawnFfmpeg(
+          streamCopyLoopArgs({
+            sourcePath: prepared.sourcePath,
+            outputPath: workPath,
+            targetSeconds: target,
+            loop: loopNeeded,
+          }),
+          target,
+          wrapProgress(hooks, 0, 0.99),
+        )
+        usedStreamCopy = true
+      } else {
+        hooks.onStatus('rendering', loopNeeded ? 'Encoding loop' : 'Trimming audio')
+        await spawnFfmpeg(
+          simpleArgs(prepared, workPath, loopNeeded, outputChannels, plan, counter),
+          target,
+          wrapProgress(hooks, 0, 0.99),
+        )
+      }
+    }
+  } catch (error) {
+    if (usedStreamCopy) {
+      // Fall through to packet-preserving duration recovery (then re-encode only if needed).
+      console.warn('[AudioExport] Stream copy spawn/process failed; attempting duration recovery before re-encode.', error)
+    } else {
+      throw error
     }
   }
 
   if (hooks.cancelled()) throw new RenderCancelled()
   hooks.onStatus('verifying', 'Checking the audio file')
-  const verified = await verifyAudioOutput(workPath, target, raw.settings.format)
+  let verified: VerifiedAudioOutput
+  try {
+    if (usedStreamCopy) {
+      const recovery = await recoverStreamCopyDuration({
+        workPath,
+        dir,
+        targetSeconds: target,
+        format: raw.settings.format,
+        expectedChannels: outputChannels,
+        hooks: wrapProgress(hooks, 0.9, 0.99),
+        retryStreamCopyLoop: async () => {
+          hooks.onStatus('rendering', 'Retrying stream copy with corrected loop duration')
+          if (raw.sources && raw.sources.length >= 2) {
+            await tryPlaylistStreamCopy(raw, workPath, dir, hooks, plan, counter, {
+              forceLoop: true,
+            })
+          } else {
+            const prepared = raw
+            await spawnFfmpeg(
+              streamCopyLoopArgs({
+                sourcePath: prepared.sourcePath,
+                outputPath: workPath,
+                targetSeconds: target,
+                loop: true,
+              }),
+              target,
+              wrapProgress(hooks, 0.7, 0.9),
+            )
+          }
+        },
+        expandPlaylistAndCopy: async () => {
+          if (!(raw.sources && raw.sources.length >= 2)) return false
+          const listPath = path.join(dir, 'concat-copy-expanded.txt')
+          const repeats = await writeExpandedPlaylistConcatList({
+            listPath,
+            entries: raw.sources.map((source) => ({
+              path: source.path,
+              trimStart: source.trimStart,
+              trimEnd: source.trimEnd,
+              duration: source.duration,
+            })),
+            targetSeconds: target,
+          })
+          console.info(`[AudioDuration] expanded playlist concat to ${repeats} cycle(s)`)
+          hooks.onStatus('rendering', 'Retrying stream copy with expanded playlist')
+          await spawnFfmpeg(
+            streamCopyConcatArgs({
+              listPath,
+              outputPath: workPath,
+              targetSeconds: target,
+              loop: false,
+            }),
+            target,
+            wrapProgress(hooks, 0.7, 0.9),
+          )
+          return true
+        },
+      })
+
+      if (recovery.preservedPackets) {
+        verified = recovery.verified
+        if (recovery.strategy !== 'none') {
+          plan = {
+            ...plan,
+            strategy: 'STREAM_COPY',
+            reason: `Stream copy duration recovered via ${recovery.strategy} (${recovery.attempts} attempt(s)).`,
+            reencodeRequired: false,
+            lossyEncodeBudget: 0,
+            userLabel: 'Original Stream Preserved',
+          }
+        }
+        logAudioExport({
+          streamCopy: true,
+          decodeRequired: false,
+          losslessEncodeCount: counter.losslessEncodeCount,
+          lossyEncodeCount: counter.lossyEncodeCount,
+          verification: 'Passed',
+          strategyChangeReason:
+            recovery.strategy !== 'none'
+              ? `Duration recovery: ${recovery.strategy} (attempts=${recovery.attempts})`
+              : undefined,
+          actualOutputBitrate: verified.bitrate,
+        })
+      } else {
+        const reencodeReason = recovery.reencodeReason
+        console.warn(`[AudioExport] ${reencodeReason}`)
+        counter.lossyEncodeCount = 0
+        counter.losslessEncodeCount = 0
+        counter.decodeCount = 0
+        plan = {
+          ...plan,
+          strategy: 'HIGH_QUALITY_REENCODE',
+          reason: reencodeReason,
+          reencodeRequired: true,
+          lossyEncodeBudget: 1,
+          userLabel: 'High-Quality Re-encoding',
+        }
+        logAudioPlan(plan, probes, {
+          originalSourceBitrate: maxReliableSourceBitrateBps(probes),
+          targetEncodingBitrate: plan.targetBitrateKbps != null ? plan.targetBitrateKbps * 1000 : null,
+        })
+        // Re-encode from original sources/settings — never from a lossy intermediate.
+        if (raw.sources && raw.sources.length >= 2) {
+          await renderPlaylist(raw, workPath, dir, hooks, outputChannels, plan, counter)
+        } else {
+          const prepared = await maybeTrimSource(raw, dir, hooks, outputChannels)
+          const loopNeeded = prepared.sourceDuration < target
+          if (prepared.settings.loopMode === 'seamless' && loopNeeded) {
+            await renderSeamless(prepared, workPath, dir, hooks, outputChannels, plan, counter)
+          } else {
+            await spawnFfmpeg(
+              simpleArgs(prepared, workPath, loopNeeded, outputChannels, plan, counter),
+              target,
+              wrapProgress(hooks, 0, 0.99),
+            )
+          }
+        }
+        verified = await verifyAudioOutput(workPath, target, raw.settings.format, outputChannels)
+        logAudioExport({
+          streamCopy: false,
+          decodeRequired: true,
+          losslessEncodeCount: counter.losslessEncodeCount,
+          lossyEncodeCount: counter.lossyEncodeCount,
+          verification: 'Passed',
+          strategyChangeReason: plan.reason,
+          actualOutputBitrate: verified.bitrate,
+        })
+        usedStreamCopy = false
+      }
+    } else {
+      verified = await verifyAudioOutput(workPath, target, raw.settings.format, outputChannels)
+      logAudioExport({
+        streamCopy: false,
+        decodeRequired: counter.decodeRequired || plan.reencodeRequired,
+        losslessEncodeCount: counter.losslessEncodeCount,
+        lossyEncodeCount: counter.lossyEncodeCount,
+        verification: 'Passed',
+        actualOutputBitrate: verified.bitrate,
+      })
+    }
+  } catch (error) {
+    if (usedStreamCopy) {
+      // Unexpected non-duration failure after stream copy — last-resort re-encode from originals.
+      console.warn('[AudioExport] Stream copy failed unexpectedly; re-encoding from original sources.', error)
+      counter.lossyEncodeCount = 0
+      counter.losslessEncodeCount = 0
+      counter.decodeCount = 0
+      plan = {
+        ...plan,
+        strategy: 'HIGH_QUALITY_REENCODE',
+        reason: 'Stream copy failed for a non-recoverable reason; re-encoded once from original sources.',
+        reencodeRequired: true,
+        lossyEncodeBudget: 1,
+        userLabel: 'High-Quality Re-encoding',
+      }
+      logAudioPlan(plan, probes, {
+        originalSourceBitrate: maxReliableSourceBitrateBps(probes),
+        targetEncodingBitrate: plan.targetBitrateKbps != null ? plan.targetBitrateKbps * 1000 : null,
+      })
+      if (raw.sources && raw.sources.length >= 2) {
+        await renderPlaylist(raw, workPath, dir, hooks, outputChannels, plan, counter)
+      } else {
+        const prepared = await maybeTrimSource(raw, dir, hooks, outputChannels)
+        const loopNeeded = prepared.sourceDuration < target
+        if (prepared.settings.loopMode === 'seamless' && loopNeeded) {
+          await renderSeamless(prepared, workPath, dir, hooks, outputChannels, plan, counter)
+        } else {
+          await spawnFfmpeg(
+            simpleArgs(prepared, workPath, loopNeeded, outputChannels, plan, counter),
+            target,
+            wrapProgress(hooks, 0, 0.99),
+          )
+        }
+      }
+      verified = await verifyAudioOutput(workPath, target, raw.settings.format, outputChannels)
+      logAudioExport({
+        streamCopy: false,
+        decodeRequired: true,
+        losslessEncodeCount: counter.losslessEncodeCount,
+        lossyEncodeCount: counter.lossyEncodeCount,
+        verification: 'Passed',
+        strategyChangeReason: plan.reason,
+        actualOutputBitrate: verified.bitrate,
+      })
+      usedStreamCopy = false
+    } else {
+      logAudioExport({
+        streamCopy: false,
+        decodeRequired: counter.decodeRequired || plan.reencodeRequired,
+        losslessEncodeCount: counter.losslessEncodeCount,
+        lossyEncodeCount: counter.lossyEncodeCount,
+        verification: 'Failed',
+      })
+      throw error
+    }
+  }
+
   await moveOutput(workPath, finalPath)
-  return { ...verified, outputPath: finalPath, warning: null }
+  return {
+    ...verified,
+    outputPath: finalPath,
+    warning: null,
+    processingStrategy: plan.strategy,
+    processingLabel: plan.userLabel,
+    processingReason: plan.reason,
+    lossyEncodeCount: counter.lossyEncodeCount,
+    reencoded: counter.lossyEncodeCount > 0 || plan.reencodeRequired,
+  }
+}
+
+async function tryPlaylistStreamCopy(
+  raw: AudioLooperRenderRequest & { id: string },
+  workPath: string,
+  dir: string,
+  hooks: AudioLooperRenderHooks,
+  _plan: AudioProcessingPlan,
+  _counter: AudioEncodeCounter,
+  options: { forceLoop?: boolean } = {},
+): Promise<boolean> {
+  const sources = raw.sources ?? []
+  if (sources.length < 2) return false
+  if (raw.settings.playlistCrossfade || raw.settings.normalizeLoudness) return false
+  const listPath = path.join(dir, 'concat-copy.txt')
+  const lines: string[] = []
+  for (const source of sources) {
+    const file = source.path.replace(/\\/g, '/').replace(/'/g, "'\\''")
+    lines.push(`file '${file}'`)
+    if (source.trimStart > 0.03) lines.push(`inpoint ${n(source.trimStart)}`)
+    if (source.trimEnd < source.duration - 0.05) lines.push(`outpoint ${n(source.trimEnd)}`)
+  }
+  const durations = sources.map((source) => source.trimEnd - source.trimStart)
+  const period = assertPlaylistTimeline(durations, false, 0)
+  const target = raw.settings.targetDurationSeconds
+  const needsRepeat = options.forceLoop || period < target - 0.001
+  // Concat demuxer + -stream_loop is unreliable for long targets; expand the list instead.
+  if (needsRepeat) {
+    await writeExpandedPlaylistConcatList({
+      listPath,
+      entries: sources.map((source) => ({
+        path: source.path,
+        trimStart: source.trimStart,
+        trimEnd: source.trimEnd,
+        duration: source.duration,
+      })),
+      targetSeconds: target,
+    })
+  } else {
+    await writeFile(listPath, `${lines.join('\n')}\n`)
+  }
+  hooks.onStatus('rendering', needsRepeat ? 'Copying playlist loop' : 'Copying playlist')
+  await spawnFfmpeg(
+    streamCopyConcatArgs({ listPath, outputPath: workPath, targetSeconds: target, loop: false }),
+    target,
+    wrapProgress(hooks, 0, 0.99),
+  )
+  return true
+}
+
+export function resolveRenderChannels(raw: AudioLooperRenderRequest): number {
+  if (raw.targetChannels != null && raw.targetChannels > 0) return Math.round(raw.targetChannels)
+  if (raw.sources && raw.sources.length >= 2) {
+    return resolveOutputChannels(
+      raw.sources.map((source) => source.channels),
+      raw.settings.format,
+    )
+  }
+  return resolveOutputChannels([raw.sourceChannels], raw.settings.format)
 }
 
 function wrapProgress(hooks: AudioLooperRenderHooks, from: number, to: number): FfmpegHooks {
@@ -91,12 +508,17 @@ function ffmpegPrefix(): string[] {
   return ['-y', '-hide_banner', '-progress', 'pipe:1', '-nostats']
 }
 
-function encodeArgs(settings: AudioLooperSettings): string[] {
-  if (settings.format === 'wav') return ['-c:a', 'pcm_s16le']
-  if (settings.format === 'flac') return ['-c:a', 'flac']
-  return ['-c:a', 'libmp3lame', '-b:a', `${settings.mp3Bitrate}k`]
+function encodeArgs(settings: AudioLooperSettings, plan?: AudioProcessingPlan, counter?: AudioEncodeCounter): string[] {
+  const args = looperEncodeArgs({
+    format: settings.format,
+    mp3BitrateKbps: plan?.targetBitrateKbps ?? settings.mp3Bitrate,
+  })
+  // Count only the final lossy encode here; intermediate PCM steps are tracked by callers when needed.
+  if (settings.format === 'mp3' && counter) counter.recordLossyEncode(1)
+  return args
 }
 
+/** Volume/fades only — duration is enforced with -t, not unconditional atrim. */
 function outputFilter(settings: AudioLooperSettings, duration: number): string | null {
   const parts: string[] = []
   const volume = volumeToFfmpeg(settings.volumePercent)
@@ -106,19 +528,45 @@ function outputFilter(settings: AudioLooperSettings, duration: number): string |
     const start = Math.max(0, duration - settings.fadeOutSeconds)
     parts.push(`afade=t=out:st=${n(start)}:d=${n(settings.fadeOutSeconds)}`)
   }
-  parts.push(`atrim=0:${n(duration)}`, 'asetpts=PTS-STARTPTS')
   return parts.length ? parts.join(',') : null
 }
 
-function simpleArgs(raw: AudioLooperRenderRequest & { id: string }, workPath: string, loop: boolean): string[] {
+function simpleArgs(
+  raw: AudioLooperRenderRequest & { id: string },
+  workPath: string,
+  loop: boolean,
+  outputChannels: number,
+  plan?: AudioProcessingPlan,
+  counter?: AudioEncodeCounter,
+): string[] {
   const target = raw.settings.targetDurationSeconds
   const args = [...ffmpegPrefix()]
   if (loop) args.push('-stream_loop', '-1')
   args.push('-i', raw.sourcePath, '-t', n(target), '-vn', '-map', '0:a:0')
-  const filter = outputFilter(raw.settings, target)
+  const sampleRate = plan?.expectedSampleRate || raw.sourceSampleRate
+  const filter = composeAudioFilter(raw.settings, target, raw.sourceChannels, outputChannels, sampleRate)
   if (filter) args.push('-filter:a', filter)
-  args.push(...encodeArgs(raw.settings), workPath)
+  args.push(...encodeArgs(raw.settings, plan, counter), workPath)
   return args
+}
+
+/** Volume/fades/trim, plus channel normalize when the source layout differs from the target. */
+function composeAudioFilter(
+  settings: AudioLooperSettings,
+  duration: number,
+  sourceChannels: number,
+  outputChannels: number,
+  sampleRate: number,
+): string | null {
+  const parts: string[] = []
+  if (sourceChannels > 0 && sourceChannels !== outputChannels) {
+    parts.push(pcmNormalizeFilter(sampleRate > 0 ? sampleRate : 48000, outputChannels))
+  } else if (outputChannels > 2 || (sourceChannels > 2 && settings.format === 'mp3')) {
+    parts.push(pcmNormalizeFilter(sampleRate > 0 ? sampleRate : 48000, outputChannels))
+  }
+  const tail = outputFilter(settings, duration)
+  if (tail) parts.push(tail)
+  return parts.length ? parts.join(',') : null
 }
 
 async function renderSeamless(
@@ -126,6 +574,9 @@ async function renderSeamless(
   workPath: string,
   dir: string,
   hooks: AudioLooperRenderHooks,
+  outputChannels: number,
+  plan?: AudioProcessingPlan,
+  counter?: AudioEncodeCounter,
 ): Promise<void> {
   const D = raw.sourceDuration
   const C = raw.settings.crossfadeSeconds
@@ -134,6 +585,8 @@ async function renderSeamless(
     throw new Error('Crossfade must be shorter than the source audio.')
   }
 
+  const rate = plan?.expectedSampleRate || (raw.sourceSampleRate > 0 ? raw.sourceSampleRate : 48000)
+  const pcm = pcmNormalizeFilter(rate, outputChannels)
   const cyclePath = path.join(dir, 'cycle.wav')
   const xfPath = path.join(dir, 'xf.wav')
   const midPath = path.join(dir, 'mid.wav')
@@ -149,7 +602,7 @@ async function renderSeamless(
       raw.sourcePath,
       '-filter_complex',
       [
-        `[0:a]asplit=2[head][tail]`,
+        `[0:a]${pcm},asplit=2[head][tail]`,
         `[head]atrim=0:${n(C)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${n(C)}:curve=esin[h]`,
         `[tail]atrim=${n(D - C)}:${n(D)},asetpts=PTS-STARTPTS,afade=t=out:st=0:d=${n(C)}:curve=esin[t]`,
         `[t][h]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[xf]`,
@@ -176,7 +629,7 @@ async function renderSeamless(
         '-i',
         raw.sourcePath,
         '-filter:a',
-        `atrim=${n(C)}:${n(D - C)},asetpts=PTS-STARTPTS`,
+        `${pcm},atrim=${n(C)}:${n(D - C)},asetpts=PTS-STARTPTS`,
         '-t',
         n(midDuration),
         '-vn',
@@ -220,11 +673,11 @@ async function renderSeamless(
   const filter = outputFilter(raw.settings, target)
   const args = [...ffmpegPrefix(), '-stream_loop', '-1', '-i', cyclePath, '-t', n(target), '-vn', '-map', '0:a:0']
   if (filter) args.push('-filter:a', filter)
-  args.push(...encodeArgs(raw.settings), workPath)
+  args.push(...encodeArgs(raw.settings, plan, counter), workPath)
   await spawnFfmpeg(args, target, wrapProgress(hooks, 0.08, 0.99))
 }
 
-const PCM_FORMAT = 'aformat=sample_fmts=s16:sample_rates=48000:channel_layouts=stereo'
+const FALLBACK_SAMPLE_RATE = 48000
 const LIMITER = 'alimiter=limit=0.95:level=disabled'
 
 export function playlistStreamArgs(
@@ -232,6 +685,8 @@ export function playlistStreamArgs(
   settings: AudioLooperSettings,
   workPath: string,
   loop: boolean,
+  plan?: AudioProcessingPlan,
+  counter?: AudioEncodeCounter,
 ): string[] {
   const target = settings.targetDurationSeconds
   const args = [...ffmpegPrefix()]
@@ -239,7 +694,7 @@ export function playlistStreamArgs(
   args.push('-i', cyclePath, '-t', n(target), '-vn', '-map', '0:a:0')
   const filter = outputFilter(settings, target)
   if (filter) args.push('-filter:a', filter)
-  args.push(...encodeArgs(settings), workPath)
+  args.push(...encodeArgs(settings, plan, counter), workPath)
   return args
 }
 
@@ -247,6 +702,7 @@ async function maybeTrimSource(
   raw: AudioLooperRenderRequest & { id: string },
   dir: string,
   hooks: AudioLooperRenderHooks,
+  outputChannels: number,
 ): Promise<AudioLooperRenderRequest & { id: string }> {
   const track = raw.settings.tracks?.[0]
   if (!track) return raw
@@ -256,6 +712,7 @@ async function maybeTrimSource(
   const duration = trimEnd - track.trimStart
   if (!(duration > 0)) throw new Error('Each trim must be longer than zero.')
   const trimmedPath = path.join(dir, 'trimmed.wav')
+  const pcm = pcmNormalizeFilter(raw.sourceSampleRate > 0 ? raw.sourceSampleRate : FALLBACK_SAMPLE_RATE, outputChannels)
   hooks.onStatus('preparing', 'Trimming audio')
   await spawnFfmpeg(
     [
@@ -263,7 +720,7 @@ async function maybeTrimSource(
       '-i',
       raw.sourcePath,
       '-filter:a',
-      `atrim=${n(track.trimStart)}:${n(trimEnd)},asetpts=PTS-STARTPTS,${PCM_FORMAT}`,
+      `atrim=${n(track.trimStart)}:${n(trimEnd)},asetpts=PTS-STARTPTS,${pcm}`,
       '-t',
       n(duration),
       '-vn',
@@ -278,8 +735,9 @@ async function maybeTrimSource(
     ...raw,
     sourcePath: trimmedPath,
     sourceDuration: duration,
-    sourceSampleRate: 48000,
-    sourceChannels: 2,
+    sourceSampleRate: raw.sourceSampleRate > 0 ? raw.sourceSampleRate : FALLBACK_SAMPLE_RATE,
+    sourceChannels: outputChannels,
+    targetChannels: outputChannels,
   }
 }
 
@@ -288,6 +746,9 @@ async function renderPlaylist(
   workPath: string,
   dir: string,
   hooks: AudioLooperRenderHooks,
+  outputChannels: number,
+  plan?: AudioProcessingPlan,
+  counter?: AudioEncodeCounter,
 ): Promise<void> {
   const sources = raw.sources ?? []
   const durations = sources.map((source) => source.trimEnd - source.trimStart)
@@ -295,6 +756,10 @@ async function renderPlaylist(
   const crossfade = crossfadeOn ? raw.settings.playlistCrossfadeSeconds : 0
   const period = assertPlaylistTimeline(durations, crossfadeOn, crossfade)
   const analyzeEnd = raw.settings.normalizeLoudness ? 0.4 : 0.18
+  const sampleRate =
+    plan?.expectedSampleRate ||
+    Math.max(...sources.map((s) => s.sampleRate).filter((r) => r > 0), FALLBACK_SAMPLE_RATE)
+  const pcm = pcmNormalizeFilter(sampleRate, outputChannels)
 
   const prepared: string[] = []
   for (let index = 0; index < sources.length; index += 1) {
@@ -308,7 +773,7 @@ async function renderPlaylist(
     const out = path.join(dir, `track-${index}.wav`)
     const from = (index / sources.length) * analyzeEnd
     const to = ((index + 1) / sources.length) * analyzeEnd
-    await prepareTrack(source, out, raw.settings.normalizeLoudness, hooks, from, to)
+    await prepareTrack(source, out, raw.settings.normalizeLoudness, pcm, hooks, from, to)
     prepared.push(out)
   }
 
@@ -316,7 +781,7 @@ async function renderPlaylist(
   hooks.onStatus('preparing', 'Building the sequence')
   const cyclePath = path.join(dir, 'cycle.wav')
   if (crossfadeOn) {
-    await buildCrossfadeCycle(prepared, durations, crossfade, period, cyclePath, dir, hooks, analyzeEnd)
+    await buildCrossfadeCycle(prepared, durations, crossfade, period, cyclePath, dir, hooks, analyzeEnd, pcm)
   } else {
     await concatWavs(prepared, cyclePath, period, raw.settings.normalizeLoudness, hooks, analyzeEnd, analyzeEnd + 0.08)
   }
@@ -326,7 +791,7 @@ async function renderPlaylist(
   const loop = period < target - 0.001
   hooks.onStatus('rendering', loop ? 'Encoding loop' : 'Trimming audio')
   await spawnFfmpeg(
-    playlistStreamArgs(cyclePath, raw.settings, workPath, loop),
+    playlistStreamArgs(cyclePath, raw.settings, workPath, loop, plan, counter),
     target,
     wrapProgress(hooks, analyzeEnd + 0.1, 0.99),
   )
@@ -336,12 +801,13 @@ async function prepareTrack(
   source: AudioLooperPlaylistSource,
   outPath: string,
   normalize: boolean,
+  pcm: string,
   hooks: AudioLooperRenderHooks,
   from: number,
   to: number,
 ): Promise<void> {
   const duration = source.trimEnd - source.trimStart
-  const trimmed = `atrim=${n(source.trimStart)}:${n(source.trimEnd)},asetpts=PTS-STARTPTS,${PCM_FORMAT}`
+  const trimmed = `atrim=${n(source.trimStart)}:${n(source.trimEnd)},asetpts=PTS-STARTPTS,${pcm}`
   if (!normalize) {
     await spawnFfmpeg(
       [...ffmpegPrefix(), '-i', source.path, '-filter:a', trimmed, '-t', n(duration), '-vn', '-c:a', 'pcm_s16le', outPath],
@@ -421,6 +887,7 @@ async function buildCrossfadeCycle(
   dir: string,
   hooks: AudioLooperRenderHooks,
   progressFrom: number,
+  pcm: string,
 ): Promise<void> {
   let current = tracks[0]
   let currentDuration = durations[0] ?? 0
@@ -439,7 +906,7 @@ async function buildCrossfadeCycle(
         '-i',
         next,
         '-filter_complex',
-        `[0:a][1:a]acrossfade=d=${n(crossfade)}:c1=esin:c2=esin,${PCM_FORMAT}`,
+        `[0:a][1:a]acrossfade=d=${n(crossfade)}:c1=esin:c2=esin,${pcm}`,
         '-t',
         n(outDuration),
         '-c:a',

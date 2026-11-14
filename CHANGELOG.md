@@ -10,8 +10,31 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-14
+
+### Added
+
+- Ranking clip sidebar: **Delete all** button with confirm dialog (same pattern as Image Motion / Upscaler lists).
+- Audio Looper: **Send to Screensaver** transfers original tracks and loop settings (no intermediate lossy export); Screensaver encodes or stream-copies once into the video.
+- Screensaver: durable background-audio asset store (`/api/screensaver/audio*`) with upload progress and FLAC support.
+- Source-Quality-First audio processing: stream copy when compatible, source-aware bitrates when re-encoding, and export labels for Original Stream Preserved / Lossless Processing / High-Quality Re-encoding.
+
+### Fixed
+
+- Audio Looper: stream-copy exports that slightly miss the target duration are trimmed or re-looped with packet copy first; lossy re-encode is only a last resort.
+- Looper→Screensaver: plain MP3/AAC stream-copy is no longer forced through a WAV intermediate and AAC re-encode; compatible transfers keep `STREAM_COPY` with `lossyEncodeCount=0`.
+- Screensaver: background audio re-encode now honors high bitrates (e.g. 320 kbps) instead of landing near ~220–290 kbps with FFmpeg’s native AAC encoder; Looper→Screensaver no longer applies volume/fades twice.
+- Audio Looper: channel handling preserves Mono/Stereo correctly (mono-only projects stay mono; stereo playlists stay stereo with L/R separation); large uploads get channel labels via ffprobe when the waveform decode is skipped.
+
 ### Changed
 
+- Screensaver: new projects default to background audio **100% volume** and **no fades** (was 70% / 2s–3s), so plain MP3/AAC can stream-copy into the export.
+- Screensaver mux no longer hardcodes AAC 192 kbps; plain AAC/MP3 background audio can stream-copy into MP4.
+- Audio Looper avoids unnecessary re-encoding (conditional filters; MP3 playlist stream copy when codecs/rates/channels match).
+- Screensaver background audio limit raised to **1 GiB** (centralized in `shared/screensaverAudio.ts`); export prefers `audioAssetId` over multipart re-upload.
+- Screensaver missing-audio warning only appears when availability is confirmed `missing` (not while uploading/validating or when a valid in-memory/server asset exists).
+- Optimized CFR 4K60 size estimate aligned with measured ~3 Mbit/s photographic stills (≈5+ GB / 4 h class), not the old 1 fps still baseline.
+- Audio Looper: **Shuffle** is an icon-only control in the tracks header (left of Delete all); **Restore order** removed.
 - Renamed remaining internal `vvr` / `VVR_*` identifiers to `ribo` / `RIBO_*` (packages, IndexedDB, env keys, Cursor skills/rules). Existing browser data and `VVR_*` env values migrate once onto the new names.
 - Windows launcher output renamed from `Video factory.exe` to **`Ribo Studio.exe`** (`npm run build:launcher`).
 

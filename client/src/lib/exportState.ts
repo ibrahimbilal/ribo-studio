@@ -28,6 +28,8 @@ export function idleExport(): ExportState {
     etaSec: null,
     stage: null,
     encodeProgress: null,
+    processingLabel: null,
+    lossyEncodeCount: null,
   }
 }
 
@@ -55,6 +57,8 @@ export function exportStateFromPoll(patch: JobPollUpdate): ExportState {
     etaSec: patch.etaSec ?? base.etaSec,
     stage: patch.stage ?? base.stage,
     encodeProgress: patch.encodeProgress ?? base.encodeProgress,
+    processingLabel: patch.processingLabel ?? base.processingLabel,
+    lossyEncodeCount: patch.lossyEncodeCount ?? base.lossyEncodeCount,
   }
 }
 

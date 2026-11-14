@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Image as ImageIcon, ImagePlay, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
 import AppStudioExportBar from '../../components/ui/AppStudioExportBar.vue'
 import CreateThumbnailAction from '../../components/CreateThumbnailAction.vue'
@@ -43,6 +43,14 @@ function onKey(event: KeyboardEvent) {
 }
 
 const showDiagnostics = screensaverDiagnosticsEnabled()
+
+watch(
+  () => store.shellTabRequest,
+  () => {
+    const next = store.consumeShellTabRequest()
+    if (next) tab.value = next
+  },
+)
 
 onMounted(() => {
   void store.init()

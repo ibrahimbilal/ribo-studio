@@ -11,7 +11,7 @@ Verified product surfaces and where they live. Deep detail: `.cursor/skills/ribo
 
 ## Shorts — Ranking
 
-- Up to 30 clips (local or link title-only); reorder, trim, rank colors, play-at-end — `stores/project.ts`, `ClipSidebar.vue`, `SelectedClipPanel.vue`.
+- Up to 30 clips (local or link title-only); reorder, trim, rank colors, play-at-end, delete all — `stores/project.ts`, `ClipSidebar.vue`, `SelectedClipPanel.vue`.
 - Banner word spans + presets — `StylePanel.vue`, `lib/presets.ts`, `lib/title.ts`.
 - Canvas overlay preview + MP4 export — `PreviewStage.vue`, `usePlayback.ts`, `drawOverlay.ts`, `exportJob.ts`, `server/src/render.ts`.
 - Links never download video (`canDownload: false`).
@@ -28,6 +28,7 @@ Verified product surfaces and where they live. Deep detail: `.cursor/skills/ribo
 - Optional subscribe animation overlay — `shared/screensaverSubscribeAnimation.ts`, hybrid/CFR paths.
 - Multi-project IndexedDB library — `screensaverProjectLibrary.ts`.
 - Create Thumbnail / Send to Image Motion — `createThumbnail.ts`, `sendToImageMotion.ts`.
+- Background audio up to **1 GiB** via server audio-assets (`shared/screensaverAudio.ts`, `/api/screensaver/audio*`).
 
 ## Thumbnail Studio
 
@@ -43,8 +44,10 @@ Verified product surfaces and where they live. Deep detail: `.cursor/skills/ribo
 
 ## Audio Looper
 
-- Loop audio to exact duration (Simple / Seamless; playlist crossfade) — `apps/audio-looper/`, `shared/audioLooper*.ts`, `renderAudioLooper.ts`.
-- Shares FFmpeg queue as `kind: 'audio-looper'`. Formats MP3/WAV/FLAC.
+- Loop audio to exact duration (Simple / Seamless; playlist crossfade) — `apps/audio-looper/`, `shared/audioLooper*.ts`, `shared/audioLooperChannels.ts`, `shared/audioProcessingPlan.ts`, `renderAudioLooper.ts`.
+- Source-Quality-First planner: stream copy when compatible (honored end-to-end into Screensaver mux — no unconditional WAV), lossless PCM only when complex transforms need decode, source-aware bitrates when re-encoding (`streamCopy` / `lossyEncodeCount` / separate source vs stream bitrate logs).
+- Shares FFmpeg queue as `kind: 'audio-looper'`. Formats MP3/WAV/FLAC. Channel policy: mono-only → mono; stereo/mixed → stereo; multi-channel preserved on WAV/FLAC or downmixed for MP3. Probe: `POST /api/audio-looper/probe`.
+- **Send to Screensaver** transfers original sources + settings as an audio recipe (`POST /api/screensaver/audio/from-looper-plan`) — no intermediate lossy export required (`LooperSendToScreensaver.vue`, `sendToScreensaver.ts`).
 
 ## Cross-cutting
 

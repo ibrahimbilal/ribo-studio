@@ -29,6 +29,14 @@ export interface JobStatus {
   warning: string | null
   outputBytes: number | null
   outputDuration: number | null
+  outputChannels?: number | null
+  outputSampleRate?: number | null
+  outputBitrate?: number | null
+  outputCodec?: string | null
+  outputChannelLayout?: string | null
+  processingStrategy?: string | null
+  processingLabel?: string | null
+  lossyEncodeCount?: number | null
   queuePosition: number
   downloadName: string
   encoder?: string | null
@@ -38,6 +46,23 @@ export interface JobStatus {
   elapsedSec?: number | null
   etaSec?: number | null
   stage?: string | null
+}
+
+export interface AudioProbeDetails {
+  duration: number
+  codec: string | null
+  codecProfile?: string | null
+  formatName: string | null
+  channels: number
+  channelLayout: string | null
+  sampleRate: number
+  sampleFmt?: string | null
+  bitsPerSample?: number
+  streamBitrate?: number
+  containerBitrate?: number
+  bitrate: number
+  bitrateMode?: 'cbr' | 'vbr' | 'unknown'
+  size: number
 }
 
 export interface EncoderCatalog {
@@ -151,6 +176,74 @@ export function uploadScreensaverMedia(file: File, onProgress: (fraction: number
   return sendForm<ScreensaverMedia>('/api/screensaver/media', body, onProgress)
 }
 
+export interface ScreensaverAudioAsset {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  duration: number
+  codec: string | null
+  sampleRate: number
+  channels: number
+  bitrate?: number
+  origin: 'upload' | 'looper' | 'looper-plan'
+  sourceJobId: string | null
+  sourceApp: 'screensaver' | 'audio-looper'
+  hasRecipe?: boolean
+  trackCount?: number
+  createdAt: number
+}
+
+export function uploadScreensaverAudio(
+  file: File,
+  onProgress: (fraction: number) => void,
+  signal?: AbortSignal,
+): Promise<ScreensaverAudioAsset> {
+  const body = new FormData()
+  body.append('file', file, file.name)
+  return sendForm<ScreensaverAudioAsset>('/api/screensaver/audio', body, onProgress, signal)
+}
+
+export async function adoptLooperAudioForScreensaver(jobId: string): Promise<ScreensaverAudioAsset> {
+  const response = await fetch('/api/screensaver/audio/from-job', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobId }),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as ScreensaverAudioAsset
+}
+
+/** Upload original Looper sources + settings so Screensaver can encode once (or stream-copy). */
+export async function uploadLooperPlanForScreensaver(
+  files: File[],
+  settings: unknown,
+  onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
+): Promise<ScreensaverAudioAsset> {
+  const body = new FormData()
+  for (const file of files) body.append('files', file, file.name)
+  body.append('settings', JSON.stringify(settings))
+  return sendForm<ScreensaverAudioAsset>('/api/screensaver/audio/from-looper-plan', body, onProgress ?? (() => undefined), signal)
+}
+
+export function screensaverAudioUrl(id: string): string {
+  return `/api/screensaver/audio/${id}`
+}
+
+export async function fetchScreensaverAudioMeta(id: string): Promise<ScreensaverAudioAsset | null> {
+  const response = await fetch(`/api/screensaver/audio/${id}?meta=1`)
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as ScreensaverAudioAsset
+}
+
+export async function deleteScreensaverAudio(id: string): Promise<void> {
+  const response = await fetch(`/api/screensaver/audio/${id}`, { method: 'DELETE' })
+  if (response.status === 404) return
+  if (!response.ok) throw new Error(await readError(response))
+}
+
 export interface ScreensaverFrame {
   id: string
   name: string
@@ -244,6 +337,24 @@ export function startAudioLooperExport(
   signal: AbortSignal,
 ): Promise<{ jobId: string }> {
   return sendForm('/api/audio-looper/export', body, onProgress, signal)
+}
+
+/** FFprobe metadata for an uploaded looper source (used when browser decode skips channel info). */
+export async function probeLooperAudio(file: File, signal?: AbortSignal): Promise<AudioProbeDetails> {
+  const body = new FormData()
+  body.append('file', file, file.name)
+  const response = await fetch('/api/audio-looper/probe', { method: 'POST', body, signal })
+  if (!response.ok) {
+    let message = `Request failed (${response.status}).`
+    try {
+      const data = (await response.json()) as { error?: string }
+      if (data.error) message = data.error
+    } catch {
+      // Body was not JSON.
+    }
+    throw new Error(message)
+  }
+  return (await response.json()) as AudioProbeDetails
 }
 
 export async function getJob(id: string): Promise<JobStatus> {

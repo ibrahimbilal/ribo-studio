@@ -122,11 +122,24 @@ export function audioDurationSlack(expected: number): number {
   return Math.max(AUDIO_DURATION_TOLERANCE_FLOOR, Math.min(AUDIO_DURATION_TOLERANCE_CAP, expected * AUDIO_DURATION_TOLERANCE_RATIO))
 }
 
+export interface VerifiedAudioOutput {
+  outputPath: string
+  bytes: number
+  duration: number
+  channels: number
+  channelLayout: string | null
+  sampleRate: number
+  bitrate: number
+  codec: string | null
+  formatName: string | null
+}
+
 export async function verifyAudioOutput(
   file: string,
   expected: number,
   format: AudioLooperFormat,
-): Promise<{ outputPath: string; bytes: number; duration: number }> {
+  expectedChannels?: number,
+): Promise<VerifiedAudioOutput> {
   const probed = await probeAudioDetails(file)
   const info = await stat(file)
   if (!probed.codec || probed.duration <= 0) {
@@ -140,13 +153,33 @@ export async function verifyAudioOutput(
     throw new Error('The export looked incomplete, so it was discarded.')
   }
   const slack = audioDurationSlack(expected)
-  if (probed.duration < expected - slack) {
+  // Prefer stream duration over container (padding / encoder delay) for pass/fail.
+  const actual =
+    probed.streamDuration > 0
+      ? probed.streamDuration
+      : probed.duration
+  if (actual < expected - slack) {
     throw new Error('The export looked incomplete, so it was discarded.')
   }
-  if (probed.duration > expected + slack) {
+  if (actual > expected + slack) {
     throw new Error('The export was longer than requested, so it was discarded.')
   }
-  return { outputPath: file, bytes: info.size, duration: probed.duration }
+  if (expectedChannels != null && expectedChannels > 0 && probed.channels !== expectedChannels) {
+    throw new Error(
+      `The export has ${probed.channels || 'unknown'} channel${probed.channels === 1 ? '' : 's'} but ${expectedChannels} were required. It was discarded.`,
+    )
+  }
+  return {
+    outputPath: file,
+    bytes: info.size,
+    duration: actual,
+    channels: probed.channels,
+    channelLayout: probed.channelLayout,
+    sampleRate: probed.sampleRate,
+    bitrate: probed.bitrate,
+    codec: probed.codec,
+    formatName: probed.formatName,
+  }
 }
 
 /** Parse one FFmpeg `-progress` line. Prefers out_time_us, then out_time_ms, then out_time. */

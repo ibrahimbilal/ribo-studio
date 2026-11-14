@@ -18,6 +18,8 @@ export interface JobPollUpdate {
   stage?: string | null
   /** FFmpeg encode completion 0–1 (time / duration), null before server render starts. */
   encodeProgress?: number | null
+  processingLabel?: string | null
+  lossyEncodeCount?: number | null
 }
 
 export function mapJobToProgress(job: JobStatus, uploadProgress = 0.16): JobPollUpdate {
@@ -47,6 +49,8 @@ export function mapJobToProgress(job: JobStatus, uploadProgress = 0.16): JobPoll
     etaSec: job.etaSec ?? null,
     stage: job.stage ?? null,
     encodeProgress,
+    processingLabel: job.processingLabel ?? null,
+    lossyEncodeCount: job.lossyEncodeCount ?? null,
   }
 }
 
@@ -84,6 +88,8 @@ export async function pollJobUntilDone(
       jobId: latest.id,
       error: null,
       encodeProgress: 1,
+      processingLabel: latest.processingLabel ?? null,
+      lossyEncodeCount: latest.lossyEncodeCount ?? null,
     })
     return latest
   } finally {

@@ -5,12 +5,14 @@ import { useCardReorder } from '../composables/useCardReorder'
 import { usePlayback } from '../composables/usePlayback'
 import { formatClock, sourceLabel } from '../lib/format'
 import { useProjectStore } from '../stores/project'
+import AppDialog from './ui/AppDialog.vue'
 import FileDropZone from './FileDropZone.vue'
 
 const store = useProjectStore()
 const playback = usePlayback()
 const urlInput = ref('')
 const listEl = ref<HTMLElement | null>(null)
+const deleteAllOpen = ref(false)
 const { instant, itemStyle, isPlaceholder, onGripPointerDown } = useCardReorder({
   list: listEl,
   onReorder: (from, to) => store.moveClip(from, to),
@@ -19,6 +21,15 @@ const fileDrag = ref(false)
 const replaceInput = ref<HTMLInputElement | null>(null)
 const replaceId = ref<string | null>(null)
 let dragDepth = 0
+
+function closeDeleteAll() {
+  deleteAllOpen.value = false
+}
+
+async function confirmDeleteAll() {
+  deleteAllOpen.value = false
+  await store.removeAllClips()
+}
 
 function submitUrl() {
   const value = urlInput.value
@@ -115,9 +126,22 @@ function kept(duration: number, start: number, end: number): string {
       />
     </div>
 
+    <div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
+      <h3 class="section-label">Clips</h3>
+      <button
+        class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+        type="button"
+        :disabled="store.clips.length === 0"
+        @click="deleteAllOpen = true"
+      >
+        <Trash2 :size="14" />
+        Delete all
+      </button>
+    </div>
+
     <div
       ref="listEl"
-      class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3"
+      class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3"
       :class="{ 'card-reorder-instant': instant }"
       @dragover.prevent
     >
@@ -188,5 +212,13 @@ function kept(duration: number, start: number, end: number): string {
       </article>
       <input ref="replaceInput" class="hidden" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v" @change="onReplace" />
     </div>
+
+    <AppDialog :open="deleteAllOpen" title="Delete all clips" @cancel="closeDeleteAll">
+      <p class="text-sm text-zinc-300">Remove every clip from this ranking project?</p>
+      <template #actions>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">Cancel</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">Delete all</button>
+      </template>
+    </AppDialog>
   </aside>
 </template>

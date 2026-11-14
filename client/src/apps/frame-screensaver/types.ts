@@ -42,6 +42,10 @@ export interface SavedScreensaverProject {
   loopAudio: boolean
   backgroundColor: string
   audioFileName: string | null
+  /** Server audio-asset id for uploaded / transferred background audio. */
+  audioAssetId?: string | null
+  audioFileSize?: number | null
+  audioDurationSec?: number | null
   profile?: ScreensaverProfile
   encoder?: EncoderChoice
   /** Missing on older saves — load as fast-vfr (do not migrate silently). */

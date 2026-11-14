@@ -14,11 +14,17 @@ export interface Probe {
 interface ProbeStream {
   codec_type?: string
   codec_name?: string
+  profile?: string
   pix_fmt?: string
   width?: number
   height?: number
   channels?: number
+  channel_layout?: string
   sample_rate?: string
+  sample_fmt?: string
+  bits_per_sample?: number
+  bits_per_raw_sample?: string
+  bit_rate?: string
   duration?: string
   tags?: { rotate?: string }
   disposition?: { attached_pic?: number }
@@ -27,7 +33,13 @@ interface ProbeStream {
 
 interface ProbeJson {
   streams?: ProbeStream[]
-  format?: { duration?: string; start_time?: string }
+  format?: {
+    duration?: string
+    start_time?: string
+    bit_rate?: string
+    format_name?: string
+    size?: string
+  }
 }
 
 export interface SourceDetails {
@@ -119,25 +131,86 @@ export async function probeStill(file: string): Promise<{ width: number; height:
   return { width: video.width, height: video.height }
 }
 
+export type AudioBitrateMode = 'cbr' | 'vbr' | 'unknown'
+
 export interface AudioDetails {
+  /**
+   * Preferred content duration for verification: stream duration when present,
+   * otherwise container duration (may include padding / encoder delay).
+   */
   duration: number
+  /** Audio stream duration from ffprobe (0 when missing). */
+  streamDuration: number
+  /** Container/format duration from ffprobe (0 when missing). */
+  containerDuration: number
+  /** Container start_time (encoder delay / priming offset); may be negative. */
+  startTime: number
   codec: string | null
+  codecProfile: string | null
+  /** Container / format name from ffprobe (e.g. mp3, wav, mov,mp4,m4a). */
+  formatName: string | null
   channels: number
+  channelLayout: string | null
   sampleRate: number
+  sampleFmt: string | null
+  bitsPerSample: number
+  /** Stream bit_rate when present (bits/sec); 0 if missing. */
+  streamBitrate: number
+  /** Container format bit_rate when present (bits/sec); 0 if missing. */
+  containerBitrate: number
+  /**
+   * Preferred bitrate for planning: stream bitrate when available, else container.
+   * 0 when unknown — never invent a constant bitrate.
+   */
+  bitrate: number
+  bitrateMode: AudioBitrateMode
   size: number
+}
+
+function inferBitrateMode(streamBitrate: number, containerBitrate: number): AudioBitrateMode {
+  if (streamBitrate > 0) return 'cbr'
+  if (containerBitrate > 0) return 'vbr'
+  return 'unknown'
 }
 
 export async function probeAudioDetails(file: string): Promise<AudioDetails> {
   const data = await readProbe(file)
   const audio = (data.streams ?? []).find((stream) => stream.codec_type === 'audio')
-  const duration = positiveNumber(audio?.duration) || positiveNumber(data.format?.duration)
+  const streamDuration = positiveNumber(audio?.duration)
+  const containerDuration = positiveNumber(data.format?.duration)
+  const startTime = finiteNumber(data.format?.start_time)
+  const duration = streamDuration || containerDuration
   if (!audio || !duration) throw new Error('This file does not contain a readable audio stream.')
   const info = await stat(file)
+  const channels = Number.isFinite(audio.channels) ? Number(audio.channels) : 0
+  const layout =
+    typeof audio.channel_layout === 'string' && audio.channel_layout.trim()
+      ? audio.channel_layout.trim()
+      : null
+  const streamBitrate = positiveNumber(audio.bit_rate)
+  const containerBitrate = positiveNumber(data.format?.bit_rate)
+  const bitrate = streamBitrate || containerBitrate || 0
+  const bitsPerSample =
+    (Number.isFinite(audio.bits_per_sample) && (audio.bits_per_sample ?? 0) > 0
+      ? Number(audio.bits_per_sample)
+      : 0) || positiveNumber(audio.bits_per_raw_sample) || 0
   return {
     duration,
+    streamDuration,
+    containerDuration,
+    startTime,
     codec: audio.codec_name ?? null,
-    channels: Number.isFinite(audio.channels) ? Number(audio.channels) : 0,
+    codecProfile: typeof audio.profile === 'string' && audio.profile.trim() ? audio.profile.trim() : null,
+    formatName: data.format?.format_name ?? null,
+    channels,
+    channelLayout: layout,
     sampleRate: positiveNumber(audio.sample_rate),
+    sampleFmt: typeof audio.sample_fmt === 'string' && audio.sample_fmt.trim() ? audio.sample_fmt.trim() : null,
+    bitsPerSample,
+    streamBitrate,
+    containerBitrate,
+    bitrate,
+    bitrateMode: inferBitrateMode(streamBitrate, containerBitrate),
     size: info.size,
   }
 }

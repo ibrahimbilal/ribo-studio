@@ -430,7 +430,7 @@ function setTitleHideAfterEnabled(enabled: boolean) {
         />
     </SettingsAccordion>
 
-    <SettingsAccordion v-show="showSound" title="Audio">
+    <SettingsAccordion v-show="showSound" title="Audio" open>
       <SourceClipAudioControls
         v-model:keep-audio="store.style.video.keepAudio"
         v-model:normalize="store.style.video.normalize"

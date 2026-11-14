@@ -40,6 +40,8 @@ export async function ensureStorage(): Promise<void> {
   await mkdir(upscalerDir, { recursive: true })
   await mkdir(looperPreviewDir, { recursive: true })
   await loadRegistry()
+  const { ensureAudioAssets } = await import('./audioAssets')
+  await ensureAudioAssets()
 }
 
 export function getClip(id: string): StoredClip | undefined {
@@ -178,6 +180,8 @@ export async function sweepStorage(): Promise<void> {
   }
   await saveRegistry()
   await purgeOrphanClipFiles()
+  const { sweepAudioAssets } = await import('./audioAssets')
+  await sweepAudioAssets(7 * 24 * 60 * 60 * 1000)
 }
 
 export function safeVideoExt(name: string): string {

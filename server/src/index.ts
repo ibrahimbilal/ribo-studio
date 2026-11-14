@@ -67,6 +67,13 @@ import { addFrame, ensureFrames, getFrame, listFrames, removeAllFrames, removeFr
 import { probeAudioFile, probeImage, probeMedia, probeSourceDetails, probeStill, sniffMediaKind } from './probe'
 import { imageUpscalerRouter, purgeImageUpscaler, sweepImageUpscaler } from './imageUpscalerRoutes'
 import { audioLooperRouter } from './audioLooperRoutes'
+import { createScreensaverAudioRouter } from './screensaverAudioRoutes'
+import { getAudioAsset } from './audioAssets'
+import {
+  SCREENSAVER_AUDIO_MAX_BYTES,
+  formatScreensaverAudioLimitLabel,
+  validateScreensaverAudioFileMeta,
+} from '../../shared/screensaverAudio'
 import {
   addClip,
   clipIsBusy,
@@ -108,7 +115,11 @@ const screensaverMediaUpload = multer({
 
 const screensaverExportUpload = multer({
   dest: incomingDir,
-  limits: { fileSize: 80 * 1024 * 1024, files: SCREENSAVER_EXPORT_MAX_MULTIPART_FILES },
+  // Animation / composition PNGs stay ≤80 MB; optional legacy audio field may use the 1 GiB audio cap.
+  limits: {
+    fileSize: Math.max(80 * 1024 * 1024, SCREENSAVER_AUDIO_MAX_BYTES),
+    files: SCREENSAVER_EXPORT_MAX_MULTIPART_FILES,
+  },
 })
 
 const screensaverFrameUpload = multer({
@@ -585,17 +596,31 @@ app.post(
       const dir = path.join(jobsDir, id)
       await mkdir(dir, { recursive: true })
       let musicPath: string | null = null
+      let audioAssetId: string | null = project.audioAssetId
       let compositionPath: string | null = null
       let framePath: string | null = null
       let maskPath: string | null = null
       try {
-        if (audioFile) {
+        if (audioAssetId) {
+          const asset = getAudioAsset(audioAssetId)
+          if (!asset) throw new ClientError(400, 'The background audio file is no longer available. Choose the audio again before exporting.')
+          musicPath = asset.path
+          if (audioFile) await rm(audioFile.path, { force: true }).catch(() => undefined)
+        } else if (audioFile) {
+          const problem = validateScreensaverAudioFileMeta({
+            name: audioFile.originalname,
+            type: audioFile.mimetype,
+            size: audioFile.size,
+          })
+          if (problem) throw new Error(problem)
           const ext = safeAudioExt(audioFile.originalname)
-          if (!ext) throw new Error('Background audio must be an MP3, WAV, M4A, AAC, or OGG file.')
+          if (!ext) throw new Error('Background audio must be an MP3, WAV, FLAC, M4A, AAC, or OGG file.')
           musicPath = path.join(dir, `music${ext}`)
           await rename(audioFile.path, musicPath)
           audioFile.path = musicPath
           await probeAudioFile(musicPath)
+        } else if (project.audioMode === 'upload') {
+          throw new ClientError(400, 'Upload background audio or choose another audio option.')
         }
         if (compositionFile) {
           compositionPath = path.join(dir, 'composition.png')
@@ -691,6 +716,7 @@ app.post(
           loopAudio: project.loopAudio,
           backgroundColor: project.backgroundColor,
           musicPath,
+          audioAssetId,
           sourceDuration: stored.duration || details.duration || project.duration,
           sourceHasAudio: stored.hasAudio,
           downloadName: safeDownloadName(project.filename),
@@ -770,6 +796,7 @@ app.get('/api/jobs/:id/download', (req, res) => {
 
 app.use('/api/image-upscaler', imageUpscalerRouter)
 app.use('/api/audio-looper', audioLooperRouter)
+app.use('/api/screensaver', createScreensaverAudioRouter())
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Not found.' })
@@ -795,14 +822,17 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
     const tooManyFiles = error.code === 'LIMIT_FILE_COUNT'
     const frameUpload = req.path.includes('/screensaver/frames')
     const screensaverExport = req.path.includes('/screensaver/export')
+    const screensaverAudio = req.path.includes('/screensaver/audio')
     const audioLooper = req.path.includes('/audio-looper')
     res.status(tooLarge ? 413 : 400).json({
       error: tooLarge
         ? frameUpload
           ? `PNG frames must be ${FRAME_FILE_LIMIT / (1024 * 1024)} MB or smaller.`
-          : audioLooper
-            ? 'Audio files must be 100 MB or smaller.'
-            : 'That file is too large. Videos must be 500 MB or smaller. Music and overlays must be 40 MB or smaller.'
+          : screensaverAudio || screensaverExport
+            ? `Background audio must be ${formatScreensaverAudioLimitLabel()} or smaller.`
+            : audioLooper
+              ? 'Audio files must be 100 MB or smaller.'
+              : 'That file is too large. Videos must be 500 MB or smaller. Music and overlays must be 40 MB or smaller.'
         : tooManyFiles && screensaverExport
           ? `Too many files in one export (max ${SCREENSAVER_EXPORT_MAX_MULTIPART_FILES}). Lower subscribe animation FPS or duration, or restart the server after changing export limits.`
           : 'The upload could not be accepted.',
@@ -1018,6 +1048,7 @@ interface ScreensaverProjectInput {
   audioFadeOut: number
   loopAudio: boolean
   backgroundColor: string
+  audioAssetId: string | null
   profile: ScreensaverProfile
   encoder: EncoderChoice
   renderingMode: ScreensaverRenderMode
@@ -1061,6 +1092,10 @@ function parseScreensaverProject(raw: unknown): ScreensaverProjectInput {
   if (fit !== 'contain' && fit !== 'cover' && fit !== 'blur') throw new ClientError(400, 'Choose contain, cover, or blur.')
   const loopType = data.loopType === 'smooth' ? 'smooth' : 'hard'
   const audioMode = data.audioMode === 'source' || data.audioMode === 'upload' ? data.audioMode : 'none'
+  const audioAssetIdRaw = typeof (data as { audioAssetId?: unknown }).audioAssetId === 'string'
+    ? String((data as { audioAssetId?: string }).audioAssetId).trim()
+    : ''
+  const audioAssetId = audioAssetIdRaw && UUID.test(audioAssetIdRaw) ? audioAssetIdRaw : null
   if (mode === 'static' && kind !== 'image') {
     throw new ClientError(400, 'Static art mode requires an image source.')
   }
@@ -1099,6 +1134,7 @@ function parseScreensaverProject(raw: unknown): ScreensaverProjectInput {
     audioFadeOut: Math.max(0, Math.min(30, Number(data.audioFadeOut) || 0)),
     loopAudio: Boolean(data.loopAudio),
     backgroundColor: String(data.backgroundColor),
+    audioAssetId,
     profile: isScreensaverProfile(data.profile) ? data.profile : 'balanced',
     encoder: isEncoderChoice(data.encoder) ? data.encoder : 'auto',
     renderingMode,

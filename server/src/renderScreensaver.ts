@@ -12,7 +12,7 @@ import type { ScreensaverComposition } from '../../shared/screensaverComposition
 import { EncoderRejected, selectEncoder, type EncoderId } from './encoders'
 import { n, RenderCancelled, spawnFfmpeg, verifyVideoOutput, type FfmpegStats } from './ffmpegUtil'
 import { probeSourceDetails } from './probe'
-import { audioFilterLine, canStreamCopy, compositionFilterLines, legacyScaleFilter, type GraphJob } from './screensaverGraph'
+import { canStreamCopy, compositionFilterLines, legacyScaleFilter, type GraphJob } from './screensaverGraph'
 import { renderScreensaverHybrid } from './renderScreensaverHybrid'
 import { renderScreensaverCfr } from './screensaverCfr/renderScreensaverCfr'
 import { jobsDir, outputsDir } from './storage'
@@ -35,6 +35,8 @@ export interface ScreensaverRenderRequest {
   loopAudio: boolean
   backgroundColor: string
   musicPath: string | null
+  /** Server audio-asset id when music came from the shared asset store (not a job-local copy). */
+  audioAssetId?: string | null
   sourceDuration: number
   sourceHasAudio: boolean
   profile?: ScreensaverProfile
@@ -180,6 +182,7 @@ async function renderWithEncoder(
         duration: job.duration,
         compositionPath: job.compositionPath!,
         musicPath: job.musicPath,
+        audioAssetId: job.audioAssetId,
         mediaPath: job.mediaPath,
         mediaKind: job.mediaKind,
         audioMode: job.audioMode,
@@ -213,6 +216,7 @@ async function renderWithEncoder(
         duration: job.duration,
         compositionPath: job.compositionPath,
         musicPath: job.musicPath,
+        audioAssetId: job.audioAssetId,
         mediaPath: job.mediaPath,
         mediaKind: job.mediaKind,
         audioMode: job.audioMode,
@@ -388,31 +392,57 @@ async function encodeFiltered(
     lines.push(`[0:v]${legacyScaleFilter(job.width, job.height, job.fit, job.backgroundColor)},fps=${job.fps},trim=0:${n(job.duration)},setpts=PTS-STARTPTS[vout]`)
   }
 
+  const { aacEncodeArgs, buildScreensaverAudioFilter, canStreamCopyIntoMp4, planAndLog } = await import(
+    './audioProcessing'
+  )
+  const asset = job.audioAssetId ? (await import('./audioAssets')).getAudioAsset(job.audioAssetId) : undefined
+  const probeCodec = asset?.codec ?? (job.audioMode === 'source' ? job.sourceAudioCodec : null)
+  const plain =
+    wantsAudio(job) &&
+    canStreamCopyIntoMp4({
+      codec: probeCodec,
+      volume: job.audioVolume,
+      fadeIn: job.audioFadeIn,
+      fadeOut: job.audioFadeOut,
+    })
+  let audioCopyMapped = false
   const musicIndex = args.filter((arg) => arg === '-i').length
   if (wantsAudio(job) && job.audioMode === 'upload' && job.musicPath) {
     if (job.loopAudio) args.push('-stream_loop', '-1')
     args.push('-i', job.musicPath)
-    lines.push(
-      audioFilterLine({
-        inputLabel: `${musicIndex}:a`,
-        volume: job.audioVolume,
-        fadeIn: job.audioFadeIn,
-        fadeOut: job.audioFadeOut,
-        duration: job.duration,
-        loopSamples: false,
-      }),
-    )
+    if (!plain) {
+      lines.push(
+        buildScreensaverAudioFilter({
+          inputLabel: `${musicIndex}:a`,
+          volume: job.audioVolume,
+          fadeIn: job.audioFadeIn,
+          fadeOut: job.audioFadeOut,
+          duration: job.duration,
+          sampleRate: asset?.sampleRate ?? 48000,
+          channels: asset?.channels ?? 2,
+          forceResample: false,
+          forceStereo: (asset?.channels ?? 2) !== 2,
+        }),
+      )
+    } else {
+      audioCopyMapped = true
+    }
   } else if (wantsAudio(job) && job.audioMode === 'source') {
-    lines.push(
-      audioFilterLine({
-        inputLabel: '0:a',
-        volume: job.audioVolume,
-        fadeIn: job.audioFadeIn,
-        fadeOut: job.audioFadeOut,
-        duration: job.duration,
-        loopSamples: false,
-      }),
-    )
+    if (!plain) {
+      lines.push(
+        buildScreensaverAudioFilter({
+          inputLabel: '0:a',
+          volume: job.audioVolume,
+          fadeIn: job.audioFadeIn,
+          fadeOut: job.audioFadeOut,
+          duration: job.duration,
+          forceResample: true,
+          forceStereo: true,
+        }),
+      )
+    } else {
+      audioCopyMapped = true
+    }
   }
 
   if (lines.length) {
@@ -423,10 +453,42 @@ async function encodeFiltered(
     if (lines.some((line) => line.includes('[aout]'))) args.push('-map', '[aout]')
   } else {
     args.push('-map', '0:v:0')
+    if (audioCopyMapped && job.audioMode === 'upload') args.push('-map', `${musicIndex}:a:0`)
+    if (audioCopyMapped && job.audioMode === 'source') args.push('-map', '0:a:0')
   }
   args.push(...encoder.args, '-r', String(job.fps), '-t', n(job.duration + 0.05))
-  if (wantsAudio(job)) args.push('-c:a', 'aac', '-b:a', '192k', '-ar', '48000')
-  else args.push('-an')
+  if (wantsAudio(job)) {
+    const plan = planAndLog({
+      sources: [
+        {
+          codec: probeCodec ?? null,
+          bitrate: asset?.bitrate ?? 0,
+          sampleRate: asset?.sampleRate ?? 48000,
+          channels: asset?.channels ?? 2,
+          duration: job.duration,
+        },
+      ],
+      destination: plain ? 'mp4-copy' : 'mp4-aac',
+      operations: {
+        muxVolume: job.audioVolume,
+        muxFadeIn: job.audioFadeIn,
+        muxFadeOut: job.audioFadeOut,
+      },
+    })
+    if (plan.strategy === 'STREAM_COPY' && plain) {
+      args.push('-c:a', 'copy')
+    } else {
+      args.push(
+        ...aacEncodeArgs({
+          bitrateKbps: plan.targetBitrateKbps ?? 320,
+          sampleRate: plan.expectedSampleRate,
+          channels: Math.min(2, plan.expectedChannels) || 2,
+        }),
+      )
+    }
+  } else {
+    args.push('-an')
+  }
   args.push('-movflags', '+faststart', outputPath)
   await spawnFfmpeg(args, job.duration, hooks)
 }
@@ -436,9 +498,30 @@ async function attachAudio(args: string[], job: NormalizedJob, videoHasAudio: bo
     args.push('-map', '0:v:0', '-an')
     return
   }
-  const plainSource = job.audioVolume > 0.98 && job.audioFadeIn < 0.05 && job.audioFadeOut < 0.05 && job.sourceAudioCodec === 'aac'
+  const { aacEncodeArgs, buildScreensaverAudioFilter, canStreamCopyIntoMp4, planAndLog } = await import(
+    './audioProcessing'
+  )
+  const asset = job.audioAssetId ? (await import('./audioAssets')).getAudioAsset(job.audioAssetId) : undefined
+  const uploadCodec = asset?.codec ?? null
+  const plainUpload = canStreamCopyIntoMp4({
+    codec: uploadCodec,
+    volume: job.audioVolume,
+    fadeIn: job.audioFadeIn,
+    fadeOut: job.audioFadeOut,
+  })
+  const plainSource = canStreamCopyIntoMp4({
+    codec: job.sourceAudioCodec,
+    volume: job.audioVolume,
+    fadeIn: job.audioFadeIn,
+    fadeOut: job.audioFadeOut,
+  })
   if (job.audioMode === 'source' && videoHasAudio && plainSource) {
     args.push('-map', '0:v:0', '-map', '0:a:0', '-c:a', 'copy')
+    return
+  }
+  if (job.audioMode === 'upload' && job.musicPath && plainUpload) {
+    if (job.loopAudio) args.push('-stream_loop', '-1')
+    args.push('-i', job.musicPath, '-map', '0:v:0', '-map', '1:a:0', '-c:a', 'copy')
     return
   }
   let audioIndex = 0
@@ -450,18 +533,50 @@ async function attachAudio(args: string[], job: NormalizedJob, videoHasAudio: bo
     args.push('-stream_loop', '-1', '-i', job.mediaPath)
     audioIndex = 1
   }
-  const filter = audioFilterLine({
+  const plan = planAndLog({
+    sources: [
+      {
+        codec: uploadCodec ?? job.sourceAudioCodec ?? null,
+        bitrate: asset?.bitrate ?? 0,
+        sampleRate: asset?.sampleRate ?? 48000,
+        channels: asset?.channels ?? 2,
+        duration: job.duration,
+      },
+    ],
+    destination: 'mp4-aac',
+    operations: {
+      muxVolume: job.audioVolume,
+      muxFadeIn: job.audioFadeIn,
+      muxFadeOut: job.audioFadeOut,
+    },
+  })
+  const filter = buildScreensaverAudioFilter({
     inputLabel: `${audioIndex}:a`,
     volume: job.audioVolume,
     fadeIn: job.audioFadeIn,
     fadeOut: job.audioFadeOut,
     duration: job.duration,
-    loopSamples: false,
+    sampleRate: plan.expectedSampleRate,
+    channels: Math.min(2, plan.expectedChannels) || 2,
+    forceResample: true,
+    forceStereo: true,
   })
   const filterPath = path.join(jobsDir, job.id, 'audio.txt')
   await mkdir(path.dirname(filterPath), { recursive: true })
   await writeFile(filterPath, filter)
-  args.push('-filter_complex_script', filterPath, '-map', '0:v:0', '-map', '[aout]', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000')
+  args.push(
+    '-filter_complex_script',
+    filterPath,
+    '-map',
+    '0:v:0',
+    '-map',
+    '[aout]',
+    ...aacEncodeArgs({
+      bitrateKbps: plan.targetBitrateKbps ?? 320,
+      sampleRate: plan.expectedSampleRate,
+      channels: Math.min(2, plan.expectedChannels) || 2,
+    }),
+  )
 }
 
 async function verifyReady(
@@ -476,7 +591,7 @@ async function verifyReady(
 
 function wantsAudio(job: NormalizedJob): boolean {
   if (job.audioVolume <= 0.001) return false
-  if (job.audioMode === 'upload') return Boolean(job.musicPath)
+  if (job.audioMode === 'upload') return Boolean(job.musicPath || job.audioAssetId)
   if (job.audioMode === 'source') return job.sourceHasAudio && job.mediaKind === 'video'
   return false
 }

@@ -2,7 +2,6 @@
 import { ChevronDown, ChevronUp, GripVertical, Trash2 } from '@lucide/vue'
 import { ref } from 'vue'
 import { useCardReorder } from '../../../composables/useCardReorder'
-import { formatClock } from '../../../lib/format'
 import { useAudioLooperStore } from '../stores/audioLooper'
 
 const store = useAudioLooperStore()
@@ -49,7 +48,7 @@ const { instant, itemStyle, isPlaceholder, onGripPointerDown } = useCardReorder(
           </p>
           <p v-if="store.sequenceTrackId === track.id" class="mt-0.5 text-xs text-brand">Playing</p>
         </div>
-        <span v-if="track.duration" class="shrink-0 text-xs tabular-nums text-zinc-400">{{ formatClock(store.trimmedLength(track)) }}</span>
+        <span class="shrink-0 text-xs uppercase text-zinc-400">{{ store.formatLabel(track) }}</span>
       </div>
       <div v-if="store.trackCount > 1" class="mt-2 flex">
         <button class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40" type="button" aria-label="Move up" title="Move up" :disabled="index === 0" @click.stop="store.reorder(index, index - 1)">

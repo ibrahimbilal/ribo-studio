@@ -1,5 +1,6 @@
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
+import { releaseAudioAssets, retainAudioAssets } from './audioAssets'
 import { releaseClips, retainClips, jobsDir, outputsDir } from './storage'
 import { renderProject, type RenderRequest } from './render'
 import { renderScreensaver, type ScreensaverRenderRequest } from './renderScreensaver'
@@ -19,6 +20,15 @@ export interface JobView {
   warning: string | null
   outputBytes: number | null
   outputDuration: number | null
+  /** Probed from the finished audio file (Audio Looper). */
+  outputChannels: number | null
+  outputSampleRate: number | null
+  outputBitrate: number | null
+  outputCodec: string | null
+  outputChannelLayout: string | null
+  processingStrategy: string | null
+  processingLabel: string | null
+  lossyEncodeCount: number | null
   queuePosition: number
   downloadName: string
   outputExt: string
@@ -40,6 +50,14 @@ interface JobBase {
   warning: string | null
   outputBytes: number | null
   outputDuration: number | null
+  outputChannels: number | null
+  outputSampleRate: number | null
+  outputBitrate: number | null
+  outputCodec: string | null
+  outputChannelLayout: string | null
+  processingStrategy: string | null
+  processingLabel: string | null
+  lossyEncodeCount: number | null
   outputPath: string | null
   outputExt: string
   downloadName: string
@@ -97,6 +115,7 @@ export function createJob(id: string, input: RenderRequest & { downloadName: str
     warning: null,
     outputBytes: null,
     outputDuration: null,
+    ...emptyOutputAudio(),
     outputPath: null,
     outputExt: '.mp4',
     downloadName: input.downloadName,
@@ -127,6 +146,7 @@ export function createScreensaverJob(
     warning: null,
     outputBytes: null,
     outputDuration: null,
+    ...emptyOutputAudio(),
     outputPath: null,
     outputExt: '.mp4',
     downloadName: input.downloadName,
@@ -137,6 +157,7 @@ export function createScreensaverJob(
   }
   jobs.set(id, job)
   retainClips([input.mediaId])
+  if (input.audioAssetId) retainAudioAssets([input.audioAssetId])
   queue.push(id)
   void pump()
   return view(job)
@@ -159,6 +180,7 @@ export function createImageMotionJob(
     warning: null,
     outputBytes: null,
     outputDuration: null,
+    ...emptyOutputAudio(),
     outputPath: null,
     outputExt: '.mp4',
     downloadName,
@@ -189,6 +211,7 @@ export function createAudioLooperJob(
     warning: null,
     outputBytes: null,
     outputDuration: null,
+    ...emptyOutputAudio(),
     outputPath: null,
     outputExt: input.outputExt,
     downloadName: input.downloadName,
@@ -251,6 +274,7 @@ export async function dropJobOutput(jobId: string): Promise<void> {
     job.outputPath = null
     job.outputBytes = null
     job.outputDuration = null
+    Object.assign(job, emptyOutputAudio())
   }
 }
 
@@ -330,6 +354,36 @@ async function pump(): Promise<void> {
           job.outputPath = result.outputPath
           job.outputBytes = result.bytes
           job.outputDuration = result.duration
+          if (job.kind === 'audio-looper') {
+            const audio = result as {
+              channels?: number
+              sampleRate?: number
+              bitrate?: number
+              codec?: string | null
+              channelLayout?: string | null
+              processingStrategy?: string
+              processingLabel?: string
+              lossyEncodeCount?: number
+            }
+            job.outputChannels = audio.channels ?? null
+            job.outputSampleRate = audio.sampleRate ?? null
+            job.outputBitrate = audio.bitrate ?? null
+            job.outputCodec = audio.codec ?? null
+            job.outputChannelLayout = audio.channelLayout ?? null
+            job.processingStrategy = audio.processingStrategy ?? null
+            job.processingLabel = audio.processingLabel ?? null
+            job.lossyEncodeCount = audio.lossyEncodeCount ?? null
+          }
+          if (job.kind === 'screensaver') {
+            const audio = result as {
+              processingStrategy?: string
+              processingLabel?: string
+              lossyEncodeCount?: number
+            }
+            if (audio.processingStrategy) job.processingStrategy = audio.processingStrategy
+            if (audio.processingLabel) job.processingLabel = audio.processingLabel
+            if (audio.lossyEncodeCount != null) job.lossyEncodeCount = audio.lossyEncodeCount
+          }
         }
       } catch (error) {
         if (job.cancelRequested || (error instanceof Error && error.name === 'RenderCancelled')) {
@@ -358,6 +412,7 @@ async function finish(job: Job): Promise<void> {
     releaseClips(job.clips.map((clip) => clip.id))
   } else if (job.kind === 'screensaver') {
     releaseClips([job.mediaId])
+    if (job.audioAssetId) releaseAudioAssets([job.audioAssetId])
   } else if (job.kind === 'image-motion') {
     releaseClips(job.mediaIds)
   }
@@ -386,6 +441,14 @@ function view(job: Job): JobView {
     warning: job.warning,
     outputBytes: job.outputBytes,
     outputDuration: job.outputDuration,
+    outputChannels: job.outputChannels,
+    outputSampleRate: job.outputSampleRate,
+    outputBitrate: job.outputBitrate,
+    outputCodec: job.outputCodec,
+    outputChannelLayout: job.outputChannelLayout,
+    processingStrategy: job.processingStrategy,
+    processingLabel: job.processingLabel,
+    lossyEncodeCount: job.lossyEncodeCount,
     queuePosition,
     downloadName: job.downloadName,
     outputExt: job.outputExt,
@@ -409,6 +472,29 @@ function emptyDiagnostics(): Pick<JobBase, 'encoderLabel' | 'hardware' | 'encode
     etaSec: null,
     stage: null,
     encodeStarted: null,
+  }
+}
+
+function emptyOutputAudio(): Pick<
+  JobBase,
+  | 'outputChannels'
+  | 'outputSampleRate'
+  | 'outputBitrate'
+  | 'outputCodec'
+  | 'outputChannelLayout'
+  | 'processingStrategy'
+  | 'processingLabel'
+  | 'lossyEncodeCount'
+> {
+  return {
+    outputChannels: null,
+    outputSampleRate: null,
+    outputBitrate: null,
+    outputCodec: null,
+    outputChannelLayout: null,
+    processingStrategy: null,
+    processingLabel: null,
+    lossyEncodeCount: null,
   }
 }
 

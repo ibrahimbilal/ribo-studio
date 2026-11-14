@@ -44,7 +44,11 @@ Progress on the client: overlays/upload are local; queued/preparing/rendering/ve
 | GET | `/api/screensaver/frames/:id` | that PNG |
 | DELETE | `/api/screensaver/frames/:id` | remove a saved frame |
 | POST | `/api/uploads/cleanup` | JSON `{ purgeAll?: true, jobId? }` (default) — remove all frame PNGs, leftover `jobs/` work dirs, every clip not held by a render, and export MP4s in `outputs/` (optional `jobId` for the just-downloaded file; skips outputs and job dirs for jobs still encoding). Same handler at `/api/screensaver/uploads/cleanup`. Legacy `{ mediaId, frameIds }` when `purgeAll: false` |
-| POST | `/api/screensaver/export` | screensaver JSON, optional `audio`, optional `composition` PNG, optional `animationFrames` PNGs (max 120). Video frames come from the saved PNG, not an upload |
+| POST | `/api/screensaver/audio` | background audio upload, field `file`, max **1 GiB** → durable `audio-assets/` registry |
+| POST | `/api/screensaver/audio/from-job` | `{ jobId }` adopt finished Audio Looper output into `audio-assets/` (copy/hardlink) |
+| GET | `/api/screensaver/audio/:id` | stream asset (`?meta=1` for JSON metadata) |
+| DELETE | `/api/screensaver/audio/:id` | remove if not retained by an active render |
+| POST | `/api/screensaver/export` | screensaver JSON (`audioAssetId` preferred), optional legacy `audio` multipart, optional `composition` PNG, optional `animationFrames` PNGs. Video frames come from the saved PNG, not an upload |
 | GET | `/api/image-upscaler/capabilities` | Lanczos3 plus whether AI Lite can run. No filesystem paths |
 | POST | `/api/image-upscaler/process` | one image, field `file`, plus `options` JSON. Returns a job |
 | POST | `/api/image-upscaler/batch` | field `files` (max 8), plus `options` JSON |
@@ -71,13 +75,14 @@ Unknown `/api` routes return 404 JSON. If `client/dist/index.html` exists, Expre
 - `jobs/<id>/` — overlays, composition PNG, and music for the active render. Removed when the job ends, on tab/window close, and on server boot. Leftovers from a crashed or restarted render do not wait for the 6-hour sweep.
 - `outputs/<id>.mp4` — finished ranking/screensaver files.
 - `outputs/<id>.mp3|wav|flac` — finished Audio Looper files. Tab-close purge skips non-mp4 outputs.
+- `audio-assets/` and `audio-assets.json` — Screensaver background audio (uploads + adopted looper outputs). Retained while a screensaver render holds `audioAssetId`. Tab-close purge does **not** wipe this folder.
 - `upscaler/<jobId>/` — Image Upscaler inputs and outputs. Removed on boot, on purge, and after the job TTL (2 hours). Not part of the FFmpeg queue.
 
-Sweep every 10 minutes: outputs older than 2 hours, jobs and incoming older than 6 hours, clips older than 7 days (unless a render holds them).
+Sweep every 10 minutes: outputs older than 2 hours, jobs and incoming older than 6 hours, clips and unreferenced audio-assets older than 7 days (unless a render holds them).
 
 ## Limits
 
-- 30 clips, 20 minutes each, 30 minutes per compilation, 500 MB per video, 40 MB per music, overlay, or screensaver frame PNG.
+- 30 clips, 20 minutes each, 30 minutes per compilation, 500 MB per video, 40 MB ranking/image-motion music or overlay, **1 GiB** Screensaver background audio (`SCREENSAVER_AUDIO_MAX_BYTES`), 40 MB screensaver frame PNG.
 - Trim at least 0.3 seconds. Fade at most 1 second and 40% of the shortest clip.
 - Banner height 80px to 42% of the frame, even.
 - One FFmpeg process at a time on the server. The client may queue up to 12 ranking and 12 screensaver exports (snapshots); browser overlay/composition prep runs one at a time globally (`exportQueueRunner.ts`).

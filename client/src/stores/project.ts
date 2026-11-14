@@ -371,6 +371,11 @@ export const useProjectStore = defineStore('project', () => {
     void idb.deleteClipFile(id).catch(() => undefined)
   }
 
+  async function removeAllClips() {
+    const ids = clips.value.map((clip) => clip.id)
+    for (const id of ids) await removeClip(id)
+  }
+
   function moveClip(from: number, to: number) {
     if (from === to || from < 0 || to < 0 || from >= clips.value.length || to >= clips.value.length) return
     const next = clips.value.slice()
@@ -774,6 +779,7 @@ export const useProjectStore = defineStore('project', () => {
     attachFile,
     addUrl,
     removeClip,
+    removeAllClips,
     moveClip,
     selectClip,
     closeSelectedPanel,

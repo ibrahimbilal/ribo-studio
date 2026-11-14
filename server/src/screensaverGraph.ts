@@ -127,12 +127,21 @@ export function audioFilterLine(input: {
   fadeOut: number
   duration: number
   loopSamples: boolean
+  /** When set, resample only if the source rate differs. */
+  sampleRate?: number
+  /** When false, skip forced stereo aformat when source is already stereo. */
+  forceStereo?: boolean
+  forceResample?: boolean
 }): string {
-  const parts = [
-    'aresample=48000',
-    'aformat=sample_fmts=fltp:channel_layouts=stereo',
-    `volume=${n(input.volume)}`,
-  ]
+  const parts: string[] = []
+  const rate = input.sampleRate && input.sampleRate > 0 ? Math.round(input.sampleRate) : 48000
+  if (input.forceResample !== false) parts.push(`aresample=${rate}`)
+  if (input.forceStereo !== false) {
+    parts.push('aformat=sample_fmts=fltp:channel_layouts=stereo')
+  } else {
+    parts.push('aformat=sample_fmts=fltp')
+  }
+  if (Math.abs(input.volume - 1) > 0.001) parts.push(`volume=${n(input.volume)}`)
   if (input.loopSamples) parts.push('aloop=loop=-1:size=2e+09')
   parts.push(`atrim=0:${n(input.duration)}`, 'asetpts=PTS-STARTPTS')
   if (input.fadeIn > 0.01) parts.push(`afade=t=in:st=0:d=${n(input.fadeIn)}`)

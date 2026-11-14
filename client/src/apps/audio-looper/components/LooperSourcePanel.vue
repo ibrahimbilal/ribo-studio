@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Trash2 } from '@lucide/vue'
+import { Shuffle, Trash2 } from '@lucide/vue'
 import { ref } from 'vue'
 import FileDropZone from '../../../components/FileDropZone.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
@@ -35,15 +35,27 @@ function onFiles(files: File[]): void {
 
     <div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
       <h3 class="section-label">Tracks</h3>
-      <button
-        class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
-        type="button"
-        :disabled="!store.hasSource"
-        @click="confirmClear = true"
-      >
-        <Trash2 :size="14" />
-        Clear all tracks
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          class="btn btn-ghost cursor-pointer px-2 py-1 text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
+          type="button"
+          :disabled="store.trackCount < 2"
+          :aria-label="store.shuffled ? 'Reshuffle' : 'Shuffle'"
+          :title="store.shuffled ? 'Reshuffle' : 'Shuffle'"
+          @click="store.shuffleTracks()"
+        >
+          <Shuffle :size="14" />
+        </button>
+        <button
+          class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+          type="button"
+          :disabled="!store.hasSource"
+          @click="confirmClear = true"
+        >
+          <Trash2 :size="14" />
+          Delete all
+        </button>
+      </div>
     </div>
 
     <div class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">

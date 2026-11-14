@@ -64,15 +64,6 @@ function setBitrate(value: string): void {
         <div v-else-if="inspector === 'loop'" key="loop" class="space-y-3">
           <p v-if="!store.hasSource" class="text-xs text-zinc-500">Add audio to configure the loop.</p>
           <template v-else-if="store.trackCount >= 2">
-            <div class="flex flex-wrap gap-2">
-              <button class="btn btn-ghost cursor-pointer text-xs" type="button" @click="store.shuffleTracks()">
-                {{ store.shuffled ? 'Reshuffle' : 'Shuffle' }}
-              </button>
-              <button v-if="store.shuffled" class="btn btn-ghost cursor-pointer text-xs" type="button" @click="store.restoreOrder()">
-                Restore order
-              </button>
-            </div>
-            <p class="text-xs text-zinc-500">Shuffle changes the order you see, preview, and export. It stays fixed once an export starts.</p>
             <div class="flex items-center justify-between gap-3 text-sm text-zinc-200">
               <span title="Overlaps the end of each track with the start of the next, including the loop back to the first track.">Crossfade</span>
               <ToggleSwitch
@@ -158,6 +149,7 @@ function setBitrate(value: string): void {
             <select class="field" :value="store.mp3Bitrate" @change="setBitrate(($event.target as HTMLSelectElement).value)">
               <option v-for="rate in AUDIO_LOOPER_BITRATES" :key="rate" :value="rate">{{ rate }} kbps</option>
             </select>
+            <p class="mt-1 text-xs text-zinc-500">{{ store.mp3BitrateHint }}</p>
           </label>
           <p v-else-if="store.format === 'wav'" class="text-xs text-zinc-500">WAV is PCM 16-bit at the source sample rate.</p>
           <p v-else class="text-xs text-zinc-500">FLAC is lossless at the source sample rate.</p>
