@@ -5,6 +5,7 @@ import {
   bindRenderTrack,
   draftRender,
   mediaCountLabel,
+  screensaverStatusLabel,
   statusFromExportPhase,
 } from './screensaverProjectModel'
 
@@ -16,6 +17,13 @@ describe('screensaver project render state', () => {
     assert.equal(statusFromExportPhase('done'), 'completed')
     assert.equal(statusFromExportPhase('error'), 'failed')
     assert.equal(statusFromExportPhase('cancelled'), 'cancelled')
+  })
+
+  it('shows queue positions for queued projects', () => {
+    assert.equal(screensaverStatusLabel('queued', 1), 'Queued #1')
+    assert.equal(screensaverStatusLabel('queued', 3), 'Queued #3')
+    assert.equal(screensaverStatusLabel('rendering', 1), 'Rendering')
+    assert.equal(screensaverStatusLabel('draft'), 'Draft')
   })
 
   it('ignores events from an older track', () => {

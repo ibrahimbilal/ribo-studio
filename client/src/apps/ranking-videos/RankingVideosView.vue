@@ -86,7 +86,7 @@ onBeforeUnmount(() => {
 
     <div class="flex min-h-0 min-w-0 flex-1 gap-3 overflow-hidden">
       <div
-        class="grid min-h-0 min-w-0 flex-1 gap-3 xl:grid-cols-[300px_minmax(0,1fr)_360px]"
+        class="grid min-h-0 min-w-0 flex-1 gap-3 xl:grid-cols-[320px_minmax(0,1fr)_360px]"
       >
         <div class="studio-panel min-h-0 overflow-hidden xl:flex" :class="tab === 'clips' ? 'flex' : 'hidden'">
           <ClipSidebar class="h-full w-full" />

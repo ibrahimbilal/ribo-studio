@@ -59,7 +59,8 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Screensaver encode | `server/src/renderScreensaver.ts`, `renderScreensaverHybrid.ts`, `screensaverCfr/` |
 | Screensaver subscribe animation cache | `shared/subscribeAnimationCache*.ts`, `shared/subscribeAnimationTemplates.ts`, `server/src/subscribeAnimationCache*.ts` |
 | Screensaver background audio | `shared/screensaverAudio.ts`, `server/src/audioAssets.ts`, `screensaverAudioRoutes.ts`, `screensaverAudioMux.ts` |
-| Looper → Screensaver | `client/.../audio-looper/lib/sendToScreensaver.ts`, `LooperSendToScreensaver.vue`, `POST /api/screensaver/audio/from-looper-plan` |
+| Looper → Screensaver | `client/.../audio-looper/lib/sendToScreensaver.ts`, `sendToScreensaverSelection.ts`, `LooperSendToScreensaver.vue`, `POST /api/screensaver/audio/from-looper-plan` |
+| Screensaver Export All | `client/.../frame-screensaver/lib/exportAllPlan.ts`, `ScreensaverProjectList.vue`, store `exportAllProjects` |
 | Shared UI look | `client/src/style.css`, `client/src/components/ui/` |
 | New app route | `router.ts`, `navigation.ts`, new `client/src/apps/<name>/` |
 

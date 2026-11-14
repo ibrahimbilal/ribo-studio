@@ -8,7 +8,7 @@
     "start:dev": "tsx src/index.ts",
     "start:prod": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test:screensaver": "tsx --test ../shared/screensaverAudio.test.ts src/audioAssets.test.ts src/screensaverAudioMux.test.ts && tsx scripts/verify-screensaver.ts",
+    "test:screensaver": "tsx --test --test-concurrency=1 ../shared/screensaverAudio.test.ts src/audioAssets.test.ts src/screensaverAudioMux.test.ts ../client/src/apps/frame-screensaver/lib/exportAllPlan.test.ts ../client/src/apps/frame-screensaver/lib/screensaverAudioRefs.test.ts ../client/src/apps/frame-screensaver/lib/screensaverProjectModel.test.ts && tsx scripts/verify-screensaver.ts",
     "test:screensaver-subscribe": "tsx scripts/verify-screensaver-subscribe.ts",
     "test:subscribe-animation-cache": "tsx --test ../shared/subscribeAnimationCacheKey.test.ts src/subscribeAnimationCache.test.ts",
     "probe:subscribe-animation-format": "tsx scripts/probe-subscribe-animation-format.ts",
@@ -24,7 +24,7 @@
     "bench:render-report": "tsx scripts/bench-report.ts",
     "test:ranking": "tsx scripts/verify-ranking.ts",
     "test:upscaler": "tsx --test ../shared/imageUpscaler.test.ts src/imageUpscaler.test.ts src/realesrgan.test.ts",
-    "test:audio-looper": "tsx --test ../shared/audioLooper.test.ts ../shared/audioLooperChannels.test.ts ../shared/audioProcessingPlan.test.ts src/audioLooper.test.ts src/audioDurationRecovery.test.ts && tsx scripts/verify-audio-looper.ts",
+    "test:audio-looper": "tsx --test ../shared/audioLooper.test.ts ../shared/audioLooperChannels.test.ts ../shared/audioProcessingPlan.test.ts ../client/src/apps/audio-looper/lib/sendToScreensaverSelection.test.ts src/audioLooper.test.ts src/audioDurationRecovery.test.ts && tsx scripts/verify-audio-looper.ts",
     "bench:audio-processing": "tsx scripts/bench-audio-processing.ts"
   },
   "dependencies": {

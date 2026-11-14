@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.2.0**).
+Version source of truth: root `package.json` (currently **1.3.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,8 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.3.0** (2026-11-14) — Looper multi-send to Screensaver (shared `audioAssetId`, select-all) + Screensaver Export All via existing queue; `AppCheckbox` / `multiSelect` helpers.
+- 2026-11-14 — Looper multi-send to Screensaver (shared `audioAssetId`, select-all UI) + Screensaver Export All via existing queue (`sendToScreensaver*.ts`, `screensaverAudioRefs.ts`, `exportAllPlan.ts`, screensaver store / project list, docs).
 - Release **v1.2.0** (2026-11-14) — Screensaver subscribe animation persistent PNG cache (static/dynamic templates, SHA-256 keys, disk store, Settings cache UI, export `animationCacheKey`), YouTube `channelId` on lookup, cache tests + format probe.
 - 2026-11-14 — Screensaver subscribe animation persistent PNG cache: template static/dynamic registry, SHA-256 keys, `server/tmp/subscribe-animation-cache/`, YouTube `channelId` on lookup/settings, client background prep + Settings cache UI, export `animationCacheKey` hardlink into job anim; tests `test:subscribe-animation-cache`, format probe `probe:subscribe-animation-format` (`shared/subscribeAnimation*.ts`, `youtubeChannelId.ts`, `subscribeAnimationCache*.ts`, screensaver store/settings, docs).
 - Release **v1.1.0** (2026-11-14) — Source-Quality-First audio (planner, stream-copy Looper/Screensaver mux, source-aware bitrates, duration recovery), durable Screensaver audio-assets (1 GiB, FLAC), Looper **Send to Screensaver** (`from-looper-plan`), channel policy + probe, Ranking Delete all, Shuffle UI, ribo identifier rename, Hostinger tooling removed, launcher rename to Ribo Studio.exe.

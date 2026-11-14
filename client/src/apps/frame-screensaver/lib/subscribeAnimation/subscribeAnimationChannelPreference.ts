@@ -73,7 +73,7 @@ export function mergeSubscribeChannelsFromServer(
     const merged = normalizeChannel({
       channelId: remote.channelId,
       channelName: remote.channelName ?? existing?.channelName ?? remote.channelId,
-      channelUrl: remote.channelUrl ?? existing?.channelUrl ?? null,
+      channelUrl: remote.channelUrl ?? existing?.channelUrl ?? undefined,
       channelAvatarUrl: remote.avatarUrl ?? existing?.channelAvatarUrl ?? null,
       channelSubscriberCount: remote.subscriberCount ?? existing?.channelSubscriberCount ?? null,
       channelCardTheme: existing?.channelCardTheme ?? 'light',
@@ -176,7 +176,12 @@ export function upsertSubscribeChannelPreference(
   options?: { select?: boolean },
 ): SubscribeChannelPreference | null {
   const next = normalizeChannel({
-    ...settings,
+    channelId: settings.channelId ?? undefined,
+    channelName: settings.channelName,
+    channelUrl: settings.channelUrl ?? undefined,
+    channelAvatarUrl: settings.channelAvatarUrl,
+    channelSubscriberCount: settings.channelSubscriberCount,
+    channelCardTheme: settings.channelCardTheme,
     updatedAt: Date.now(),
   })
   if (!next) return null

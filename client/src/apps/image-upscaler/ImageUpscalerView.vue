@@ -33,7 +33,7 @@ watch(hasImages, (has) => {
     <AppMobileTabs v-model="tab" :items="tabs" />
 
     <aside
-      class="studio-panel flex min-h-0 w-full shrink-0 flex-col overflow-hidden lg:h-full lg:w-[300px] lg:max-w-[300px] lg:flex-none"
+      class="studio-panel flex min-h-0 w-full shrink-0 flex-col overflow-hidden lg:h-full lg:w-[320px] lg:max-w-[320px] lg:flex-none"
       :class="tab === 'source' ? 'max-h-none flex-1' : 'hidden lg:flex'"
     >
       <div class="shrink-0 space-y-3 border-b border-zinc-800 p-4">

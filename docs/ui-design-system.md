@@ -36,6 +36,7 @@ Reuse these instead of copying color and radius values:
 - `.empty-state` — used by `AppEmptyState`.
 - `.toast`, `.toast-error`, `.toast-success` — header toasts.
 - `.toggle-switch` — used by `ToggleSwitch`.
+- `.app-checkbox` — used by `AppCheckbox` (checked / indeterminate).
 - `.nav-link` / `.nav-link--active` — sidebar and mobile nav items; active gets a one-shot brand pulse.
 - `.dash-enter` / `.dash-enter-delay-*` — dashboard card and hero entrance.
 - `.page-enter-*` / `.page-leave-*` — `RouterView` transition in `App.vue`.
@@ -61,6 +62,7 @@ Motion tokens: `--ease-out-soft`, `--duration-fast` / `--duration-base` / `--dur
 | `AppExportStatusPanel` | Export progress card: percent, bar, stat rows, collapsed rail | Which rows, progress, and tone to pass; when it is allowed to show |
 | `AppEmptyState` | Title and short guidance when nothing is loaded | When the empty state is allowed to show |
 | `AppPanel` | Titled elevated card | — |
+| `AppCheckbox` | Brand checkbox with optional indeterminate state | Selection lists / select-all |
 
 `SettingsAccordion` expands and collapses with a height + fade animation (chevron rotates). Do not reintroduce native `<details>` for settings sections.
 

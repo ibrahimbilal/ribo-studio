@@ -27,8 +27,9 @@ Verified product surfaces and where they live. Deep detail: `.cursor/skills/ribo
 - Export: Fast VFR or Optimized CFR — `renderScreensaver.ts`, `renderScreensaverHybrid.ts`, `screensaverCfr/`.
 - Optional subscribe animation overlay with persistent PNG-sequence cache (static + per-channel dynamic) — `shared/screensaverSubscribeAnimation.ts`, `shared/subscribeAnimationCache*.ts`, `server/src/subscribeAnimationCache*.ts`, hybrid/CFR paths.
 - Multi-project IndexedDB library — `screensaverProjectLibrary.ts`.
+- **Export All** — batch-submit eligible saved projects to the shared FFmpeg queue (immutable snapshots, no parallel encodes) — `exportAllPlan.ts`, `ScreensaverProjectList.vue`, screensaver store.
 - Create Thumbnail / Send to Image Motion — `createThumbnail.ts`, `sendToImageMotion.ts`.
-- Background audio up to **1 GiB** via server audio-assets (`shared/screensaverAudio.ts`, `/api/screensaver/audio*`).
+- Background audio up to **1 GiB** via server audio-assets (`shared/screensaverAudio.ts`, `/api/screensaver/audio*`); multiple projects may share one `audioAssetId`.
 
 ## Thumbnail Studio
 
@@ -47,7 +48,7 @@ Verified product surfaces and where they live. Deep detail: `.cursor/skills/ribo
 - Loop audio to exact duration (Simple / Seamless; playlist crossfade) — `apps/audio-looper/`, `shared/audioLooper*.ts`, `shared/audioLooperChannels.ts`, `shared/audioProcessingPlan.ts`, `renderAudioLooper.ts`.
 - Source-Quality-First planner: stream copy when compatible (honored end-to-end into Screensaver mux — no unconditional WAV), lossless PCM only when complex transforms need decode, source-aware bitrates when re-encoding (`streamCopy` / `lossyEncodeCount` / separate source vs stream bitrate logs).
 - Shares FFmpeg queue as `kind: 'audio-looper'`. Formats MP3/WAV/FLAC. Channel policy: mono-only → mono; stereo/mixed → stereo; multi-channel preserved on WAV/FLAC or downmixed for MP3. Probe: `POST /api/audio-looper/probe`.
-- **Send to Screensaver** transfers original sources + settings as an audio recipe (`POST /api/screensaver/audio/from-looper-plan`) — no intermediate lossy export required (`LooperSendToScreensaver.vue`, `sendToScreensaver.ts`).
+- **Send to Screensaver** transfers original sources + settings as an audio recipe (`POST /api/screensaver/audio/from-looper-plan`) — no intermediate lossy export required; multi-select attaches one shared asset to many Screensaver projects (`LooperSendToScreensaver.vue`, `sendToScreensaver.ts`, `screensaverAudioRefs.ts`).
 
 ## Cross-cutting
 

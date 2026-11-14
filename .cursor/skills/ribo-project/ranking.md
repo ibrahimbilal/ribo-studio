@@ -4,7 +4,7 @@
 
 **Ranking Shorts** — `RankingVideosView.vue` (ranking branch): optional mobile tabs, editor grid. The center column is preview stage plus a `studio-panel` under it (clip/export status, Export MP4), same pattern as Screensaver and Audio Looper. New project lives in the platform header.
 
-- `xl` and up: clips `300px`, preview flex, style `360px`. The right panel is titled Settings and switches Clip, Style, Output, and Sound. Video settings (resolution, fps, encoder, scaling, transition) live under Output; Style keeps presets, colors, title, and ranking. The selected clip panel sits in that column.
+- `xl` and up: clips `320px`, preview flex, style `360px`. The right panel is titled Settings and switches Clip, Style, Output, and Sound. Video settings (resolution, fps, encoder, scaling, transition) live under Output; Style keeps presets, colors, title, and ranking. The selected clip panel sits in that column.
 - Space toggles play on the ranking route only (not in inputs).
 - Hydration overlay until ranking `hydrated`.
 - Dev: `window.__ribo` is the ranking Pinia store.

@@ -10,6 +10,13 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-11-14
+
+### Added
+
+- Audio Looper: **Send to Screensaver** multi-select — attach one shared audio asset to many Screensaver projects without duplicating large files.
+- Screensaver: **Export all** submits eligible saved projects to the existing render queue (per-project snapshots, queue positions, skip already-exporting).
+
 ## [1.2.0] — 2026-11-14
 
 ### Added

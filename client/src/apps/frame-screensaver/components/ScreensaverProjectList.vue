@@ -1,11 +1,19 @@
 <script setup lang="ts">
 import { formatDurationLabel } from '@shared/screensaver'
-import { Copy, Download, ImagePlay, ImagePlus, Info, Music, Pencil, RotateCcw, Trash2 } from '@lucide/vue'
+import { Copy, Download, FileOutput, FolderOutput, ImagePlay, ImagePlus, Info, Music, Pencil, RotateCcw, Trash2 } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { formatBytes, formatClock } from '../../../lib/format'
 import { audioFormatLabel } from '../../../lib/media'
+import AppCheckbox from '../../../components/ui/AppCheckbox.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
-import { SCREENSAVER_STATUS_LABEL, type ScreensaverProjectStatus } from '../lib/screensaverProjectModel'
+import {
+  deselectAllProjectIds,
+  selectAllCheckboxState,
+  selectAllProjectIds,
+  toggleProjectSelection,
+} from '../../../lib/multiSelect'
+import { skipReasonLabel, type ExportAllDecision } from '../lib/exportAllPlan'
+import { screensaverStatusLabel, type ScreensaverProjectStatus } from '../lib/screensaverProjectModel'
 import { createThumbnailFromScreensaver } from '../lib/createThumbnail'
 import { sendScreensaverImageToImageMotion } from '../lib/sendToImageMotion'
 import { useScreensaverStore } from '../stores/screensaver'
@@ -16,6 +24,11 @@ const renameValue = ref('')
 const deleteId = ref<string | null>(null)
 const deleteAllOpen = ref(false)
 const downloadingAll = ref(false)
+const exportAllOpen = ref(false)
+const exportingAll = ref(false)
+const exportAllEligible = ref<ExportAllDecision[]>([])
+const exportAllSkipped = ref<Extract<ExportAllDecision, { kind: 'skipped' }>[]>([])
+const exportAllSelectedIds = ref<string[]>([])
 const infoTip = ref<{ id: string; kind: 'source' | 'audio'; x: number; y: number; above: boolean } | null>(null)
 
 const deleteTarget = computed(() => store.projects.find((item) => item.id === deleteId.value) ?? null)
@@ -26,6 +39,22 @@ const downloadableCount = computed(
     ).length,
 )
 const infoProject = computed(() => store.projects.find((item) => item.id === infoTip.value?.id) ?? null)
+const exportAllEligibleIds = computed(() => exportAllEligible.value.map((item) => item.id))
+const exportAllSelectedCount = computed(() => exportAllSelectedIds.value.length)
+const exportAllSelectAllState = computed(() =>
+  selectAllCheckboxState(exportAllSelectedIds.value.length, exportAllEligibleIds.value.length),
+)
+/** Fast gate for the header button; the confirm dialog runs the full eligibility plan. */
+const approxExportableCount = computed(
+  () =>
+    store.projects.filter(
+      (item) =>
+        !item.live &&
+        !item.sourceMissing &&
+        item.upload.state === 'ready' &&
+        Boolean(item.serverId),
+    ).length,
+)
 
 function statusClass(status: ScreensaverProjectStatus): string {
   switch (status) {
@@ -165,6 +194,42 @@ async function downloadAll() {
   }
 }
 
+async function openExportAll() {
+  if (exportingAll.value) return
+  const plan = await store.buildExportAllPlan()
+  exportAllEligible.value = plan.eligible
+  exportAllSkipped.value = plan.skipped
+  exportAllSelectedIds.value = selectAllProjectIds(plan.eligible.map((item) => item.id))
+  exportAllOpen.value = true
+}
+
+function closeExportAll() {
+  if (exportingAll.value) return
+  exportAllOpen.value = false
+}
+
+function toggleExportAllProject(id: string) {
+  exportAllSelectedIds.value = toggleProjectSelection(exportAllSelectedIds.value, id)
+}
+
+function onExportAllSelectAllChange(checked: boolean) {
+  exportAllSelectedIds.value = checked
+    ? selectAllProjectIds(exportAllEligibleIds.value)
+    : deselectAllProjectIds()
+}
+
+async function confirmExportAll() {
+  if (exportingAll.value || exportAllSelectedIds.value.length === 0) return
+  exportingAll.value = true
+  try {
+    const selectedIds = [...exportAllSelectedIds.value]
+    exportAllOpen.value = false
+    await store.exportAllProjects(selectedIds)
+  } finally {
+    exportingAll.value = false
+  }
+}
+
 function canImageHandoff(project: (typeof store.projects)[number]): boolean {
   return project.mediaKind === 'image' && !project.sourceMissing && project.upload.state === 'ready'
 }
@@ -195,15 +260,27 @@ async function openSoundSettingsFor(id: string) {
   <section class="flex min-h-0 flex-1 flex-col">
     <div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
       <h3 class="section-label">Projects</h3>
-      <button
-        class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
-        type="button"
-        :disabled="store.projects.length === 0"
-        @click="deleteAllOpen = true"
-      >
-        <Trash2 :size="14" />
-        Delete all
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          class="btn btn-ghost cursor-pointer px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+          type="button"
+          :disabled="approxExportableCount === 0 || exportingAll"
+          :title="exportingAll ? 'Submitting…' : 'Export all eligible projects'"
+          @click="openExportAll"
+        >
+          <FolderOutput  :size="14" />
+          Export all
+        </button>
+        <button
+          class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+          type="button"
+          :disabled="store.projects.length === 0"
+          @click="deleteAllOpen = true"
+        >
+          <Trash2 :size="14" />
+          Delete all
+        </button>
+      </div>
     </div>
 
     <div class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">
@@ -232,7 +309,7 @@ async function openSoundSettingsFor(id: string) {
             <div class="flex items-start gap-2">
               <p class="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100" :title="project.name">{{ project.name }}</p>
               <span class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" :class="statusClass(project.render.status)">
-                {{ SCREENSAVER_STATUS_LABEL[project.render.status] }}
+                {{ screensaverStatusLabel(project.render.status, project.queuePosition) }}
               </span>
             </div>
             <p class="mt-0.5 truncate text-xs text-zinc-500">
@@ -419,6 +496,87 @@ async function openSoundSettingsFor(id: string) {
       <template #actions>
         <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">Cancel</button>
         <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">Delete all</button>
+      </template>
+    </AppDialog>
+
+    <AppDialog :open="exportAllOpen" title="Export all projects" @cancel="closeExportAll">
+      <p class="text-sm text-zinc-300">
+        Submit selected projects to the existing render queue using each project’s saved settings.
+      </p>
+
+      <div
+        v-if="exportAllEligible.length > 0"
+        class="mt-3 flex items-center justify-between gap-2"
+      >
+        <label class="inline-flex cursor-pointer items-center gap-2.5 text-sm text-zinc-200">
+          <AppCheckbox
+            :checked="exportAllSelectAllState === 'checked'"
+            :indeterminate="exportAllSelectAllState === 'indeterminate'"
+            :disabled="exportingAll"
+            aria-label="Select all eligible projects"
+            @change="onExportAllSelectAllChange"
+          />
+          Select all
+        </label>
+        <p class="text-xs text-zinc-400">
+          {{ exportAllSelectedCount }} of {{ exportAllEligible.length }} selected
+          <span v-if="exportAllSkipped.length > 0"> · {{ exportAllSkipped.length }} skipped</span>
+        </p>
+      </div>
+      <p v-else class="mt-3 text-sm text-zinc-400">
+        No eligible projects
+        <span v-if="exportAllSkipped.length > 0"> · {{ exportAllSkipped.length }} skipped</span>
+      </p>
+
+      <div
+        v-if="exportAllEligible.length > 0"
+        class="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border border-zinc-800 bg-inset p-1"
+      >
+        <label
+          v-for="item in exportAllEligible"
+          :key="item.id"
+          class="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-white/5"
+          :class="
+            exportAllSelectedIds.includes(item.id)
+              ? 'bg-brand/10 ring-1 ring-inset ring-brand/35'
+              : ''
+          "
+        >
+          <AppCheckbox
+            class="shrink-0"
+            :checked="exportAllSelectedIds.includes(item.id)"
+            :disabled="exportingAll"
+            :aria-label="`Select ${item.name}`"
+            @change="() => toggleExportAllProject(item.id)"
+          />
+          <span class="min-w-0 flex-1 truncate text-sm text-zinc-100" :title="item.name">{{ item.name }}</span>
+        </label>
+      </div>
+
+      <ul v-if="exportAllSkipped.length > 0" class="mt-3 max-h-28 space-y-1 overflow-y-auto text-xs text-zinc-500">
+        <li v-for="item in exportAllSkipped" :key="item.id">
+          {{ item.name }} — {{ skipReasonLabel(item.reason) }}
+        </li>
+      </ul>
+      <template #actions>
+        <button class="btn btn-ghost cursor-pointer" type="button" :disabled="exportingAll" @click="closeExportAll">
+          Cancel
+        </button>
+        <button
+          class="btn btn-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+          type="button"
+          :disabled="exportingAll || exportAllSelectedCount === 0"
+          @click="confirmExportAll"
+        >
+          <FileOutput :size="16" aria-hidden="true" />
+          {{
+            exportingAll
+              ? 'Submitting…'
+              : exportAllSelectedCount === 1
+                ? 'Export 1 project'
+                : `Export ${exportAllSelectedCount} projects`
+          }}
+        </button>
       </template>
     </AppDialog>
   </section>

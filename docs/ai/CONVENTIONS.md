@@ -10,7 +10,7 @@ Patterns observed in this repo. Prefer matching them over inventing new ones.
 - Platform chrome stays in `components/layout/` and `stores/platform.ts`.
 - Presentational shared UI in `components/ui/` — **do not import Pinia** there.
 - Reuse tokens/classes from `style.css` (`.btn`, `.field`, `.panel`, …) before new CSS. See `docs/ui-design-system.md`.
-- Studio layout pattern: ~300px source column, flex preview, ~360px Settings; export under preview via `AppStudioExportBar` where used.
+- Studio layout pattern: 320px source column, flex preview, ~360px Settings; export under preview via `AppStudioExportBar` where used.
 - Booleans: `ToggleSwitch`. Settings sections: `SettingsAccordion` / `AppSettingsTabs` (not native `<details>`).
 - Uploads: `FileDropZone` + `FileStatusBox` before custom upload UI.
 - Motion respects `prefers-reduced-motion`.

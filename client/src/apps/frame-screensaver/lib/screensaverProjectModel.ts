@@ -67,6 +67,16 @@ export const SCREENSAVER_STATUS_LABEL: Record<ScreensaverProjectStatus, string> 
   cancelled: 'Cancelled',
 }
 
+export function screensaverStatusLabel(
+  status: ScreensaverProjectStatus,
+  queuePosition?: number | null,
+): string {
+  if (status === 'queued' && queuePosition != null && queuePosition > 0) {
+    return `Queued #${queuePosition}`
+  }
+  return SCREENSAVER_STATUS_LABEL[status]
+}
+
 export function mediaCountLabel(mediaKind: 'image' | 'video' | null): string {
   if (mediaKind === 'image') return '1 image'
   if (mediaKind === 'video') return '1 video'
