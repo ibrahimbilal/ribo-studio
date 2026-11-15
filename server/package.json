@@ -12,7 +12,7 @@
     "test:screensaver-subscribe": "tsx scripts/verify-screensaver-subscribe.ts",
     "test:subscribe-animation-cache": "tsx --test ../shared/subscribeAnimationCacheKey.test.ts src/subscribeAnimationCache.test.ts",
     "probe:subscribe-animation-format": "tsx scripts/probe-subscribe-animation-format.ts",
-    "test:screensaver-cfr": "tsx --test ../shared/screensaverCfr.test.ts src/screensaverCfr/timeline.test.ts src/screensaverCfr/encodingConfig.test.ts && tsx scripts/verify-screensaver-cfr.ts",
+    "test:screensaver-cfr": "tsx --test ../shared/screensaverCfr.test.ts ../shared/screensaverMuxStrategy.test.ts src/screensaverCfr/timeline.test.ts src/screensaverCfr/encodingConfig.test.ts src/diskSpace.test.ts && tsx scripts/verify-screensaver-cfr.ts",
     "test:screensaver-visual": "tsx scripts/visual-screensaver-adjust.ts",
     "bench:screensaver": "tsx scripts/bench-screensaver.ts",
     "bench:screensaver-subscribe": "tsx scripts/bench-screensaver-subscribe.ts",
@@ -26,7 +26,8 @@
     "test:upscaler": "tsx --test ../shared/imageUpscaler.test.ts src/imageUpscaler.test.ts src/realesrgan.test.ts",
     "test:audio-looper": "tsx --test ../shared/audioLooper.test.ts ../shared/audioLooperChannels.test.ts ../shared/audioProcessingPlan.test.ts ../shared/audioExecutionPlan.test.ts ../shared/audioCompatibility.test.ts ../client/src/apps/audio-looper/lib/sendToScreensaverSelection.test.ts src/audioLooper.test.ts src/audioDurationRecovery.test.ts src/encodeOnceLoopCopy.test.ts && tsx scripts/verify-audio-looper.ts",
     "bench:audio-processing": "tsx scripts/bench-audio-processing.ts",
-    "poc:encode-once-loop-copy": "tsx scripts/poc-encode-once-loop-copy.ts"
+    "poc:encode-once-loop-copy": "tsx scripts/poc-encode-once-loop-copy.ts",
+    "poc:single-pass-direct-mux": "tsx scripts/poc-single-pass-direct-mux.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

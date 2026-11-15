@@ -7,7 +7,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { LooperAudioRecipe } from '../../shared/looperAudioRecipe'
 import { assertPlaylistTimeline } from '../../shared/audioLooperPlaylist'
-import { planAudioExecution } from '../../shared/audioExecutionPlan'
+import { planAudioExecution, type AudioExecutionStrategy } from '../../shared/audioExecutionPlan'
 import { volumeToFfmpeg } from '../../shared/audioLooper'
 import {
   maxReliableSourceBitrateBps,
@@ -16,6 +16,7 @@ import {
   type AudioProcessingPlan,
   type AudioSourceProbe,
 } from '../../shared/audioProcessingPlan'
+import { isDirectAudioPeriodLoopEnabled } from '../../shared/screensaverMuxStrategy'
 import {
   aacEncodeArgs,
   AudioEncodeCounter,
@@ -31,9 +32,11 @@ import {
   getOrCreateAudioPeriod,
   hashFileContent,
   isEncodeOnceLoopCopyEnabled,
+  materializeCachedPeriod,
   retainAudioPeriodCache,
   releaseAudioPeriodCache,
 } from './audioPeriodCache'
+import type { DiskIoSession } from './diskIoTelemetry'
 import {
   encodeDestinationPeriod,
   snapPeriodSecondsToAacFrames,
@@ -163,6 +166,34 @@ interface PreparedRecipeAudio {
   strategyChangeReason?: string
   /** When true, musicPath already covers job.duration — mux must not -stream_loop again. */
   alreadyLooped?: boolean
+  /** Prefer -stream_loop of this period at final mux (no full-duration looped.mp3). */
+  loopAtMux?: boolean
+  streamCopyEligible?: boolean
+  executionStrategy?: AudioExecutionStrategy | string
+  cacheHit?: boolean
+  durationSeconds?: number
+}
+
+/** Video input for final mux — file path or ffconcat demuxer (single-pass). */
+export type ScreensaverVideoInput =
+  | { kind: 'file'; path: string }
+  | { kind: 'concat'; listPath: string; timescale?: number }
+
+function pushVideoInputArgs(args: string[], video: ScreensaverVideoInput): void {
+  if (video.kind === 'concat') {
+    args.push('-f', 'concat', '-safe', '0', '-i', video.listPath)
+  } else {
+    args.push('-i', video.path)
+  }
+}
+
+function resolveVideoInput(opts: {
+  videoPath?: string
+  videoInput?: ScreensaverVideoInput
+}): ScreensaverVideoInput {
+  if (opts.videoInput) return opts.videoInput
+  if (opts.videoPath) return { kind: 'file', path: opts.videoPath }
+  throw new Error('Screensaver mux requires a video input.')
 }
 
 function combinedMuxGain(
@@ -276,12 +307,27 @@ async function materializeEncodeOncePeriod(opts: {
   periodSeconds: number
   originalSourceBitrate: number
   hooks: FfmpegHooks
+  /** When true, skip full-duration looped.mp3 and loop the period at final mux. */
+  preferDirectAudioLoop?: boolean
+  diskIo?: DiskIoSession
 }): Promise<PreparedRecipeAudio | null> {
-  const { job, recipe, sources, probes, plan, periodSeconds, originalSourceBitrate, hooks } = opts
+  const {
+    job,
+    recipe,
+    sources,
+    probes,
+    plan,
+    periodSeconds,
+    originalSourceBitrate,
+    hooks,
+    preferDirectAudioLoop = false,
+    diskIo,
+  } = opts
   const sampleRate = plan.expectedSampleRate || 48000
   const channels = Math.min(2, plan.expectedChannels || 2) || 2
   const bitrateKbps = plan.targetBitrateKbps ?? 256
   const volume = volumeToFfmpeg(recipe.settings.volumePercent)
+  const stage = diskIo?.beginStage('AUDIO_PERIOD_PREPARE')
 
   const encodeSources: EncodeOnceSource[] = sources.map((sourcePath, index) => {
     const probe = probes[index]!
@@ -347,15 +393,75 @@ async function materializeEncodeOncePeriod(opts: {
         throw new Error(`Encoded period verification failed: ${hardFail.join('; ')}`)
       }
     })
+    diskIo?.markAudioPeriodCache(cacheHit)
 
     const dir = path.join(jobsDir, job.id, 'audio-encode-once')
     await mkdir(dir, { recursive: true })
+    // Prefer a job-local hardlink/copy so strip can rewrite without touching the shared cache.
+    const localPeriod = path.join(dir, 'period.cached.mp3')
+    await materializeCachedPeriod(cachedPeriod, localPeriod)
     const strippedPath = path.join(dir, 'period.stripped.mp3')
     const stripped = await stripContainerDelayForLoop({
-      periodPath: cachedPeriod,
+      periodPath: localPeriod,
       outputPath: strippedPath,
       hooks,
     })
+
+    const counter = new AudioEncodeCounter()
+    if (!cacheHit) {
+      counter.recordDecode(1)
+      counter.recordLossyEncode(1)
+    }
+
+    const directLoop = preferDirectAudioLoop && isDirectAudioPeriodLoopEnabled()
+    if (directLoop) {
+      const periodDetails = await probeAudioDetails(stripped.path)
+      console.info(
+        `[AudioExport] ENCODE_ONCE_LOOP_COPY: MP3 period ready for mux loop (${periodSeconds.toFixed(3)}s → target ${job.duration.toFixed(3)}s) cacheHit=${cacheHit} directLoop=1`,
+      )
+      logAudioExport({
+        streamCopy: false,
+        decodeRequired: true,
+        decodePerformed: !cacheHit,
+        resamplingPerformed: true,
+        pcmMaterializationPerformed: false,
+        losslessEncodeCount: counter.losslessEncodeCount,
+        lossyEncodeCount: counter.lossyEncodeCount,
+        lossyEncodeInputDurationSeconds: cacheHit ? 0 : periodSeconds,
+        lossyGenerationsInFinalOutput: 1,
+        loopStreamCopy: true,
+        finalMuxAudioStreamCopy: true,
+        boundaryVerification: 'Skipped',
+        durationVerification: 'Skipped',
+        fallbackUsed: false,
+        verification: 'Passed',
+        actualOutputBitrate: periodDetails.bitrate || bitrateKbps * 1000,
+      })
+      diskIo?.markFullDurationAudio(false)
+      stage?.end({ cacheHit, notes: 'directAudioPeriodLoop' })
+      return {
+        musicPath: stripped.path,
+        codec: 'mp3',
+        originalSourceBitrate,
+        currentStreamBitrate: periodDetails.bitrate || bitrateKbps * 1000,
+        sampleRate: periodDetails.sampleRate || sampleRate,
+        channels: periodDetails.channels || channels,
+        gainBaked: true,
+        muxVolume: 1,
+        muxFadeIn: 0,
+        muxFadeOut: 0,
+        counter,
+        plannedStrategy: plan.strategy,
+        plannedReason: `ENCODE_ONCE_LOOP_COPY: ${plan.reason}`,
+        alreadyLooped: false,
+        loopAtMux: true,
+        streamCopyEligible: true,
+        executionStrategy: 'ENCODE_ONCE_LOOP_COPY',
+        cacheHit,
+        durationSeconds: periodDetails.duration || periodSeconds,
+      }
+    }
+
     const fullPath = path.join(dir, 'looped.mp3')
     await streamCopyLoopPeriod({
       periodPath: stripped.path,
@@ -370,11 +476,6 @@ async function materializeEncodeOncePeriod(opts: {
       )
     }
     const details = await probeAudioDetails(fullPath)
-    const counter = new AudioEncodeCounter()
-    if (!cacheHit) {
-      counter.recordDecode(1)
-      counter.recordLossyEncode(1)
-    }
     console.info(
       `[AudioExport] ENCODE_ONCE_LOOP_COPY: MP3 period→loop (${periodSeconds.toFixed(3)}s → ${details.duration.toFixed(3)}s) cacheHit=${cacheHit}`,
     )
@@ -396,6 +497,9 @@ async function materializeEncodeOncePeriod(opts: {
       verification: 'Passed',
       actualOutputBitrate: details.bitrate || bitrateKbps * 1000,
     })
+    diskIo?.markFullDurationAudio(true)
+    await diskIo?.trackTempFile(fullPath)
+    stage?.end({ cacheHit, outputBytes: details.duration ? undefined : undefined, notes: 'materializedLoopedMp3' })
 
     return {
       musicPath: fullPath,
@@ -412,7 +516,15 @@ async function materializeEncodeOncePeriod(opts: {
       plannedStrategy: plan.strategy,
       plannedReason: `ENCODE_ONCE_LOOP_COPY: ${plan.reason}`,
       alreadyLooped: true,
+      loopAtMux: false,
+      streamCopyEligible: true,
+      executionStrategy: 'ENCODE_ONCE_LOOP_COPY',
+      cacheHit,
+      durationSeconds: details.duration,
     }
+  } catch (error) {
+    stage?.end({ notes: `failed: ${error instanceof Error ? error.message : String(error)}` })
+    throw error
   } finally {
     releaseAudioPeriodCache(cacheKey)
   }
@@ -425,6 +537,7 @@ async function materializeRecipeAudio(
   job: ScreensaverAudioJobLike,
   asset: StoredAudioAsset,
   hooks: FfmpegHooks,
+  options?: { preferDirectAudioLoop?: boolean; diskIo?: DiskIoSession },
 ): Promise<PreparedRecipeAudio | null> {
   if (!asset.recipe || asset.origin !== 'looper-plan') return null
   const recipe = asset.recipe
@@ -539,6 +652,8 @@ async function materializeRecipeAudio(
         periodSeconds,
         originalSourceBitrate,
         hooks,
+        preferDirectAudioLoop: options?.preferDirectAudioLoop,
+        diskIo: options?.diskIo,
       })
       if (prepared) return prepared
     } catch (error) {
@@ -644,32 +759,41 @@ async function materializeRecipeAudio(
 
 export async function muxScreensaverAudio(opts: {
   job: ScreensaverAudioJobLike
-  videoPath: string
+  /** @deprecated Prefer videoInput. Kept for Hybrid / legacy callers. */
+  videoPath?: string
+  videoInput?: ScreensaverVideoInput
   outputPath: string
   workDir: string
   durationSec: number
   hooks: FfmpegHooks
   /** When true, video input is already the only input index 0. */
   copyVideo: boolean
+  /** Prefer Encode-Once period looping at mux (skip looped.mp3). */
+  preferDirectAudioLoop?: boolean
+  diskIo?: DiskIoSession
+  /** Progress / status label while FFmpeg relocates moov (final faststart). */
+  onFaststartStatus?: () => void
 }): Promise<ScreensaverAudioMuxResult> {
-  const { job, videoPath, outputPath, workDir, durationSec, hooks, copyVideo } = opts
+  const { job, outputPath, workDir, durationSec, hooks, copyVideo } = opts
+  const video = resolveVideoInput(opts)
+  const diskIo = opts.diskIo
+  const muxStage = diskIo?.beginStage('FINAL_MUX')
   const counter = new AudioEncodeCounter()
-  const args = ['-y', '-hide_banner', '-progress', 'pipe:1', '-nostats', '-i', videoPath]
+  const args = ['-y', '-hide_banner', '-progress', 'pipe:1', '-nostats']
+  pushVideoInputArgs(args, video)
+  if (video.kind === 'concat' && video.timescale != null) {
+    // Timescale is applied on the output mapping below via -video_track_timescale.
+  }
 
   if (job.audioVolume <= 0.001 || (job.audioMode === 'upload' && !job.musicPath && !job.audioAssetId)) {
-    args.push(
-      '-map',
-      '0:v:0',
-      '-c:v',
-      'copy',
-      '-an',
-      '-t',
-      n(durationSec + 0.02),
-      '-movflags',
-      '+faststart',
-      outputPath,
-    )
+    args.push('-map', '0:v:0', '-c:v', 'copy', '-an')
+    if (video.kind === 'concat' && video.timescale != null) {
+      args.push('-video_track_timescale', String(video.timescale))
+    }
+    args.push('-t', n(durationSec + 0.02), '-movflags', '+faststart', outputPath)
+    opts.onFaststartStatus?.()
     await spawnFfmpeg(args, durationSec, hooks)
+    muxStage?.end({ ffmpegInvocations: 1, faststartOps: 1, notes: 'no-audio' })
     return {
       processingStrategy: 'STREAM_COPY',
       processingLabel: 'Original Stream Preserved',
@@ -697,7 +821,10 @@ export async function muxScreensaverAudio(opts: {
 
   const asset = job.audioAssetId ? getAudioAsset(job.audioAssetId) : undefined
   if (asset?.origin === 'looper-plan' && asset.recipe) {
-    const prepared = await materializeRecipeAudio(job, asset, hooks)
+    const prepared = await materializeRecipeAudio(job, asset, hooks, {
+      preferDirectAudioLoop: opts.preferDirectAudioLoop,
+      diskIo,
+    })
     if (prepared) {
       musicPath = prepared.musicPath
       codec = prepared.codec
@@ -788,6 +915,11 @@ export async function muxScreensaverAudio(opts: {
   })
 
   const shouldLoopAudio = job.loopAudio && !alreadyLooped
+  const pushTimescale = (): void => {
+    if (video.kind === 'concat' && video.timescale != null) {
+      args.push('-video_track_timescale', String(video.timescale))
+    }
+  }
   if (plan.strategy === 'STREAM_COPY' && musicPath && plain && !wavMaterialized) {
     if (job.audioMode === 'upload' || asset) {
       if (shouldLoopAudio) args.push('-stream_loop', '-1')
@@ -795,22 +927,15 @@ export async function muxScreensaverAudio(opts: {
     } else if (job.audioMode === 'source' && job.mediaPath) {
       args.push('-stream_loop', '-1', '-i', job.mediaPath)
     }
-    args.push(
-      '-map',
-      '0:v:0',
-      '-map',
-      '1:a:0',
-      '-c:v',
-      'copy',
-      '-c:a',
-      'copy',
-      '-t',
-      n(durationSec + 0.02),
-      '-movflags',
-      '+faststart',
-      outputPath,
-    )
+    args.push('-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'copy')
+    pushTimescale()
+    args.push('-t', n(durationSec + 0.02), '-movflags', '+faststart', outputPath)
+    if (!args.includes('copy') || args.some((arg) => arg.includes('libx264') || arg.startsWith('h264_'))) {
+      throw new Error('Screensaver mux must stream-copy video.')
+    }
+    opts.onFaststartStatus?.()
     await spawnFfmpeg(args, durationSec, hooks)
+    muxStage?.end({ ffmpegInvocations: 1, faststartOps: 1, notes: 'stream-copy-audio' })
     let actualOutputBitrate = currentStreamBitrate
     try {
       const out = await probeAudioDetails(outputPath)
@@ -886,6 +1011,9 @@ export async function muxScreensaverAudio(opts: {
     '[aout]',
     '-c:v',
     copyVideo ? 'copy' : 'copy',
+  )
+  pushTimescale()
+  args.push(
     ...aacEncodeArgs({
       bitrateKbps: kbps,
       sampleRate: plan.expectedSampleRate,
@@ -897,7 +1025,9 @@ export async function muxScreensaverAudio(opts: {
     '+faststart',
     outputPath,
   )
+  opts.onFaststartStatus?.()
   await spawnFfmpeg(args, durationSec, hooks)
+  muxStage?.end({ ffmpegInvocations: 1, faststartOps: 1, notes: 'aac-encode' })
   let actualOutputBitrate = kbps * 1000
   try {
     const out = await probeAudioDetails(outputPath)

@@ -9,6 +9,8 @@ Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
 Changes since the current `package.json` version. User-facing bullets also belong under **Unreleased** in root `CHANGELOG.md`. On release, the release-manager skill / `npm run release:*` promotes the root changelog; then summarize or clear this section as appropriate.
 
+- 2026-11-15 — Single-Pass Direct Mux for Screensaver CFR/Hybrid: concat demuxer → final MP4 (no full-duration video intermediate); Encode-Once can `-stream_loop` verified MP3 period at mux (skip `looped.mp3`); drop intermediate `+faststart`; DiskIO telemetry; free-space estimate; probe reuse after CFR validation; flags `RIBO_SINGLE_PASS_DIRECT_MUX` / `RIBO_DIRECT_AUDIO_PERIOD_LOOP`; PoC `poc:single-pass-direct-mux` (`shared/screensaverMuxStrategy.ts`, `diskIoTelemetry.ts`, `diskSpace.ts`, `renderScreensaverCfr.ts`, `screensaverAudioMux.ts`, `renderScreensaverHybrid.ts`, `docs/single-pass-direct-mux.md`).
+
 ## History
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.

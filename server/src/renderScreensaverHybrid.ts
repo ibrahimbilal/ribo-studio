@@ -2,6 +2,7 @@ import { rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { SCREENSAVER_CFR_TIMESCALE } from '../../shared/screensaver'
 import { SUBSCRIBE_ANIMATION_FPS, type SubscribeAnimationSettings } from '../../shared/screensaverSubscribeAnimation'
+import { resolveScreensaverMuxEligibility } from '../../shared/screensaverMuxStrategy'
 import type { EncoderId } from './encoders'
 import { n, RenderCancelled, spawnFfmpeg, verifyVideoOutput } from './ffmpegUtil'
 import type { ScreensaverRenderHooks } from './renderScreensaver'
@@ -74,14 +75,16 @@ export async function renderScreensaverHybrid(
   const concatList = path.join(workDir, 'segments.txt')
   const videoOnly = path.join(workDir, 'video-only.mp4')
   let warning = inheritedWarning
+  const eligibility = resolveScreensaverMuxEligibility()
+  const expectAudio = wantsAudio(job)
 
   try {
     if (startSec >= 0.05) {
-      await encodeStaticSegment(job, encoder, segA, startSec, hooks, 0.33)
+      await encodeStaticSegment(job, encoder, segA, startSec, hooks, 0.33, eligibility.skipIntermediateFaststart)
     }
-    await encodeAnimationSegment(job, encoder, segB, animSec, hooks, 0.66)
+    await encodeAnimationSegment(job, encoder, segB, animSec, hooks, 0.66, eligibility.skipIntermediateFaststart)
     if (tailSec >= 0.05) {
-      await encodeStaticSegment(job, encoder, segC, tailSec, hooks, 0.9)
+      await encodeStaticSegment(job, encoder, segC, tailSec, hooks, 0.9, eligibility.skipIntermediateFaststart)
     }
     if (hooks.cancelled()) throw new RenderCancelled()
 
@@ -97,20 +100,81 @@ export async function renderScreensaverHybrid(
       entries.push(`duration ${n(tailSec)}`)
     }
     await writeFile(concatList, `${entries.join('\n')}\n`)
-    try {
-      await concatCopy(concatList, videoOnly, job.duration, hooks)
-    } catch (error) {
-      if (hooks.cancelled() || error instanceof RenderCancelled) throw error
-      warning = warning
-        ? `${warning} Segment concat copy failed; re-encoded with VFR.`
-        : 'Segment concat copy failed; re-encoded with VFR.'
-      await concatReencode(job, encoder, concatList, videoOnly, hooks)
+
+    let audioMeta: { processingStrategy?: string; processingLabel?: string; lossyEncodeCount?: number } = {
+      lossyEncodeCount: 0,
     }
 
-    const audioMeta = await muxAudio(job, videoOnly, outputPath, workDir, hooks)
+    const buildVideoOnly = async (): Promise<void> => {
+      try {
+        await concatCopy(concatList, videoOnly, job.duration, hooks, false)
+      } catch (error) {
+        if (hooks.cancelled() || error instanceof RenderCancelled) throw error
+        warning = warning
+          ? `${warning} Segment concat copy failed; re-encoded with VFR.`
+          : 'Segment concat copy failed; re-encoded with VFR.'
+        await concatReencode(job, encoder, concatList, videoOnly, hooks)
+      }
+    }
+
+    if (eligibility.directVideoAssembly && !expectAudio) {
+      try {
+        hooks.onStatus('rendering', 'Muxing final video')
+        await concatCopy(concatList, outputPath, job.duration, hooks, true)
+      } catch (error) {
+        if (hooks.cancelled() || error instanceof RenderCancelled) throw error
+        warning = warning
+          ? `${warning} Segment concat copy failed; re-encoded with VFR.`
+          : 'Segment concat copy failed; re-encoded with VFR.'
+        await concatReencode(job, encoder, concatList, videoOnly, hooks)
+        audioMeta = await muxAudio(job, videoOnly, outputPath, workDir, hooks)
+      }
+    } else if (eligibility.directVideoAssembly && expectAudio) {
+      try {
+        hooks.onStatus('rendering', 'Muxing final video')
+        const meta = await muxScreensaverAudio({
+          job: {
+            id: job.id,
+            duration: job.duration,
+            audioMode: job.audioMode,
+            audioVolume: job.audioVolume,
+            audioFadeIn: job.audioFadeIn,
+            audioFadeOut: job.audioFadeOut,
+            loopAudio: job.loopAudio,
+            musicPath: job.musicPath,
+            audioAssetId: job.audioAssetId,
+            sourceHasAudio: job.sourceHasAudio,
+            mediaKind: job.mediaKind,
+            mediaPath: job.mediaPath,
+          },
+          videoInput: { kind: 'concat', listPath: concatList, timescale: VFR_TIMESCALE },
+          outputPath,
+          workDir,
+          durationSec: job.duration,
+          hooks,
+          copyVideo: true,
+          preferDirectAudioLoop: eligibility.directAudioPeriodLoop,
+          onFaststartStatus: () => hooks.onStatus('rendering', 'Optimizing MP4 metadata'),
+        })
+        audioMeta = {
+          processingStrategy: meta.processingStrategy,
+          processingLabel: meta.processingLabel,
+          lossyEncodeCount: meta.lossyEncodeCount,
+        }
+      } catch (error) {
+        if (hooks.cancelled() || error instanceof RenderCancelled) throw error
+        console.warn('[Hybrid] Direct concat mux failed; using video-only intermediate.', error)
+        await rm(outputPath, { force: true }).catch(() => undefined)
+        await buildVideoOnly()
+        audioMeta = await muxAudio(job, videoOnly, outputPath, workDir, hooks)
+      }
+    } else {
+      await buildVideoOnly()
+      audioMeta = await muxAudio(job, videoOnly, outputPath, workDir, hooks)
+    }
+
     if (hooks.cancelled()) throw new RenderCancelled()
     hooks.onStatus('verifying', 'Validating output')
-    const expectAudio = wantsAudio(job)
     return {
       ...(await verifyVideoOutput(outputPath, job.width, job.height, job.duration, expectAudio)),
       warning,
@@ -132,6 +196,7 @@ async function encodeStaticSegment(
   durationSec: number,
   hooks: ScreensaverRenderHooks,
   progressCap: number,
+  skipFaststart = true,
 ): Promise<void> {
   const frameCount = Math.max(1, Math.round(durationSec))
   const args = [
@@ -156,10 +221,9 @@ async function encodeStaticSegment(
     '1',
     '-video_track_timescale',
     String(VFR_TIMESCALE),
-    '-movflags',
-    '+faststart',
-    output,
   ]
+  if (!skipFaststart) args.push('-movflags', '+faststart')
+  args.push(output)
   await spawnFfmpeg(args, durationSec, wrapProgress(hooks, progressCap))
 }
 
@@ -170,6 +234,7 @@ async function encodeAnimationSegment(
   durationSec: number,
   hooks: ScreensaverRenderHooks,
   progressCap: number,
+  skipFaststart = true,
 ): Promise<void> {
   const filterPath = path.join(path.dirname(output), 'seg-b-filter.txt')
   const ox = job.animationOverlayX
@@ -211,14 +276,19 @@ async function encodeAnimationSegment(
     String(Math.max(1, Math.round(durationSec * SUBSCRIBE_ANIMATION_FPS))),
     '-video_track_timescale',
     String(VFR_TIMESCALE),
-    '-movflags',
-    '+faststart',
-    output,
   ]
+  if (!skipFaststart) args.push('-movflags', '+faststart')
+  args.push(output)
   await spawnFfmpeg(args, durationSec, wrapProgress(hooks, progressCap))
 }
 
-async function concatCopy(listPath: string, output: string, expectedDuration: number, hooks: ScreensaverRenderHooks): Promise<void> {
+async function concatCopy(
+  listPath: string,
+  output: string,
+  expectedDuration: number,
+  hooks: ScreensaverRenderHooks,
+  faststart: boolean,
+): Promise<void> {
   const args = [
     '-y',
     '-hide_banner',
@@ -237,10 +307,9 @@ async function concatCopy(listPath: string, output: string, expectedDuration: nu
     'make_zero',
     '-video_track_timescale',
     String(VFR_TIMESCALE),
-    '-movflags',
-    '+faststart',
-    output,
   ]
+  if (faststart) args.push('-movflags', '+faststart')
+  args.push(output)
   await spawnFfmpeg(args, expectedDuration, hooks)
 }
 
@@ -300,6 +369,7 @@ async function muxAudio(
       '+faststart',
       outputPath,
     ]
+    hooks.onStatus('rendering', 'Optimizing MP4 metadata')
     await spawnFfmpeg(args, job.duration, hooks)
     return { lossyEncodeCount: 0 }
   }
@@ -324,6 +394,7 @@ async function muxAudio(
     durationSec: job.duration,
     hooks,
     copyVideo: true,
+    onFaststartStatus: () => hooks.onStatus('rendering', 'Optimizing MP4 metadata'),
   })
   return {
     processingStrategy: meta.processingStrategy,

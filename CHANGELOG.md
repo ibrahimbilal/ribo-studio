@@ -10,6 +10,10 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- Screensaver Optimized CFR (and eligible Hybrid) exports use **Single-Pass Direct Mux**: assemble cached video segments straight into the final MP4 without a full-duration `cfr-video.mp4` / `video-only.mp4` intermediate, and skip full-duration `looped.mp3` when Encode-Once direct period looping is safe. Reduces temporary disk use and logical I/O on long 4K exports. Disable with `RIBO_SINGLE_PASS_DIRECT_MUX=0` (legacy multi-pass fallback remains automatic on failure).
+
 ## [1.4.0] — 2026-11-15
 
 ### Added

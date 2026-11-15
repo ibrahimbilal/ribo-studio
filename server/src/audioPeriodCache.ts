@@ -5,7 +5,7 @@
 
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { copyFile, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { copyFile, link, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createHash as createHashStream } from 'node:crypto'
 import { AUDIO_PERIOD_PIPELINE_VERSION, buildEncodedPeriodCacheKey } from '../../shared/audioExecutionPlan'
@@ -132,6 +132,21 @@ export async function copyCachedPeriodTo(dest: string, cacheKey: string): Promis
   if (!hit) return false
   await copyFile(hit, dest)
   return true
+}
+
+/**
+ * Prefer hardlink into the job dir (same volume); fall back to copyFile.
+ * Cached artifacts remain immutable — callers must not mutate the destination if it is a hardlink.
+ */
+export async function materializeCachedPeriod(cachePath: string, dest: string): Promise<'hardlink' | 'copy'> {
+  await rm(dest, { force: true }).catch(() => undefined)
+  try {
+    await link(cachePath, dest)
+    return 'hardlink'
+  } catch {
+    await copyFile(cachePath, dest)
+    return 'copy'
+  }
 }
 
 export async function pruneAudioPeriodCache(maxBytes = AUDIO_PERIOD_CACHE_MAX_BYTES): Promise<void> {

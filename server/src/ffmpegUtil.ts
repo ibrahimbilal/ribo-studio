@@ -84,6 +84,19 @@ export function spawnFfmpeg(args: string[], expected: number, hooks: FfmpegHooks
   })
 }
 
+export interface VideoOutputProbeReuse {
+  width: number | null
+  height: number | null
+  codec: string | null
+  duration: number | null
+  hasAudio: boolean
+  /** When set, skips a second `stat` of the output file. */
+  bytes?: number
+}
+
+/**
+ * Post-export sanity check. Pass `preProbed` from CFR packet validation to avoid a duplicate ffprobe.
+ */
 export async function verifyVideoOutput(
   file: string,
   width: number,
@@ -91,9 +104,23 @@ export async function verifyVideoOutput(
   expected: number,
   expectAudio: boolean,
   frameMismatchMessage = 'The export did not match the requested frame size. It was discarded.',
+  preProbed?: VideoOutputProbeReuse | null,
 ): Promise<{ outputPath: string; bytes: number; duration: number }> {
-  const probed = await probeMedia(file)
-  const info = await stat(file)
+  const probed = preProbed
+    ? {
+        hasVideo: true,
+        width: preProbed.width ?? 0,
+        height: preProbed.height ?? 0,
+        codec: preProbed.codec,
+        duration: preProbed.duration ?? 0,
+        hasAudio: preProbed.hasAudio,
+        size: preProbed.bytes ?? 0,
+      }
+    : await probeMedia(file)
+  const info =
+    preProbed?.bytes != null
+      ? { size: preProbed.bytes }
+      : await stat(file)
   if (!probed.hasVideo || probed.width !== width || probed.height !== height) {
     throw new Error(frameMismatchMessage)
   }

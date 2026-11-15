@@ -50,6 +50,7 @@
     "test:audio-looper": "npm run test:audio-looper -w server",
     "bench:audio-processing": "npm run bench:audio-processing -w server",
     "poc:encode-once-loop-copy": "npm run poc:encode-once-loop-copy -w server",
+    "poc:single-pass-direct-mux": "npm run poc:single-pass-direct-mux -w server",
     "launch": "node scripts/launch-dev.cjs",
     "launch:linux": "bash scripts/launch-linux.sh",
     "build:launcher": "node scripts/build-launcher.mjs",

@@ -7,10 +7,14 @@ import {
   SUBSCRIBE_ANIMATION_FPS,
   type SubscribeAnimationSettings,
 } from '../../../shared/screensaverSubscribeAnimation'
+import { resolveScreensaverMuxEligibility } from '../../../shared/screensaverMuxStrategy'
 import type { EncoderId } from '../encoders'
+import { DiskIoSession, fileSizeOrZero } from '../diskIoTelemetry'
+import { assertDiskSpace, estimateMuxOutputBytes } from '../diskSpace'
 import { n, RenderCancelled, spawnFfmpeg, verifyVideoOutput } from '../ffmpegUtil'
 import type { ScreensaverRenderHooks } from '../renderScreensaver'
 import { muxScreensaverAudio } from '../screensaverAudioMux'
+import { jobsDir } from '../storage'
 import {
   cfrLibx264Args,
   resolveCfrEncodeSettings,
@@ -100,6 +104,10 @@ export async function renderScreensaverCfr(
   hooks.onStatus('preparing', 'Preparing timeline')
   report(hooks, 0, 'Preparing timeline')
 
+  const eligibility = resolveScreensaverMuxEligibility()
+  const diskIo = new DiskIoSession(eligibility.strategy)
+  const prepareStage = diskIo.beginStage('PREPARE_TIMELINE')
+
   const settings = resolveCfrEncodeSettings(job.cfrQuality, job.fps, job.width, job.height)
   const compositionHash = await compositionContentHash(job.compositionPath)
   const timeline = buildCfrTimeline({
@@ -108,6 +116,7 @@ export async function renderScreensaverCfr(
     compositionKey: compositionHash,
     subscribeAnimation: job.subscribeAnimation,
   })
+  prepareStage.end()
 
   const cache = await createSegmentCache(workDir)
   const segmentsDir = path.join(workDir, 'cfr-segments')
@@ -120,11 +129,14 @@ export async function renderScreensaverCfr(
   let framesEncoded = 0
   let encodeDone = 0
   const encodeTotal = estimateEncodeUnits(timeline, job.fps)
+  const expectAudio = wantsAudio(job)
+  const listPath = path.join(workDir, 'cfr-segments.ffconcat')
+  const videoOnly = path.join(workDir, 'cfr-video.mp4')
 
   try {
-    // Segment encodes are real FFmpeg work — leave preparing so the UI can show encode %.
-    hooks.onStatus('rendering', 'Rendering artwork')
-    report(hooks, WEIGHTS.prepare, 'Rendering artwork')
+    hooks.onStatus('rendering', 'Rendering unique video segments')
+    report(hooks, WEIGHTS.prepare, 'Rendering unique video segments')
+    const encodeStage = diskIo.beginStage('VIDEO_SEGMENT_ENCODE')
 
     for (const region of timeline.regions) {
       if (hooks.cancelled()) throw new RenderCancelled()
@@ -140,11 +152,12 @@ export async function renderScreensaverCfr(
             compositionHash,
             frameCount,
             hooks,
+            skipFaststart: eligibility.skipIntermediateFaststart,
             onEncoded: () => {
               framesEncoded += frameCount
               encodeDone += 1
               const ratio = WEIGHTS.prepare + WEIGHTS.encode * Math.min(1, encodeDone / Math.max(1, encodeTotal))
-              report(hooks, ratio, 'Rendering static segments')
+              report(hooks, ratio, 'Rendering unique video segments')
             },
           })
         }
@@ -168,11 +181,12 @@ export async function renderScreensaverCfr(
           compositionHash,
           frameCount: region.frameCount,
           hooks,
+          skipFaststart: eligibility.skipIntermediateFaststart,
           onEncoded: () => {
             framesEncoded += region.frameCount
             encodeDone += 1
             const ratio = WEIGHTS.prepare + WEIGHTS.encode * Math.min(1, encodeDone / Math.max(1, encodeTotal))
-            report(hooks, ratio, 'Rendering animated segments')
+            report(hooks, ratio, 'Rendering unique video segments')
           },
         })
         concatEntries.push(file)
@@ -184,27 +198,91 @@ export async function renderScreensaverCfr(
     if (cursor !== timeline.totalFrames) {
       throw new Error(`Assembled ${cursor} frames, expected ${timeline.totalFrames}.`)
     }
-    // Last boundary is end-of-file, not a segment start.
     boundaryIndexes.pop()
+    encodeStage.end({ ffmpegInvocations: framesEncoded > 0 ? encodeDone : 0 })
 
     if (hooks.cancelled()) throw new RenderCancelled()
-    hooks.onStatus('rendering', 'Assembling video')
-    report(hooks, WEIGHTS.prepare + WEIGHTS.encode, 'Assembling video')
-
-    const videoOnly = path.join(workDir, 'cfr-video.mp4')
-    const listPath = path.join(workDir, 'cfr-segments.ffconcat')
     await writeConcatManifest(listPath, concatEntries)
-    await concatCopy(listPath, videoOnly, settings, timeline.durationSeconds, hooks, WEIGHTS.prepare + WEIGHTS.encode, WEIGHTS.assemble)
 
-    if (hooks.cancelled()) throw new RenderCancelled()
-    hooks.onStatus('rendering', 'Processing audio')
-    report(hooks, WEIGHTS.prepare + WEIGHTS.encode + WEIGHTS.assemble, 'Processing audio')
-    const audioMeta = await muxAudio(job, videoOnly, outputPath, workDir, timeline.durationSeconds, hooks)
+    const estimatedFinal = estimateMuxOutputBytes({
+      durationSec: timeline.durationSeconds,
+      width: job.width,
+      height: job.height,
+      fps: job.fps,
+      hasAudio: expectAudio,
+    })
+    // Single-pass needs ~1× final; legacy needs final + intermediate video (+ optional looped audio).
+    const spaceNeeded = eligibility.directVideoAssembly
+      ? estimatedFinal
+      : estimatedFinal * 2 + (expectAudio ? Math.ceil(320_000 * timeline.durationSeconds / 8) : 0)
+    await assertDiskSpace(jobsDir, spaceNeeded, 'Not enough free disk space for this Screensaver export.')
+
+    let audioMeta: { processingStrategy?: string; processingLabel?: string; lossyEncodeCount?: number } = {
+      lossyEncodeCount: 0,
+    }
+    let usedDirectVideo = false
+
+    if (eligibility.directVideoAssembly) {
+      try {
+        audioMeta = await assembleDirect({
+          job,
+          settings,
+          listPath,
+          outputPath,
+          workDir,
+          durationSec: timeline.durationSeconds,
+          hooks,
+          diskIo,
+          preferDirectAudioLoop: eligibility.directAudioPeriodLoop,
+          expectAudio,
+        })
+        usedDirectVideo = true
+        diskIo.markFullDurationVideo(false)
+      } catch (error) {
+        if (hooks.cancelled() || error instanceof RenderCancelled) throw error
+        const reason = error instanceof Error ? error.message : String(error)
+        console.warn(`[CFR] Single-pass direct mux failed; falling back to LEGACY_MULTI_PASS. ${reason}`)
+        diskIo.markFallback(reason)
+        await rm(outputPath, { force: true }).catch(() => undefined)
+        await assertDiskSpace(
+          jobsDir,
+          estimatedFinal * 2 + (expectAudio ? Math.ceil(320_000 * timeline.durationSeconds / 8) : 0),
+          'Not enough free disk space to fall back to multi-pass assembly.',
+        )
+        audioMeta = await assembleLegacy({
+          job,
+          settings,
+          listPath,
+          videoOnly,
+          outputPath,
+          workDir,
+          durationSec: timeline.durationSeconds,
+          hooks,
+          diskIo,
+          expectAudio,
+        })
+        diskIo.markFullDurationVideo(true)
+      }
+    } else {
+      audioMeta = await assembleLegacy({
+        job,
+        settings,
+        listPath,
+        videoOnly,
+        outputPath,
+        workDir,
+        durationSec: timeline.durationSeconds,
+        hooks,
+        diskIo,
+        expectAudio,
+      })
+      diskIo.markFullDurationVideo(true)
+    }
 
     if (hooks.cancelled()) throw new RenderCancelled()
     hooks.onStatus('verifying', 'Validating output')
     report(hooks, 1 - WEIGHTS.validate, 'Validating output')
-    const expectAudio = wantsAudio(job)
+    const verifyStage = diskIo.beginStage('VERIFICATION')
     const validation = await validateCfrPackets(outputPath, {
       fps: job.fps,
       expectedFrames: timeline.totalFrames,
@@ -219,7 +297,25 @@ export async function renderScreensaverCfr(
       throw new Error(`Optimized CFR validation failed: ${validation.reasons.join(' ')}`)
     }
 
-    const verified = await verifyVideoOutput(outputPath, job.width, job.height, timeline.durationSeconds, expectAudio)
+    const verified = await verifyVideoOutput(
+      outputPath,
+      job.width,
+      job.height,
+      timeline.durationSeconds,
+      expectAudio,
+      undefined,
+      {
+        width: validation.streamInfo.width,
+        height: validation.streamInfo.height,
+        codec: validation.streamInfo.codec,
+        duration: validation.streamInfo.formatDuration ?? validation.streamInfo.duration,
+        hasAudio: validation.streamInfo.hasAudio,
+        bytes: validation.bytes,
+      },
+    )
+    verifyStage.end()
+    diskIo.setFinalOutputBytes(verified.bytes)
+    diskIo.logSummary()
     report(hooks, 1, 'Completed')
     if (framesEncoded > 0) {
       warning = joinWarning(
@@ -227,10 +323,118 @@ export async function renderScreensaverCfr(
         `Optimized CFR encoded ${framesEncoded} unique frames for ${timeline.totalFrames} output frames.`,
       )
     }
+    console.info(`[CFR] Mux path: ${usedDirectVideo ? 'SINGLE_PASS_DIRECT_MUX' : 'LEGACY_MULTI_PASS'}`)
     return { ...verified, warning, ...audioMeta }
   } finally {
-    await rm(path.join(workDir, 'cfr-video.mp4'), { force: true }).catch(() => undefined)
-    await rm(path.join(workDir, 'cfr-segments.ffconcat'), { force: true }).catch(() => undefined)
+    await rm(videoOnly, { force: true }).catch(() => undefined)
+    await rm(listPath, { force: true }).catch(() => undefined)
+  }
+}
+
+async function assembleDirect(opts: {
+  job: CfrJob
+  settings: CfrEncodeSettings
+  listPath: string
+  outputPath: string
+  workDir: string
+  durationSec: number
+  hooks: ScreensaverRenderHooks
+  diskIo: DiskIoSession
+  preferDirectAudioLoop: boolean
+  expectAudio: boolean
+}): Promise<{ processingStrategy?: string; processingLabel?: string; lossyEncodeCount?: number }> {
+  const { job, settings, listPath, outputPath, workDir, durationSec, hooks, diskIo } = opts
+  if (!opts.expectAudio) {
+    hooks.onStatus('rendering', 'Muxing final video')
+    report(hooks, WEIGHTS.prepare + WEIGHTS.encode, 'Muxing final video')
+    const stage = diskIo.beginStage('VIDEO_SEGMENT_ASSEMBLY')
+    hooks.onStatus('rendering', 'Optimizing MP4 metadata')
+    await concatCopy(listPath, outputPath, settings, durationSec, hooks, WEIGHTS.prepare + WEIGHTS.encode, WEIGHTS.assemble + WEIGHTS.audio, {
+      faststart: true,
+      progressLabel: 'Muxing final video',
+    })
+    const outBytes = await fileSizeOrZero(outputPath)
+    stage.end({ outputBytes: outBytes, ffmpegInvocations: 1, faststartOps: 1, notes: 'no-audio-direct' })
+    diskIo.markFullDurationAudio(false)
+    return { lossyEncodeCount: 0 }
+  }
+
+  hooks.onStatus('rendering', 'Preparing audio period')
+  report(hooks, WEIGHTS.prepare + WEIGHTS.encode, 'Preparing audio period')
+  hooks.onStatus('rendering', 'Muxing final video')
+  report(hooks, WEIGHTS.prepare + WEIGHTS.encode + WEIGHTS.assemble * 0.2, 'Muxing final video')
+  const meta = await muxScreensaverAudio({
+    job: audioJobSlice(job, durationSec),
+    videoInput: { kind: 'concat', listPath, timescale: settings.timescale },
+    outputPath,
+    workDir,
+    durationSec,
+    hooks: {
+      ...hooks,
+      onProgress: (progress, message) =>
+        hooks.onProgress(
+          WEIGHTS.prepare + WEIGHTS.encode + WEIGHTS.assemble * 0.2 + progress * (WEIGHTS.assemble * 0.8 + WEIGHTS.audio),
+          message ?? 'Muxing final video',
+        ),
+    },
+    copyVideo: true,
+    preferDirectAudioLoop: opts.preferDirectAudioLoop,
+    diskIo,
+    onFaststartStatus: () => {
+      hooks.onStatus('rendering', 'Optimizing MP4 metadata')
+      report(hooks, WEIGHTS.prepare + WEIGHTS.encode + WEIGHTS.assemble + WEIGHTS.audio * 0.85, 'Optimizing MP4 metadata')
+    },
+  })
+  return {
+    processingStrategy: meta.processingStrategy,
+    processingLabel: meta.processingLabel,
+    lossyEncodeCount: meta.lossyEncodeCount,
+  }
+}
+
+async function assembleLegacy(opts: {
+  job: CfrJob
+  settings: CfrEncodeSettings
+  listPath: string
+  videoOnly: string
+  outputPath: string
+  workDir: string
+  durationSec: number
+  hooks: ScreensaverRenderHooks
+  diskIo: DiskIoSession
+  expectAudio: boolean
+}): Promise<{ processingStrategy?: string; processingLabel?: string; lossyEncodeCount?: number }> {
+  const { job, settings, listPath, videoOnly, outputPath, workDir, durationSec, hooks, diskIo } = opts
+  hooks.onStatus('rendering', 'Assembling video')
+  report(hooks, WEIGHTS.prepare + WEIGHTS.encode, 'Assembling video')
+  const stage = diskIo.beginStage('VIDEO_SEGMENT_ASSEMBLY')
+  await concatCopy(listPath, videoOnly, settings, durationSec, hooks, WEIGHTS.prepare + WEIGHTS.encode, WEIGHTS.assemble, {
+    faststart: false,
+    progressLabel: 'Assembling video',
+  })
+  await diskIo.trackTempFile(videoOnly)
+  stage.end({ outputBytes: await fileSizeOrZero(videoOnly), ffmpegInvocations: 1, notes: 'legacy-intermediate' })
+
+  if (hooks.cancelled()) throw new RenderCancelled()
+  hooks.onStatus('rendering', opts.expectAudio ? 'Preparing audio period' : 'Muxing final video')
+  report(hooks, WEIGHTS.prepare + WEIGHTS.encode + WEIGHTS.assemble, opts.expectAudio ? 'Preparing audio period' : 'Muxing final video')
+  return muxAudio(job, videoOnly, outputPath, workDir, durationSec, hooks, diskIo)
+}
+
+function audioJobSlice(job: CfrJob, durationSec: number) {
+  return {
+    id: job.id,
+    duration: durationSec,
+    audioMode: job.audioMode,
+    audioVolume: job.audioVolume,
+    audioFadeIn: job.audioFadeIn,
+    audioFadeOut: job.audioFadeOut,
+    loopAudio: job.loopAudio,
+    musicPath: job.musicPath,
+    audioAssetId: job.audioAssetId,
+    sourceHasAudio: job.sourceHasAudio,
+    mediaKind: job.mediaKind,
+    mediaPath: job.mediaPath,
   }
 }
 
@@ -252,6 +456,7 @@ async function ensureStaticSegment(options: {
   compositionHash: string
   frameCount: number
   hooks: ScreensaverRenderHooks
+  skipFaststart: boolean
   onEncoded: () => void
 }): Promise<string> {
   const key = staticSegmentCacheKey({
@@ -285,10 +490,11 @@ async function ensureStaticSegment(options: {
     String(options.frameCount),
     '-an',
     ...cfrLibx264Args(options.settings, true),
-    '-movflags',
-    '+faststart',
-    output,
   ]
+  if (!options.skipFaststart) {
+    args.push('-movflags', '+faststart')
+  }
+  args.push(output)
   const expectedSec = options.frameCount / options.settings.fps
   await spawnFfmpeg(args, expectedSec, options.hooks)
   const stored = await options.cache.put(key, output)
@@ -304,9 +510,9 @@ async function ensureDynamicSegment(options: {
   compositionHash: string
   frameCount: number
   hooks: ScreensaverRenderHooks
+  skipFaststart: boolean
   onEncoded: () => void
 }): Promise<string> {
-  // PNGs are always authored at SUBSCRIBE_ANIMATION_FPS; output may be another CFR rate.
   const pngCount = Math.max(
     1,
     Math.round((options.frameCount / options.settings.fps) * SUBSCRIBE_ANIMATION_FPS),
@@ -366,10 +572,11 @@ async function ensureDynamicSegment(options: {
     '-frames:v',
     String(options.frameCount),
     ...cfrLibx264Args(options.settings, false),
-    '-movflags',
-    '+faststart',
-    output,
   ]
+  if (!options.skipFaststart) {
+    args.push('-movflags', '+faststart')
+  }
+  args.push(output)
   await spawnFfmpeg(args, durationSec, options.hooks)
   const stored = await options.cache.put(key, output)
   options.onEncoded()
@@ -396,6 +603,7 @@ async function concatCopy(
   hooks: ScreensaverRenderHooks,
   progressBase: number,
   progressSpan: number,
+  options: { faststart: boolean; progressLabel: string },
 ): Promise<void> {
   const args = [
     '-y',
@@ -415,16 +623,18 @@ async function concatCopy(
     'copy',
     '-video_track_timescale',
     String(settings.timescale),
-    '-movflags',
-    '+faststart',
-    output,
   ]
+  if (options.faststart) {
+    args.push('-movflags', '+faststart')
+  }
+  args.push(output)
   if (!args.includes('copy') || args.some((arg) => arg.includes('libx264') || arg.startsWith('h264_'))) {
     throw new Error('CFR assembly must use stream copy.')
   }
   await spawnFfmpeg(args, expectedDuration, {
     ...hooks,
-    onProgress: (progress, message) => hooks.onProgress(progressBase + progress * progressSpan, message ?? 'Assembling video'),
+    onProgress: (progress, message) =>
+      hooks.onProgress(progressBase + progress * progressSpan, message ?? options.progressLabel),
   })
 }
 
@@ -435,6 +645,7 @@ async function muxAudio(
   workDir: string,
   durationSec: number,
   hooks: ScreensaverRenderHooks,
+  diskIo?: DiskIoSession,
 ): Promise<{ processingStrategy?: string; processingLabel?: string; lossyEncodeCount?: number }> {
   if (!wantsAudio(job)) {
     const args = [
@@ -456,30 +667,26 @@ async function muxAudio(
       '+faststart',
       outputPath,
     ]
+    hooks.onStatus('rendering', 'Optimizing MP4 metadata')
     await spawnFfmpeg(args, durationSec, hooks)
+    diskIo?.beginStage('FINAL_MUX').end({ ffmpegInvocations: 1, faststartOps: 1, notes: 'legacy-no-audio-remux' })
+    diskIo?.markFullDurationAudio(false)
     return { lossyEncodeCount: 0 }
   }
   const meta = await muxScreensaverAudio({
-    job: {
-      id: job.id,
-      duration: durationSec,
-      audioMode: job.audioMode,
-      audioVolume: job.audioVolume,
-      audioFadeIn: job.audioFadeIn,
-      audioFadeOut: job.audioFadeOut,
-      loopAudio: job.loopAudio,
-      musicPath: job.musicPath,
-      audioAssetId: job.audioAssetId,
-      sourceHasAudio: job.sourceHasAudio,
-      mediaKind: job.mediaKind,
-      mediaPath: job.mediaPath,
-    },
+    job: audioJobSlice(job, durationSec),
     videoPath,
     outputPath,
     workDir,
     durationSec,
     hooks,
     copyVideo: true,
+    preferDirectAudioLoop: false,
+    diskIo,
+    onFaststartStatus: () => {
+      hooks.onStatus('rendering', 'Optimizing MP4 metadata')
+      report(hooks, WEIGHTS.prepare + WEIGHTS.encode + WEIGHTS.assemble + WEIGHTS.audio * 0.85, 'Optimizing MP4 metadata')
+    },
   })
   return {
     processingStrategy: meta.processingStrategy,

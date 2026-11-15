@@ -24,7 +24,7 @@ Verified product surfaces and where they live. Deep detail: `.cursor/skills/ribo
 ## Screensaver
 
 - Long-form 16:9 from image or looping video; composition, frames, adjustments — `apps/frame-screensaver/`, `shared/screensaverComposition.ts`.
-- Export: Fast VFR or Optimized CFR — `renderScreensaver.ts`, `renderScreensaverHybrid.ts`, `screensaverCfr/`.
+- Export: Fast VFR or Optimized CFR — `renderScreensaver.ts`, `renderScreensaverHybrid.ts`, `screensaverCfr/`. Eligible CFR/Hybrid finals use **Single-Pass Direct Mux** (`shared/screensaverMuxStrategy.ts`, `docs/single-pass-direct-mux.md`): ffconcat → final MP4 without full-duration video intermediates; Encode-Once may loop the MP3 period at mux. Flag `RIBO_SINGLE_PASS_DIRECT_MUX` (default on).
 - Optional subscribe animation overlay with persistent PNG-sequence cache (static + per-channel dynamic) — `shared/screensaverSubscribeAnimation.ts`, `shared/subscribeAnimationCache*.ts`, `server/src/subscribeAnimationCache*.ts`, hybrid/CFR paths.
 - Multi-project IndexedDB library — `screensaverProjectLibrary.ts`.
 - **Export All** — batch-submit eligible saved projects to the shared FFmpeg queue (immutable snapshots, no parallel encodes) — `exportAllPlan.ts`, `ScreensaverProjectList.vue`, screensaver store.

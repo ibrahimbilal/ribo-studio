@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { stat } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
 import { ffprobeBinary } from '../binaries'
 
@@ -25,6 +26,9 @@ export interface CfrValidationResult {
   packetCount: number
   timeBase: string | null
   expectedTick: number | null
+  /** Metadata from the validation probe — reuse in verifyVideoOutput to skip a second ffprobe. */
+  streamInfo: StreamInfo
+  bytes: number
 }
 
 function runFfprobe(args: string[]): Promise<string> {
@@ -117,6 +121,7 @@ export async function validateCfrPackets(
   },
 ): Promise<CfrValidationResult> {
   const info = await probeCfrStream(file)
+  const bytes = (await stat(file).catch(() => ({ size: 0 }))).size
   const reasons: string[] = []
   if (info.codec !== 'h264') reasons.push(`Codec is ${info.codec ?? 'missing'}, expected h264.`)
   if (info.pixFmt !== 'yuv420p') reasons.push(`Pixel format is ${info.pixFmt ?? 'missing'}, expected yuv420p.`)
@@ -220,5 +225,7 @@ export async function validateCfrPackets(
     packetCount,
     timeBase: info.timeBase,
     expectedTick: tick,
+    streamInfo: info,
+    bytes,
   }
 }
