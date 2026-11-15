@@ -167,6 +167,62 @@ input[type='color'] {
     font-size: 0.75rem;
   }
 
+  /* Compact format badges (MP3 / WAV / FLAC / …) — base = fallback */
+  .format-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.125rem;
+    border: 1px solid rgb(113 113 122 / 0.4);
+    border-radius: 999px;
+    background: rgb(63 63 70 / 0.45);
+    padding: 0 0.3rem;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    color: #d4d4d8;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .format-label--mp3 {
+    border-color: rgb(16 185 129 / 0.35);
+    background: rgb(16 185 129 / 0.14);
+    color: #6ee7b7;
+  }
+
+  .format-label--wav {
+    border-color: rgb(56 189 248 / 0.35);
+    background: rgb(56 189 248 / 0.14);
+    color: #7dd3fc;
+  }
+
+  .format-label--flac {
+    border-color: rgb(45 212 191 / 0.35);
+    background: rgb(45 212 191 / 0.14);
+    color: #5eead4;
+  }
+
+  .format-label--m4a {
+    border-color: rgb(251 191 36 / 0.35);
+    background: rgb(251 191 36 / 0.14);
+    color: #fcd34d;
+  }
+
+  .format-label--aac {
+    border-color: rgb(251 146 60 / 0.35);
+    background: rgb(251 146 60 / 0.14);
+    color: #fdba74;
+  }
+
+  .format-label--ogg,
+  .format-label--opus {
+    border-color: rgb(244 114 182 / 0.35);
+    background: rgb(244 114 182 / 0.14);
+    color: #f9a8d4;
+  }
+
   .section-label {
     font-size: 0.75rem;
     font-weight: 600;

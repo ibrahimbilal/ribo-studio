@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.3.0**).
+Version source of truth: root `package.json` (currently **1.4.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,10 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.4.0** (2026-11-15) — Audio Compatibility panel; Encode-Once Loop-Copy for eligible Looper→Screensaver MP4 audio; Looper format badges.
+- 2026-11-15 — Audio Looper compatibility UI: stream-signature groups, per-track indicators, panel under playlist (planner-backed suggestions, Encode-Once impact, keep/remove incompatible) (`shared/audioCompatibility.ts`, `LooperCompatibilityPanel.vue`, `LooperTrackList.vue`, looper store).
+- 2026-11-15 — Encode-Once Loop-Copy for Screensaver MP4 audio: execution planner + MP3 period encode/packet-loop (AAC period blocked by continuity POC), period cache, richer AudioPlanner/Export logs, feature flag `RIBO_ENCODE_ONCE_LOOP_COPY` (`shared/audioExecutionPlan.ts`, `encodeOnceLoopCopy.ts`, `audioPeriodCache.ts`, `screensaverAudioMux.ts`, `docs/encode-once-loop-copy-poc.md`).
+- 2026-11-15 — Audio format badges on Looper tracks / audio status (`AudioFormatBadge.vue`, `.format-label` in `style.css`).
 - Release **v1.3.0** (2026-11-14) — Looper multi-send to Screensaver (shared `audioAssetId`, select-all) + Screensaver Export All via existing queue; `AppCheckbox` / `multiSelect` helpers.
 - 2026-11-14 — Looper multi-send to Screensaver (shared `audioAssetId`, select-all UI) + Screensaver Export All via existing queue (`sendToScreensaver*.ts`, `screensaverAudioRefs.ts`, `exportAllPlan.ts`, screensaver store / project list, docs).
 - Release **v1.2.0** (2026-11-14) — Screensaver subscribe animation persistent PNG cache (static/dynamic templates, SHA-256 keys, disk store, Settings cache UI, export `animationCacheKey`), YouTube `channelId` on lookup, cache tests + format probe.

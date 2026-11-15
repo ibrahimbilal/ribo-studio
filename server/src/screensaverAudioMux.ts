@@ -7,6 +7,8 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { LooperAudioRecipe } from '../../shared/looperAudioRecipe'
 import { assertPlaylistTimeline } from '../../shared/audioLooperPlaylist'
+import { planAudioExecution } from '../../shared/audioExecutionPlan'
+import { volumeToFfmpeg } from '../../shared/audioLooper'
 import {
   maxReliableSourceBitrateBps,
   planAudioProcessing,
@@ -25,7 +27,24 @@ import {
   streamCopyConcatArgs,
 } from './audioProcessing'
 import {
+  buildEncodedPeriodCacheKey,
+  getOrCreateAudioPeriod,
+  hashFileContent,
+  isEncodeOnceLoopCopyEnabled,
+  retainAudioPeriodCache,
+  releaseAudioPeriodCache,
+} from './audioPeriodCache'
+import {
+  encodeDestinationPeriod,
+  snapPeriodSecondsToAacFrames,
+  streamCopyLoopPeriod,
+  stripContainerDelayForLoop,
+  verifyEncodedPeriod,
+  type EncodeOnceSource,
+} from './encodeOnceLoopCopy'
+import {
   assessAudioDuration,
+  assessFileDuration,
   logDurationAssessment,
   streamCopyTrimToDuration,
 } from './audioDurationRecovery'
@@ -142,6 +161,8 @@ interface PreparedRecipeAudio {
   plannedStrategy: AudioProcessingPlan['strategy']
   plannedReason: string
   strategyChangeReason?: string
+  /** When true, musicPath already covers job.duration — mux must not -stream_loop again. */
+  alreadyLooped?: boolean
 }
 
 function combinedMuxGain(
@@ -246,6 +267,157 @@ async function materializeStreamCopyPlaylist(
   }
 }
 
+async function materializeEncodeOncePeriod(opts: {
+  job: ScreensaverAudioJobLike
+  recipe: LooperAudioRecipe
+  sources: string[]
+  probes: AudioSourceProbe[]
+  plan: AudioProcessingPlan
+  periodSeconds: number
+  originalSourceBitrate: number
+  hooks: FfmpegHooks
+}): Promise<PreparedRecipeAudio | null> {
+  const { job, recipe, sources, probes, plan, periodSeconds, originalSourceBitrate, hooks } = opts
+  const sampleRate = plan.expectedSampleRate || 48000
+  const channels = Math.min(2, plan.expectedChannels || 2) || 2
+  const bitrateKbps = plan.targetBitrateKbps ?? 256
+  const volume = volumeToFfmpeg(recipe.settings.volumePercent)
+
+  const encodeSources: EncodeOnceSource[] = sources.map((sourcePath, index) => {
+    const probe = probes[index]!
+    return {
+      path: sourcePath,
+      sampleRate: probe.sampleRate,
+      channels: probe.channels,
+      duration: probe.duration,
+      trimStart: probe.trimStart,
+      trimEnd: probe.trimEnd,
+    }
+  })
+
+  const sourceHashes: string[] = []
+  for (const sourcePath of sources) {
+    sourceHashes.push(await hashFileContent(sourcePath))
+  }
+  const cacheKey = buildEncodedPeriodCacheKey({
+    sourceContentHashes: sourceHashes,
+    sourceOrder: sources.map((_, i) => i),
+    trimStarts: probes.map((p) => p.trimStart ?? 0),
+    trimEnds: probes.map((p) => p.trimEnd ?? p.duration),
+    volumePercent: recipe.settings.volumePercent,
+    loopMode: recipe.settings.loopMode,
+    playlistCrossfade: Boolean(recipe.settings.playlistCrossfade),
+    playlistCrossfadeSeconds: recipe.settings.playlistCrossfadeSeconds ?? 0,
+    normalizeLoudness: Boolean(recipe.settings.normalizeLoudness),
+    outputCodec: 'mp3',
+    sampleRate,
+    channels,
+    targetBitrateKbps: bitrateKbps,
+    encoderId: 'libmp3lame',
+  })
+
+  retainAudioPeriodCache(cacheKey)
+  try {
+    const { path: cachedPeriod, cacheHit } = await getOrCreateAudioPeriod(cacheKey, async (tempPath) => {
+      const workDir = path.join(jobsDir, job.id, 'audio-encode-once')
+      await mkdir(workDir, { recursive: true })
+      const encoded = await encodeDestinationPeriod({
+        sources: encodeSources,
+        outputPath: tempPath,
+        sampleRate,
+        channels,
+        bitrateKbps,
+        volume,
+        workDir,
+        hooks,
+        allowWavFallback: true,
+        frameAlignPad: true,
+        periodCodec: 'mp3',
+      })
+      const aligned = snapPeriodSecondsToAacFrames(periodSeconds, sampleRate)
+      const verify = await verifyEncodedPeriod({
+        periodPath: encoded.outputPath,
+        expectedPeriodSeconds: aligned,
+        sampleRate,
+        // MP3 periods are not AAC-frame concepts; tolerate duration slack only.
+        slackSeconds: Math.max(0.15, Math.min(1.0, periodSeconds * 0.02)),
+      })
+      const hardFail = verify.reasons.filter((r) => !r.includes('not AAC-frame-aligned'))
+      if (hardFail.length) {
+        throw new Error(`Encoded period verification failed: ${hardFail.join('; ')}`)
+      }
+    })
+
+    const dir = path.join(jobsDir, job.id, 'audio-encode-once')
+    await mkdir(dir, { recursive: true })
+    const strippedPath = path.join(dir, 'period.stripped.mp3')
+    const stripped = await stripContainerDelayForLoop({
+      periodPath: cachedPeriod,
+      outputPath: strippedPath,
+      hooks,
+    })
+    const fullPath = path.join(dir, 'looped.mp3')
+    await streamCopyLoopPeriod({
+      periodPath: stripped.path,
+      outputPath: fullPath,
+      targetSeconds: job.duration,
+      hooks,
+    })
+    const durationCheck = await assessFileDuration(fullPath, job.duration)
+    if (durationCheck.verdict !== 'ok') {
+      throw new Error(
+        `Encode-once duration ${durationCheck.verdict}: actual=${durationCheck.actualSeconds.toFixed(3)}s target=${job.duration.toFixed(3)}s`,
+      )
+    }
+    const details = await probeAudioDetails(fullPath)
+    const counter = new AudioEncodeCounter()
+    if (!cacheHit) {
+      counter.recordDecode(1)
+      counter.recordLossyEncode(1)
+    }
+    console.info(
+      `[AudioExport] ENCODE_ONCE_LOOP_COPY: MP3 period→loop (${periodSeconds.toFixed(3)}s → ${details.duration.toFixed(3)}s) cacheHit=${cacheHit}`,
+    )
+    logAudioExport({
+      streamCopy: false,
+      decodeRequired: true,
+      decodePerformed: !cacheHit,
+      resamplingPerformed: true,
+      pcmMaterializationPerformed: false,
+      losslessEncodeCount: counter.losslessEncodeCount,
+      lossyEncodeCount: counter.lossyEncodeCount,
+      lossyEncodeInputDurationSeconds: cacheHit ? 0 : periodSeconds,
+      lossyGenerationsInFinalOutput: 1,
+      loopStreamCopy: true,
+      finalMuxAudioStreamCopy: true,
+      boundaryVerification: 'Passed',
+      durationVerification: 'Passed',
+      fallbackUsed: false,
+      verification: 'Passed',
+      actualOutputBitrate: details.bitrate || bitrateKbps * 1000,
+    })
+
+    return {
+      musicPath: fullPath,
+      codec: 'mp3',
+      originalSourceBitrate,
+      currentStreamBitrate: details.bitrate || bitrateKbps * 1000,
+      sampleRate: details.sampleRate || sampleRate,
+      channels: details.channels || channels,
+      gainBaked: true,
+      muxVolume: 1,
+      muxFadeIn: 0,
+      muxFadeOut: 0,
+      counter,
+      plannedStrategy: plan.strategy,
+      plannedReason: `ENCODE_ONCE_LOOP_COPY: ${plan.reason}`,
+      alreadyLooped: true,
+    }
+  } finally {
+    releaseAudioPeriodCache(cacheKey)
+  }
+}
+
 /**
  * Prepare looper-plan audio for mux without overriding STREAM_COPY via an unconditional WAV.
  */
@@ -269,28 +441,43 @@ async function materializeRecipeAudio(
     fadeIn: gain.fadeIn,
     fadeOut: gain.fadeOut,
   })
+  const operations = {
+    loopMode: recipe.settings.loopMode,
+    volumePercent: recipe.settings.volumePercent,
+    fadeInSeconds: recipe.settings.fadeInSeconds,
+    fadeOutSeconds: recipe.settings.fadeOutSeconds,
+    seamlessCrossfade: recipe.settings.loopMode === 'seamless',
+    playlistCrossfade: recipe.settings.playlistCrossfade,
+    playlistCrossfadeSeconds: recipe.settings.playlistCrossfadeSeconds,
+    normalizeLoudness: recipe.settings.normalizeLoudness,
+    userMp3Bitrate: recipe.settings.mp3Bitrate,
+    muxVolume: job.audioVolume,
+    muxFadeIn: job.audioFadeIn,
+    muxFadeOut: job.audioFadeOut,
+  }
   const plan = planAudioProcessing({
     sources: probes,
     destination: plainMux ? 'mp4-copy' : 'mp4-aac',
-    operations: {
-      loopMode: recipe.settings.loopMode,
-      volumePercent: recipe.settings.volumePercent,
-      fadeInSeconds: recipe.settings.fadeInSeconds,
-      fadeOutSeconds: recipe.settings.fadeOutSeconds,
-      seamlessCrossfade: recipe.settings.loopMode === 'seamless',
-      playlistCrossfade: recipe.settings.playlistCrossfade,
-      playlistCrossfadeSeconds: recipe.settings.playlistCrossfadeSeconds,
-      normalizeLoudness: recipe.settings.normalizeLoudness,
-      userMp3Bitrate: recipe.settings.mp3Bitrate,
-      muxVolume: job.audioVolume,
-      muxFadeIn: job.audioFadeIn,
-      muxFadeOut: job.audioFadeOut,
-    },
+    operations,
+  })
+  const periodSeconds = recipePeriodSeconds(recipe, probes)
+  const execution = planAudioExecution({
+    sources: probes,
+    destination: plainMux ? 'mp4-copy' : 'mp4-aac',
+    operations,
+    qualityPlan: plan,
+    targetDurationSeconds: job.duration,
+    periodDurationSeconds: periodSeconds,
+    encodeOnceEnabled: isEncodeOnceLoopCopyEnabled(),
+    globalGainOnFullTimeline: true,
   })
   logAudioPlan(plan, probes, {
     originalSourceBitrate,
     currentStreamBitrate: probes[0]?.bitrate || originalSourceBitrate,
     targetEncodingBitrate: plan.targetBitrateKbps != null ? plan.targetBitrateKbps * 1000 : null,
+    executionStrategy: execution.strategy,
+    targetDurationSeconds: job.duration,
+    periodDurationSeconds: periodSeconds,
   })
 
   // --- STREAM_COPY: never decode, never WAV ---
@@ -340,8 +527,30 @@ async function materializeRecipeAudio(
     }
   }
 
+  // --- Encode-Once Loop-Copy: one MP3 period + mux stream_loop copy (POC-verified) ---
+  if (execution.strategy === 'ENCODE_ONCE_LOOP_COPY' && periodSeconds > 0.25) {
+    try {
+      const prepared = await materializeEncodeOncePeriod({
+        job,
+        recipe,
+        sources,
+        probes,
+        plan,
+        periodSeconds,
+        originalSourceBitrate,
+        hooks,
+      })
+      if (prepared) return prepared
+    } catch (error) {
+      console.warn(
+        '[AudioExport] Encode-once loop-copy failed; falling back to STANDARD WAV period path.',
+        error,
+      )
+    }
+  }
+
   // --- Complex Looper transforms: one loop period as WAV (not full job duration), then one AAC at mux ---
-  const period = Math.max(0.25, Math.min(recipePeriodSeconds(recipe, probes), job.duration))
+  const period = Math.max(0.25, Math.min(periodSeconds || recipePeriodSeconds(recipe, probes), job.duration))
   console.info(
     `[AudioExport] ${plan.strategy}: WAV intermediate for one loop period (${period.toFixed(3)}s) — ${plan.reason}`,
   )
@@ -484,6 +693,7 @@ export async function muxScreensaverAudio(opts: {
   let plannedStrategy: AudioProcessingPlan['strategy'] | null = null
   let plannedReason = ''
   let strategyChangeReason: string | undefined
+  let alreadyLooped = false
 
   const asset = job.audioAssetId ? getAudioAsset(job.audioAssetId) : undefined
   if (asset?.origin === 'looper-plan' && asset.recipe) {
@@ -501,6 +711,7 @@ export async function muxScreensaverAudio(opts: {
       plannedStrategy = prepared.plannedStrategy
       plannedReason = prepared.plannedReason
       strategyChangeReason = prepared.strategyChangeReason
+      alreadyLooped = Boolean(prepared.alreadyLooped)
       counter.mergeFrom(prepared.counter)
     }
   } else if (asset) {
@@ -576,9 +787,10 @@ export async function muxScreensaverAudio(opts: {
     targetEncodingBitrate: plan.targetBitrateKbps != null ? plan.targetBitrateKbps * 1000 : null,
   })
 
+  const shouldLoopAudio = job.loopAudio && !alreadyLooped
   if (plan.strategy === 'STREAM_COPY' && musicPath && plain && !wavMaterialized) {
     if (job.audioMode === 'upload' || asset) {
-      if (job.loopAudio) args.push('-stream_loop', '-1')
+      if (shouldLoopAudio) args.push('-stream_loop', '-1')
       args.push('-i', musicPath)
     } else if (job.audioMode === 'source' && job.mediaPath) {
       args.push('-stream_loop', '-1', '-i', job.mediaPath)
@@ -628,7 +840,7 @@ export async function muxScreensaverAudio(opts: {
   // Single filter + one AAC/MP3 encode (at most one additional lossy encode).
   const lines: string[] = []
   if ((job.audioMode === 'upload' || asset) && musicPath) {
-    if (job.loopAudio) args.push('-stream_loop', '-1')
+    if (shouldLoopAudio) args.push('-stream_loop', '-1')
     args.push('-i', musicPath)
     lines.push(
       buildScreensaverAudioFilter({

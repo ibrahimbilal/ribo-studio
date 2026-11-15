@@ -1,7 +1,7 @@
 {
   "name": "ribo-studio",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.4.0",
   "workspaces": [
     "client",
     "server"
@@ -49,6 +49,7 @@
     "test:upscaler": "npm exec -w server -- tsx --test ../shared/imageUpscaler.test.ts src/imageUpscaler.test.ts src/realesrgan.test.ts src/realesrganStandalone.test.ts && node --test scripts/ai-lite-env.test.cjs",
     "test:audio-looper": "npm run test:audio-looper -w server",
     "bench:audio-processing": "npm run bench:audio-processing -w server",
+    "poc:encode-once-loop-copy": "npm run poc:encode-once-loop-copy -w server",
     "launch": "node scripts/launch-dev.cjs",
     "launch:linux": "bash scripts/launch-linux.sh",
     "build:launcher": "node scripts/build-launcher.mjs",

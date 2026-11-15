@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import FileDropZone from '../../../components/FileDropZone.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
 import { useAudioLooperStore } from '../stores/audioLooper'
+import LooperCompatibilityPanel from './LooperCompatibilityPanel.vue'
 import LooperTrackList from './LooperTrackList.vue'
 
 const store = useAudioLooperStore()
@@ -58,11 +59,14 @@ function onFiles(files: File[]): void {
       </div>
     </div>
 
-    <div class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">
+    <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-3">
       <p v-if="!store.hasSource" class="px-2 py-8 text-center text-sm text-zinc-500">
         Drop audio above. One file loops. Two or more become a playlist.
       </p>
-      <LooperTrackList v-else />
+      <template v-else>
+        <LooperTrackList />
+        <LooperCompatibilityPanel />
+      </template>
     </div>
 
     <AppDialog :open="confirmClear" title="Remove all tracks?" @cancel="confirmClear = false">

@@ -220,8 +220,13 @@ function streamsCompatibleForCopy(sources: AudioSourceProbe[]): { ok: boolean; r
   const first = sources[0]!
   const codec = normalizeCodec(first.codec)
   if (!codec) return { ok: false, reason: 'Missing source codec.' }
+  if (!(first.sampleRate > 0) || !(first.channels > 0)) {
+    return { ok: false, reason: 'Incomplete source probe metadata (sample rate/channels).' }
+  }
   const rate = Math.round(first.sampleRate)
   const channels = Math.round(first.channels)
+  const layout = (first.channelLayout ?? '').toLowerCase().trim()
+  const profile = (first.codecProfile ?? '').toLowerCase().trim()
   for (let i = 1; i < sources.length; i += 1) {
     const other = sources[i]!
     if (normalizeCodec(other.codec) !== codec) {
@@ -232,6 +237,15 @@ function streamsCompatibleForCopy(sources: AudioSourceProbe[]): { ok: boolean; r
     }
     if (Math.round(other.channels) !== channels) {
       return { ok: false, reason: 'Sources use different channel layouts.' }
+    }
+    const otherLayout = (other.channelLayout ?? '').toLowerCase().trim()
+    if (layout && otherLayout && layout !== otherLayout) {
+      return { ok: false, reason: 'Sources use different channel layout labels.' }
+    }
+    const otherProfile = (other.codecProfile ?? '').toLowerCase().trim()
+    // Different bitrates remain OK; reject only when both profiles are known and disagree.
+    if (profile && otherProfile && profile !== otherProfile) {
+      return { ok: false, reason: 'Sources use different codec profiles.' }
     }
   }
   return { ok: true, reason: 'Sources share codec, sample rate, and channels.' }

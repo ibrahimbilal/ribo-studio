@@ -44,6 +44,8 @@ export async function ensureStorage(): Promise<void> {
   await ensureAudioAssets()
   const { ensureSubscribeAnimationCache } = await import('./subscribeAnimationCache')
   await ensureSubscribeAnimationCache()
+  const { ensureAudioPeriodCache } = await import('./audioPeriodCache')
+  await ensureAudioPeriodCache()
 }
 
 export function getClip(id: string): StoredClip | undefined {

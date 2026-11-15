@@ -22,6 +22,11 @@ import {
 } from '@shared/audioLooper'
 import { audioChannelLabel, resolveOutputChannels } from '@shared/audioLooperChannels'
 import { assertPlaylistTimeline, playlistCrossfadeLimit, playlistPeriod, playlistRepeats } from '@shared/audioLooperPlaylist'
+import {
+  analyzePlaylistCompatibility,
+  type CompatibilityTrackInput,
+  type PlaylistCompatibilityReport,
+} from '@shared/audioCompatibility'
 import { snapMp3BitrateKbps } from '@shared/audioProcessingPlan'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
@@ -55,7 +60,9 @@ export interface LooperTrack {
   channelLayout: string | null
   sampleRate: number | null
   codec: string | null
+  codecProfile: string | null
   bitrate: number | null
+  bitrateMode: 'cbr' | 'vbr' | 'unknown' | null
   waveform: WaveformMeta | null
   trimStart: number
   trimEnd: number | null
@@ -150,6 +157,9 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
   const mixPreviewUrl = ref<string | null>(null)
   const mixPreviewState = ref<'idle' | 'running' | 'ready' | 'error'>('idle')
   const mixPreviewError = ref<string | null>(null)
+  const selectedCompatibilityGroupId = ref<string | null>(null)
+  const filterIncompatibleOnly = ref(false)
+  const compatibilityDetailsOpen = ref(false)
   const loadTokens = new Map<string, number>()
   let mixAbort: AbortController | null = null
 
@@ -396,16 +406,20 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
   function metaLabel(track: LooperTrack | null): string {
     if (!track) return ''
     const parts: string[] = []
-    parts.push(formatBytes(track.fileSize))
-    const length = trimmedLength(track)
-    if (length > 0) parts.push(formatClock(length))
-    else if (track.duration != null) parts.push(formatClock(track.duration))
     const kbps = track.bitrate != null && track.bitrate > 0
       ? Math.max(1, Math.round(track.bitrate / 1000))
       : estimateBitrateKbps(track)
     if (kbps != null) parts.push(`${kbps} kbps`)
+    if (track.sampleRate != null && track.sampleRate > 0) {
+      const hz = Math.round(track.sampleRate)
+      parts.push(hz % 1000 === 0 ? `${hz / 1000} kHz` : `${(hz / 1000).toFixed(1)} kHz`)
+    }
     const channels = channelLabel(track)
     if (channels) parts.push(channels)
+    const length = trimmedLength(track)
+    if (length > 0) parts.push(formatClock(length))
+    else if (track.duration != null) parts.push(formatClock(track.duration))
+    parts.push(formatBytes(track.fileSize))
     return parts.join(' · ')
   }
 
@@ -453,7 +467,9 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
         channelLayout: null,
         sampleRate: null,
         codec: null,
+        codecProfile: null,
         bitrate: null,
+        bitrateMode: null,
         waveform: null,
         trimStart: 0,
         trimEnd: null,
@@ -524,7 +540,9 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
       current.channelLayout = details.channelLayout
       if (details.sampleRate > 0) current.sampleRate = details.sampleRate
       current.codec = details.codec
+      current.codecProfile = details.codecProfile ?? null
       if (details.bitrate > 0) current.bitrate = details.bitrate
+      current.bitrateMode = details.bitrateMode ?? null
       if (details.duration > 0) applyDuration(current, details.duration)
       return details.channels > 0 || details.duration > 0
     } catch {
@@ -556,6 +574,74 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     previewOwner.value = 'track'
   }
 
+  function toCompatibilityInput(track: LooperTrack): CompatibilityTrackInput {
+    return {
+      id: track.id,
+      fileName: track.fileName,
+      status: track.status === 'reading' ? 'analyzing' : track.status === 'error' ? 'error' : 'ready',
+      error: track.error,
+      duration: track.duration,
+      codec: track.codec,
+      codecProfile: track.codecProfile,
+      sampleRate: track.sampleRate,
+      channels: track.channels,
+      channelLayout: track.channelLayout,
+      bitrate: track.bitrate,
+      trimStart: track.trimStart,
+      trimEnd: track.trimEnd,
+    }
+  }
+
+  const compatibilityReport = computed((): PlaylistCompatibilityReport =>
+    analyzePlaylistCompatibility({
+      tracks: tracks.value.map(toCompatibilityInput),
+      format: format.value,
+      loopMode: loopMode.value,
+      volumePercent: volumePercent.value,
+      fadeInSeconds: fadeInSeconds.value,
+      fadeOutSeconds: fadeOutSeconds.value,
+      playlistCrossfade: playlistCrossfade.value,
+      playlistCrossfadeSeconds: playlistCrossfadeSeconds.value,
+      normalizeLoudness: normalizeLoudness.value,
+      mp3Bitrate: mp3Bitrate.value,
+      targetDurationSeconds: targetDurationSeconds.value,
+      selectedGroupId: selectedCompatibilityGroupId.value,
+      includeScreensaver: true,
+      encodeOnceEnabled: true,
+    }),
+  )
+
+  const visiblePlaybackTracks = computed(() => {
+    if (!filterIncompatibleOnly.value) return playbackTracks.value
+    const mismatch = new Set(compatibilityReport.value.mismatchingTrackIds)
+    const invalid = new Set(
+      tracks.value.filter((t) => t.status === 'error').map((t) => t.id),
+    )
+    return playbackTracks.value.filter((t) => mismatch.has(t.id) || invalid.has(t.id))
+  })
+
+  function selectCompatibilityGroup(groupId: string | null): void {
+    selectedCompatibilityGroupId.value = groupId
+    filterIncompatibleOnly.value = false
+  }
+
+  function keepLargestCompatibleGroup(): void {
+    const report = compatibilityReport.value
+    const group = report.groups.find((item) => item.id === report.recommendedGroupId)
+    const keep = new Set(group?.trackIds ?? report.matchingTrackIds)
+    if (keep.size === 0) return
+    const removeIds = tracks.value.filter((t) => !keep.has(t.id)).map((t) => t.id)
+    for (const id of removeIds) removeTrack(id)
+    selectedCompatibilityGroupId.value = null
+    filterIncompatibleOnly.value = false
+  }
+
+  function removeIncompatibleTracks(): void {
+    const ids = [...compatibilityReport.value.mismatchingTrackIds]
+    for (const id of ids) removeTrack(id)
+    filterIncompatibleOnly.value = false
+  }
+
   function removeTrack(id: string): void {
     const track = tracks.value.find((item) => item.id === id)
     if (!track) return
@@ -576,6 +662,9 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     manualOrder.value = []
     playbackOrder.value = []
     shuffled.value = false
+    selectedCompatibilityGroupId.value = null
+    filterIncompatibleOnly.value = false
+    compatibilityDetailsOpen.value = false
     selectedTrackId.value = null
     sequenceTrackId.value = null
     pickError.value = null
@@ -779,7 +868,12 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     name,
     tracks,
     playbackTracks,
+    visiblePlaybackTracks,
     readyTracks,
+    compatibilityReport,
+    selectedCompatibilityGroupId,
+    filterIncompatibleOnly,
+    compatibilityDetailsOpen,
     selectedTrack,
     selectedTrackId,
     sequenceTrackId,
@@ -840,6 +934,9 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     setSourceDuration,
     selectTrack,
     removeTrack,
+    selectCompatibilityGroup,
+    keepLargestCompatibleGroup,
+    removeIncompatibleTracks,
     clearTracks,
     clearFile: clearTracks,
     reorder,

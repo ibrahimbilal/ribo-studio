@@ -18,7 +18,7 @@ Concise navigation for Ribo Studio (repo `ibrahimbilal/ribo-studio`). Deep detai
 | Screensaver | `/screensaver` | `client/src/apps/frame-screensaver/` | `shared/screensaver*.ts`, `shared/subscribeAnimation*.ts` | `server/src/renderScreensaver*.ts`, `server/src/screensaverCfr/`, `server/src/subscribeAnimationCache*.ts` |
 | Thumbnails | `/thumbnails` | `client/src/apps/thumbnail-studio/` | `shared/thumbnail*.ts` | Browser-only export (no FFmpeg) |
 | Image Upscaler | `/upscale` | `client/src/apps/image-upscaler/` | `shared/imageUpscaler.ts` | `server/src/imageUpscaler*.ts`, `realesrgan*.ts` |
-| Audio Looper | `/looper` | `client/src/apps/audio-looper/` | `shared/audioLooper*.ts`, `shared/audioProcessingPlan.ts` | `server/src/renderAudioLooper.ts`, `audioLooperRoutes.ts`, `audioProcessing.ts` |
+| Audio Looper | `/looper` | `client/src/apps/audio-looper/` | `shared/audioLooper*.ts`, `shared/audioProcessingPlan.ts`, `shared/audioExecutionPlan.ts`, `shared/audioCompatibility.ts` | `server/src/renderAudioLooper.ts`, `audioLooperRoutes.ts`, `audioProcessing.ts`, `encodeOnceLoopCopy.ts`, `audioPeriodCache.ts`, `screensaverAudioMux.ts` |
 
 Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 

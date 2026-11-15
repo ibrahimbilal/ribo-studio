@@ -53,6 +53,22 @@ export function audioFormatLabel(fileName: string, mimeType?: string | null): st
   return 'Audio'
 }
 
+/** Normalized format key for badge coloring (mp3, wav, flac, …). */
+export function audioFormatKey(fileNameOrLabel: string, mimeType?: string | null): string {
+  const fromName = fileNameOrLabel.includes('.')
+    ? fileNameOrLabel.split('.').pop()?.toLowerCase() ?? ''
+    : fileNameOrLabel.toLowerCase().trim()
+  if (fromName && fromName !== 'audio') return fromName.replace(/[^a-z0-9]/g, '')
+  const subtype = mimeType?.split('/')[1]?.split(';')[0]?.trim().toLowerCase() ?? ''
+  if (subtype === 'mpeg' || subtype === 'mp3') return 'mp3'
+  if (subtype === 'x-wav' || subtype === 'wav') return 'wav'
+  if (subtype === 'flac') return 'flac'
+  if (subtype === 'mp4' || subtype === 'm4a' || subtype === 'x-m4a') return 'm4a'
+  if (subtype === 'aac') return 'aac'
+  if (subtype === 'ogg' || subtype === 'opus') return 'ogg'
+  return subtype || 'audio'
+}
+
 export interface LocalImageMeta {
   width: number
   height: number

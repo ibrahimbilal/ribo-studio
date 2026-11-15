@@ -10,6 +10,14 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-11-15
+
+### Added
+
+- Audio Looper: **Audio Compatibility** panel — see which tracks can stream-copy together, why processing is required, and keep/remove incompatible tracks before export.
+- Screensaver: Encode-Once Loop-Copy for eligible Looper→Screensaver exports — encode one verified audio period, then packet-copy the rest (much faster long exports; preserves source bitrate policy). Disable with `RIBO_ENCODE_ONCE_LOOP_COPY=0` if needed.
+- Audio Looper: colored format badges (MP3 / WAV / FLAC / …) on track cards.
+
 ## [1.3.0] — 2026-11-14
 
 ### Added

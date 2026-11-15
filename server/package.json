@@ -24,8 +24,9 @@
     "bench:render-report": "tsx scripts/bench-report.ts",
     "test:ranking": "tsx scripts/verify-ranking.ts",
     "test:upscaler": "tsx --test ../shared/imageUpscaler.test.ts src/imageUpscaler.test.ts src/realesrgan.test.ts",
-    "test:audio-looper": "tsx --test ../shared/audioLooper.test.ts ../shared/audioLooperChannels.test.ts ../shared/audioProcessingPlan.test.ts ../client/src/apps/audio-looper/lib/sendToScreensaverSelection.test.ts src/audioLooper.test.ts src/audioDurationRecovery.test.ts && tsx scripts/verify-audio-looper.ts",
-    "bench:audio-processing": "tsx scripts/bench-audio-processing.ts"
+    "test:audio-looper": "tsx --test ../shared/audioLooper.test.ts ../shared/audioLooperChannels.test.ts ../shared/audioProcessingPlan.test.ts ../shared/audioExecutionPlan.test.ts ../shared/audioCompatibility.test.ts ../client/src/apps/audio-looper/lib/sendToScreensaverSelection.test.ts src/audioLooper.test.ts src/audioDurationRecovery.test.ts src/encodeOnceLoopCopy.test.ts && tsx scripts/verify-audio-looper.ts",
+    "bench:audio-processing": "tsx scripts/bench-audio-processing.ts",
+    "poc:encode-once-loop-copy": "tsx scripts/poc-encode-once-loop-copy.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

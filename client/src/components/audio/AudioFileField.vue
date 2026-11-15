@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { ScreensaverAudioAvailability } from '@shared/screensaverAudio'
 import { computed, toRef } from 'vue'
-import { audioFormatLabel } from '../../lib/media'
 import { formatBytes, formatClock } from '../../lib/format'
 import { useAudioFileMeta } from '../../composables/useAudioFileMeta'
 import { Trash } from '@lucide/vue'
 import FileDropZone from '../FileDropZone.vue'
 import FileStatusBox from '../FileStatusBox.vue'
+import AudioFormatBadge from './AudioFormatBadge.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -47,8 +47,6 @@ const emit = defineEmits<{
 
 const { durationSec } = useAudioFileMeta(toRef(props, 'previewUrl'))
 
-const formatLabel = computed(() => (props.fileName ? audioFormatLabel(props.fileName) : ''))
-
 const boxStatus = computed(() => {
   if (props.status === 'uploading' || props.status === 'validating') return 'uploading' as const
   if (props.status === 'error' || props.status === 'missing') return 'error' as const
@@ -57,7 +55,6 @@ const boxStatus = computed(() => {
 
 const metaParts = computed(() => {
   const parts: string[] = []
-  if (formatLabel.value) parts.push(formatLabel.value)
   if (props.fileSize != null && props.fileSize > 0) parts.push(formatBytes(props.fileSize))
   if (durationSec.value != null) parts.push(formatClock(durationSec.value))
   if (props.status === 'uploading') parts.push(`${Math.round((props.progress || 0) * 100)}%`)
@@ -85,8 +82,11 @@ const metaParts = computed(() => {
       remove-label="Remove audio"
       @remove="emit('clear')"
     >
-      <template v-if="metaParts.length > 0" #meta>
-        {{ metaParts.join(' · ') }}
+      <template v-if="fileName || metaParts.length > 0" #meta>
+        <span class="inline-flex flex-wrap items-center gap-1.5">
+          <AudioFormatBadge v-if="fileName" :file-name="fileName" />
+          <span v-if="metaParts.length > 0">{{ metaParts.join(' · ') }}</span>
+        </span>
       </template>
     </FileStatusBox>
     <button

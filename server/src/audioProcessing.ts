@@ -94,14 +94,30 @@ function formatKbps(bps: number | null | undefined): string {
   return `${Math.round(bps / 1000)} kbps`
 }
 
+function channelLabel(channels: number): string {
+  if (channels === 1) return 'Mono'
+  if (channels === 2) return 'Stereo'
+  return channels > 0 ? String(channels) : 'unknown'
+}
+
 export function logAudioPlan(
   plan: AudioProcessingPlan,
   sources: AudioSourceProbe[],
-  bitrates?: AudioBitrateFields,
+  bitrates?: AudioBitrateFields & {
+    executionStrategy?: string
+    targetDurationSeconds?: number
+    periodDurationSeconds?: number
+  },
 ): void {
+  console.info(`[AudioPlanner] Sources: ${sources.length}`)
+  sources.forEach((source, index) => {
+    const br = source.bitrate > 0 ? formatKbps(source.bitrate) : 'unknown'
+    console.info(
+      `[AudioPlanner] Track ${index + 1}: ${source.codec ?? 'unknown'} / ${br} / ${source.sampleRate || 'unknown'} Hz / ${channelLabel(source.channels)}`,
+    )
+  })
   const first = sources[0]
   if (first) {
-    console.info(`[AudioPlanner] Source codec: ${first.codec ?? 'unknown'}`)
     const original =
       bitrates?.originalSourceBitrate != null && bitrates.originalSourceBitrate > 0
         ? bitrates.originalSourceBitrate
@@ -123,14 +139,21 @@ export function logAudioPlan(
             : null
       console.info(`[AudioPlanner] targetEncodingBitrate: ${formatKbps(target)}`)
     }
-    console.info(`[AudioPlanner] Source sample rate: ${first.sampleRate || 'unknown'} Hz`)
-    console.info(
-      `[AudioPlanner] Source channels: ${first.channels === 1 ? 'Mono' : first.channels === 2 ? 'Stereo' : first.channels || 'unknown'}`,
-    )
+    console.info(`[AudioPlanner] Common sample rate: ${plan.expectedSampleRate || 'unknown'} Hz`)
+    console.info(`[AudioPlanner] Expected channels: ${channelLabel(plan.expectedChannels)}`)
   }
-  console.info(`[AudioPlanner] Strategy: ${plan.strategy}`)
+  console.info(`[AudioPlanner] Quality strategy: ${plan.strategy}`)
+  if (bitrates?.executionStrategy) {
+    console.info(`[AudioPlanner] Execution strategy: ${bitrates.executionStrategy}`)
+  }
   console.info(`[AudioPlanner] Reason: ${plan.reason}`)
   console.info(`[AudioPlanner] Label: ${plan.userLabel}`)
+  if (bitrates?.targetDurationSeconds != null) {
+    console.info(`[AudioPlanner] Target duration: ${bitrates.targetDurationSeconds}s`)
+  }
+  if (bitrates?.periodDurationSeconds != null) {
+    console.info(`[AudioPlanner] Loop period: ${bitrates.periodDurationSeconds}s`)
+  }
 }
 
 export function logAudioExport(opts: {
@@ -141,16 +164,56 @@ export function logAudioExport(opts: {
   verification: 'Passed' | 'Failed'
   strategyChangeReason?: string
   actualOutputBitrate?: number
+  decodePerformed?: boolean
+  resamplingPerformed?: boolean
+  pcmMaterializationPerformed?: boolean
+  lossyEncodeInputDurationSeconds?: number
+  lossyGenerationsInFinalOutput?: number
+  loopStreamCopy?: boolean
+  finalMuxAudioStreamCopy?: boolean
+  boundaryVerification?: 'Passed' | 'Failed' | 'Skipped'
+  durationVerification?: 'Passed' | 'Failed' | 'Skipped'
+  fallbackUsed?: boolean
 }): void {
   if (opts.strategyChangeReason) {
     console.info(`[AudioExport] Strategy changed: ${opts.strategyChangeReason}`)
   }
   console.info(`[AudioExport] streamCopy: ${opts.streamCopy ? 'Yes' : 'No'}`)
   console.info(`[AudioExport] decodeRequired: ${opts.decodeRequired ? 'Yes' : 'No'}`)
+  if (opts.decodePerformed != null) {
+    console.info(`[AudioExport] Decode performed: ${opts.decodePerformed ? 'Yes' : 'No'}`)
+  }
+  if (opts.resamplingPerformed != null) {
+    console.info(`[AudioExport] Resampling performed: ${opts.resamplingPerformed ? 'Yes' : 'No'}`)
+  }
+  if (opts.pcmMaterializationPerformed != null) {
+    console.info(`[AudioExport] PCM materialization performed: ${opts.pcmMaterializationPerformed ? 'Yes' : 'No'}`)
+  }
   console.info(`[AudioExport] losslessEncodeCount=${opts.losslessEncodeCount}`)
   console.info(`[AudioExport] lossyEncodeCount=${opts.lossyEncodeCount}`)
+  if (opts.lossyEncodeInputDurationSeconds != null) {
+    console.info(`[AudioExport] AAC/MP3 encode input duration: ${opts.lossyEncodeInputDurationSeconds.toFixed(3)}s`)
+  }
+  if (opts.lossyGenerationsInFinalOutput != null) {
+    console.info(`[AudioExport] Lossy generations in final output: ${opts.lossyGenerationsInFinalOutput}`)
+  }
+  if (opts.loopStreamCopy != null) {
+    console.info(`[AudioExport] Loop stream copy: ${opts.loopStreamCopy ? 'Yes' : 'No'}`)
+  }
+  if (opts.finalMuxAudioStreamCopy != null) {
+    console.info(`[AudioExport] Final mux audio stream copy: ${opts.finalMuxAudioStreamCopy ? 'Yes' : 'No'}`)
+  }
   if (opts.actualOutputBitrate != null && opts.actualOutputBitrate > 0) {
     console.info(`[AudioExport] actualOutputBitrate: ${formatKbps(opts.actualOutputBitrate)}`)
+  }
+  if (opts.boundaryVerification) {
+    console.info(`[AudioExport] Boundary verification: ${opts.boundaryVerification}`)
+  }
+  if (opts.durationVerification) {
+    console.info(`[AudioExport] Duration verification: ${opts.durationVerification}`)
+  }
+  if (opts.fallbackUsed != null) {
+    console.info(`[AudioExport] Fallback used: ${opts.fallbackUsed ? 'Yes' : 'No'}`)
   }
   console.info(`[AudioExport] Verification: ${opts.verification}`)
 }
