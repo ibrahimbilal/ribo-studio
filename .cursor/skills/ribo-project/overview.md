@@ -68,7 +68,7 @@ server/tmp/                             clips, jobs, outputs, incoming, registry
 | Shared dialogs, mobile tabs, settings tabs, export button, export status panel, studio export bar, empty state, panels | `client/src/components/ui/` |
 | Settings accordion expand/collapse | `client/src/components/SettingsAccordion.vue`, `client/src/style.css` |
 | Shared file drop / browse upload | `client/src/components/FileDropZone.vue` |
-| Create Thumbnail + link toggle, send still to Image Motion | `client/src/components/CreateThumbnailAction.vue`, `client/src/apps/frame-screensaver/lib/sendToImageMotion.ts` |
+| Create Thumbnail, send still to Image Motion | `client/src/components/CreateThumbnailAction.vue`, `client/src/apps/frame-screensaver/lib/sendToImageMotion.ts` |
 | Shared audio upload + advanced sliders | `client/src/components/audio/` (`AudioFileField.vue`, `AdvancedAudioControls.vue`, `SourceClipAudioControls.vue`) |
 | Clip list, URL add, drag reorder | `client/src/components/ClipSidebar.vue`, `client/src/composables/useCardReorder.ts` |
 | Trim, colors, play-last, replace | `client/src/components/SelectedClipPanel.vue` |

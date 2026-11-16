@@ -162,17 +162,28 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
       role="dialog"
       aria-label="Notifications"
     >
-      <div class="flex items-center justify-between border-b border-zinc-800 px-3 py-2.5">
+      <div class="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2.5">
         <h2 class="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">Notifications</h2>
-        <button
-          class="cursor-pointer text-zinc-500 hover:text-zinc-300"
-          type="button"
-          title="Close"
-          aria-label="Close"
-          @click="open = false"
-        >
-          <X :size="16" />
-        </button>
+        <div class="flex items-center gap-1">
+          <button
+            v-if="platform.renderNotifications.length > 0"
+            class="cursor-pointer rounded-sm px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
+            type="button"
+            title="Clear all finished notifications"
+            @click="platform.clearAllNotifications()"
+          >
+            Clear all
+          </button>
+          <button
+            class="cursor-pointer text-zinc-500 hover:text-zinc-300"
+            type="button"
+            title="Close"
+            aria-label="Close"
+            @click="open = false"
+          >
+            <X :size="16" />
+          </button>
+        </div>
       </div>
 
       <div class="relative max-h-80 overflow-y-auto">

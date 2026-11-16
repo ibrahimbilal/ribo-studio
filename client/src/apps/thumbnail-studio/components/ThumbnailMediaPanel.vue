@@ -13,7 +13,7 @@ function onFiles(files: File[]) {
 async function updateFromScreensaver(): Promise<void> {
   store.requestReplaceOnNextTransfer()
   const { createThumbnailFromScreensaver } = await import('../../frame-screensaver/lib/createThumbnail')
-  await createThumbnailFromScreensaver(store.doc.source.linkMode === 'linked' ? 'linked' : 'snapshot')
+  await createThumbnailFromScreensaver()
   store.clearReplaceOnNextTransfer()
 }
 </script>

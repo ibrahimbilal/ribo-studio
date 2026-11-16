@@ -177,6 +177,14 @@ export function uploadScreensaverMedia(file: File, onProgress: (fraction: number
   return sendForm<ScreensaverMedia>('/api/screensaver/media', body, onProgress)
 }
 
+export interface ScreensaverAudioAssetTrack {
+  index: number
+  name: string
+  duration: number
+  trimStart: number
+  trimEnd: number
+}
+
 export interface ScreensaverAudioAsset {
   id: string
   name: string
@@ -192,6 +200,7 @@ export interface ScreensaverAudioAsset {
   sourceApp: 'screensaver' | 'audio-looper'
   hasRecipe?: boolean
   trackCount?: number
+  tracks?: ScreensaverAudioAssetTrack[]
   createdAt: number
 }
 
@@ -228,8 +237,26 @@ export async function uploadLooperPlanForScreensaver(
   return sendForm<ScreensaverAudioAsset>('/api/screensaver/audio/from-looper-plan', body, onProgress ?? (() => undefined), signal)
 }
 
+/** Clone a looper-plan recipe with a new track order (server hardlinks sources). */
+export async function cloneLooperPlanOrderForScreensaver(
+  assetId: string,
+  order: number[],
+): Promise<ScreensaverAudioAsset> {
+  const response = await fetch(`/api/screensaver/audio/${encodeURIComponent(assetId)}/clone-order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order }),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as ScreensaverAudioAsset
+}
+
 export function screensaverAudioUrl(id: string): string {
   return `/api/screensaver/audio/${id}`
+}
+
+export function screensaverAudioTrackUrl(id: string, index: number): string {
+  return `/api/screensaver/audio/${encodeURIComponent(id)}/track/${index}`
 }
 
 export async function fetchScreensaverAudioMeta(id: string): Promise<ScreensaverAudioAsset | null> {
@@ -313,6 +340,20 @@ export function beaconCleanupServerUploads(payload: ServerUploadCleanup): void {
 
 export const cleanupScreensaverUploads = cleanupServerUploads
 export const beaconCleanupScreensaverUploads = beaconCleanupServerUploads
+
+export async function fetchTempStorageBytes(): Promise<number> {
+  const response = await fetch('/api/storage/temp')
+  if (!response.ok) throw new Error(await readError(response))
+  const data = (await response.json()) as { bytes?: number }
+  return typeof data.bytes === 'number' && Number.isFinite(data.bytes) ? data.bytes : 0
+}
+
+export async function cleanTempStorage(): Promise<number> {
+  const response = await fetch('/api/storage/temp/clean', { method: 'POST' })
+  if (!response.ok) throw new Error(await readError(response))
+  const data = (await response.json()) as { bytes?: number }
+  return typeof data.bytes === 'number' && Number.isFinite(data.bytes) ? data.bytes : 0
+}
 
 export async function fetchEncoders(): Promise<EncoderCatalog> {
   const response = await fetch('/api/encoders')

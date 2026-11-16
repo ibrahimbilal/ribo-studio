@@ -11,6 +11,68 @@ export {
   type SelectAllCheckboxState,
 } from '../../../lib/multiSelect'
 
+/** How playlist track order is applied when sending to multiple Screensaver projects. */
+export type PlaylistOrderMode = 'shared' | 'unique'
+
+export function isPlaylistOrderMode(value: unknown): value is PlaylistOrderMode {
+  return value === 'shared' || value === 'unique'
+}
+
+function identityOrder(trackCount: number): number[] {
+  return Array.from({ length: trackCount }, (_, index) => index)
+}
+
+function shuffleOrder(order: number[]): number[] {
+  const next = order.slice()
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1))
+    const current = next[index]!
+    next[index] = next[swap]!
+    next[swap] = current
+  }
+  return next
+}
+
+function orderKey(order: number[]): string {
+  return order.join(',')
+}
+
+/**
+ * Build one track-index permutation per destination project.
+ * - `shared`: every project keeps the current Looper playlist order.
+ * - `unique`: the first project keeps the current order; later projects get a
+ *   different shuffle when enough distinct permutations exist.
+ */
+export function playlistOrdersForProjects(
+  trackCount: number,
+  projectCount: number,
+  mode: PlaylistOrderMode,
+): number[][] {
+  const count = Math.max(0, Math.floor(projectCount))
+  const tracks = Math.max(0, Math.floor(trackCount))
+  if (count === 0) return []
+  const base = identityOrder(tracks)
+  if (mode === 'shared' || tracks < 2 || count === 1) {
+    return Array.from({ length: count }, () => base.slice())
+  }
+
+  const used = new Set<string>([orderKey(base)])
+  const orders: number[][] = [base.slice()]
+  for (let index = 1; index < count; index += 1) {
+    let next = shuffleOrder(base)
+    for (let attempt = 0; attempt < 24 && used.has(orderKey(next)); attempt += 1) {
+      next = shuffleOrder(base)
+    }
+    used.add(orderKey(next))
+    orders.push(next)
+  }
+  return orders
+}
+
+export function isIdentityTrackOrder(order: number[]): boolean {
+  return order.every((value, index) => value === index)
+}
+
 export function sendButtonLabel(selectedCount: number, sending: boolean): string {
   if (sending) return 'Sending…'
   if (selectedCount <= 0) return 'Send'

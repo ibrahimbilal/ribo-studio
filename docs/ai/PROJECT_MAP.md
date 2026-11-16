@@ -28,11 +28,11 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | --- | --- |
 | Shell, toasts, page transition | `client/src/App.vue` |
 | Design tokens / shared classes | `client/src/style.css`, `docs/ui-design-system.md` |
-| Sidebar / header / mobile drawer / app version | `client/src/components/layout/` (`AppVersionLabel.vue`) |
+| Sidebar / header / mobile drawer / app version | `client/src/components/layout/` (`AppVersionLabel.vue`, `AppTempStorageButton.vue`) |
 | Shared UI primitives | `client/src/components/ui/` |
 | Renderer health, notifications | `client/src/stores/platform.ts` |
 | Export queue / job poll / notifications | `client/src/lib/managedExportJobs.ts`, `exportQueueRunner.ts`, `jobPoll.ts`, `renderNotifications.ts` |
-| IndexedDB | `client/src/lib/idb.ts` |
+| IndexedDB / session reset | `client/src/lib/idb.ts`, `sessionCleanup.ts`, `serverUploadCleanup.ts` |
 
 ## Server core
 
@@ -58,8 +58,8 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Ranking editor state | `client/src/stores/project.ts` |
 | Screensaver encode | `server/src/renderScreensaver.ts`, `renderScreensaverHybrid.ts`, `screensaverCfr/` |
 | Screensaver subscribe animation cache | `shared/subscribeAnimationCache*.ts`, `shared/subscribeAnimationTemplates.ts`, `server/src/subscribeAnimationCache*.ts` |
-| Screensaver background audio | `shared/screensaverAudio.ts`, `server/src/audioAssets.ts`, `screensaverAudioRoutes.ts`, `screensaverAudioMux.ts` |
-| Looper → Screensaver | `client/.../audio-looper/lib/sendToScreensaver.ts`, `sendToScreensaverSelection.ts`, `LooperSendToScreensaver.vue`, `POST /api/screensaver/audio/from-looper-plan` |
+| Screensaver background audio | `shared/screensaverAudio.ts`, `server/src/audioAssets.ts`, `screensaverAudioRoutes.ts`, `screensaverAudioMux.ts`; preview playlist `ScreensaverPreviewAudio.vue` + `GET /api/screensaver/audio/:id/track/:index` |
+| Looper → Screensaver | `client/.../audio-looper/lib/sendToScreensaver.ts`, `sendToScreensaverSelection.ts`, `LooperSendToScreensaver.vue`, `POST /api/screensaver/audio/from-looper-plan`, `POST /api/screensaver/audio/:id/clone-order` |
 | Screensaver Export All | `client/.../frame-screensaver/lib/exportAllPlan.ts`, `ScreensaverProjectList.vue`, store `exportAllProjects` |
 | Shared UI look | `client/src/style.css`, `client/src/components/ui/` |
 | New app route | `router.ts`, `navigation.ts`, new `client/src/apps/<name>/` |

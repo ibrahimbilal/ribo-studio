@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { RotateCcw } from '@lucide/vue'
 import { formatHms } from '@shared/audioLooper'
 import { formatBytes, formatClock } from '../../../lib/format'
 import AppPanel from '../../../components/ui/AppPanel.vue'
@@ -71,40 +72,44 @@ function onTrimEnd(event: Event): void {
         {{ selected && store.trimmedLength(selected) > 0 ? formatClock(store.trimmedLength(selected)) : '—' }}
       </p>
       <LooperPlayer class="mt-3" />
-      <div v-if="selected?.duration" class="mt-3 grid grid-cols-2 gap-2">
-        <label class="block text-xs text-zinc-500">
-          Start
-          <input
-            class="field mt-1 tabular-nums"
-            type="number"
-            min="0"
-            :max="selected.duration"
-            step="0.1"
-            :value="selected.trimStart.toFixed(2)"
-            @change="onTrimStart"
-          />
-        </label>
-        <label class="block text-xs text-zinc-500">
-          End
-          <input
-            class="field mt-1 tabular-nums"
-            type="number"
-            min="0"
-            :max="selected.duration"
-            step="0.1"
-            :value="(selected.trimEnd ?? selected.duration).toFixed(2)"
-            @change="onTrimEnd"
-          />
-        </label>
-      </div>
-      <button
-        v-if="selected?.duration && (selected.trimStart > 0.01 || (selected.trimEnd ?? selected.duration) < selected.duration - 0.01)"
-        class="btn btn-ghost mt-2 cursor-pointer text-xs"
-        type="button"
-        @click="store.resetTrim(selected.id)"
+      <div
+        v-if="selected?.duration"
+        class="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-x-2 gap-y-1"
       >
-        Reset trim
-      </button>
+        <label class="text-xs text-zinc-500" for="looper-trim-start">Start</label>
+        <label class="text-xs text-zinc-500" for="looper-trim-end">End</label>
+        <div />
+        <input
+          id="looper-trim-start"
+          class="field tabular-nums"
+          type="number"
+          min="0"
+          :max="selected.duration"
+          step="0.1"
+          :value="selected.trimStart.toFixed(2)"
+          @change="onTrimStart"
+        />
+        <input
+          id="looper-trim-end"
+          class="field tabular-nums"
+          type="number"
+          min="0"
+          :max="selected.duration"
+          step="0.1"
+          :value="(selected.trimEnd ?? selected.duration).toFixed(2)"
+          @change="onTrimEnd"
+        />
+        <button
+          class="btn btn-ghost h-full min-h-0 self-stretch px-2"
+          type="button"
+          aria-label="Reset trim"
+          title="Reset trim"
+          :disabled="selected.trimStart <= 0.01 && (selected.trimEnd ?? selected.duration) >= selected.duration - 0.01"
+          @click="store.resetTrim(selected.id)"
+        >
+          <RotateCcw :size="16" />
+        </button>
+      </div>
       <p v-if="skippedWaveform" class="mt-3 text-xs text-zinc-500">
         Waveform preview is skipped for large files so the browser does not decode them into memory.
       </p>

@@ -57,6 +57,14 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
 
   const selected = computed(() => items.value.find((item) => item.localId === selectedId.value) ?? null)
   const completedCount = computed(() => items.value.filter((item) => item.status === 'completed').length)
+  const downloadableCount = computed(
+    () =>
+      items.value.filter(
+        (item) =>
+          item.status === 'completed' &&
+          (item.downloadedRevision == null || item.downloadedRevision !== item.outputRevision),
+      ).length,
+  )
   const processing = computed(() => busy.value || items.value.some((item) => item.status === 'pending' || item.status === 'processing'))
   function shouldReexportOnly(options: UpscaleOptions): boolean {
     if (!jobId.value) return false
@@ -379,7 +387,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
   }
 
   function downloadZip(): void {
-    if (!jobId.value || completedCount.value === 0) return
+    if (!jobId.value || downloadableCount.value === 0) return
     const anchor = document.createElement('a')
     anchor.href = zipDownloadUrl(jobId.value)
     anchor.download = 'upscaled-images.zip'
@@ -459,6 +467,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
     busy,
     processing,
     completedCount,
+    downloadableCount,
     confirmSendId,
     formatFromSource,
     limits: DEFAULT_UPSCALE_LIMITS,

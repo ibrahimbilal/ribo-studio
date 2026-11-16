@@ -3042,7 +3042,11 @@ export const useScreensaverStore = defineStore('screensaver', () => {
 
   async function downloadAllProjectOutputs(): Promise<void> {
     const ready = projectCards.value.filter(
-      (item) => item.render.outputUrl && !item.outputMissing && item.render.status === 'completed',
+      (item) =>
+        item.render.outputUrl &&
+        !item.outputMissing &&
+        item.render.status === 'completed' &&
+        !item.downloadedUnchanged,
     )
     if (!ready.length) {
       toast('No rendered videos are ready to download.', 'info')

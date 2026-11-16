@@ -273,6 +273,108 @@ export function recipeSourcePaths(stored: StoredAudioAsset): string[] {
   return stored.recipe.tracks.map((track) => path.join(stored.recipeDir!, track.fileName))
 }
 
+async function linkOrCopy(source: string, dest: string): Promise<void> {
+  try {
+    await link(source, dest)
+  } catch {
+    await copyFile(source, dest)
+  }
+}
+
+function assertTrackOrder(order: unknown, trackCount: number): number[] {
+  if (!Array.isArray(order) || order.length !== trackCount) {
+    throw new Error('Track order must list every playlist track once.')
+  }
+  const next: number[] = []
+  const seen = new Set<number>()
+  for (const value of order) {
+    const index = typeof value === 'number' ? value : Number(value)
+    if (!Number.isInteger(index) || index < 0 || index >= trackCount || seen.has(index)) {
+      throw new Error('Track order must list every playlist track once.')
+    }
+    seen.add(index)
+    next.push(index)
+  }
+  return next
+}
+
+/**
+ * Clone a looper-plan recipe with a new track order.
+ * Source files are hardlinked (copy fallback) so unique orders do not re-upload bytes.
+ * Identity order returns the original asset.
+ */
+export async function cloneLooperPlanWithTrackOrder(
+  sourceId: string,
+  orderRaw: unknown,
+): Promise<StoredAudioAsset> {
+  const source = assets.get(sourceId)
+  if (!source || source.origin !== 'looper-plan' || !source.recipe || !source.recipeDir) {
+    throw new Error('That Looper audio plan is no longer available.')
+  }
+  const trackCount = source.recipe.tracks.length
+  const order = assertTrackOrder(orderRaw, trackCount)
+  if (order.every((value, index) => value === index)) return source
+
+  const id = randomUUID()
+  const recipeDir = path.join(audioAssetsDir, id)
+  await mkdir(recipeDir, { recursive: true })
+
+  try {
+    const tracks: LooperAudioRecipe['tracks'] = []
+    for (let index = 0; index < order.length; index += 1) {
+      const from = source.recipe.tracks[order[index]!]!
+      const ext = path.extname(from.fileName) || safeAudioExt(from.originalName) || '.bin'
+      const fileName = `source-${index}${ext}`
+      await linkOrCopy(path.join(source.recipeDir, from.fileName), path.join(recipeDir, fileName))
+      tracks.push({
+        fileName,
+        originalName: from.originalName,
+        probe: { ...from.probe },
+      })
+    }
+
+    const settingsTracks = source.recipe.settings.tracks
+    const settings: AudioLooperSettings = {
+      ...source.recipe.settings,
+      tracks: settingsTracks ? order.map((index) => ({ ...settingsTracks[index]! })) : settingsTracks,
+    }
+    const recipe: LooperAudioRecipe = {
+      version: 1,
+      settings,
+      tracks,
+      createdAt: Date.now(),
+    }
+    await writeFile(path.join(recipeDir, 'recipe.json'), JSON.stringify(recipe), 'utf8')
+
+    const first = tracks[0]!
+    const firstPath = path.join(recipeDir, first.fileName)
+    const stored: StoredAudioAsset = {
+      id,
+      path: firstPath,
+      originalName: first.originalName || source.originalName,
+      mimeType: mimeForExt(path.extname(first.fileName).toLowerCase()),
+      size: source.size,
+      duration: source.duration,
+      codec: first.probe.codec,
+      sampleRate: first.probe.sampleRate,
+      channels: first.probe.channels,
+      bitrate: first.probe.bitrate,
+      createdAt: Date.now(),
+      origin: 'looper-plan',
+      sourceJobId: null,
+      sourceApp: 'audio-looper',
+      recipeDir,
+      recipe,
+    }
+    assets.set(id, stored)
+    await saveRegistry()
+    return stored
+  } catch (error) {
+    await rm(recipeDir, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
 export async function removeAudioAsset(id: string): Promise<boolean> {
   const stored = assets.get(id)
   if (!stored) return false
@@ -289,6 +391,31 @@ export async function removeAudioAsset(id: string): Promise<boolean> {
 
 /** Public metadata — never expose filesystem paths. */
 export function audioAssetPublicView(stored: StoredAudioAsset) {
+  const recipeTracks = stored.recipe?.tracks
+  const tracks =
+    recipeTracks && recipeTracks.length > 0
+      ? recipeTracks.map((track, index) => {
+          const duration = Number.isFinite(track.probe.duration) ? Math.max(0, track.probe.duration) : 0
+          const trimStart = Number.isFinite(track.probe.trimStart) ? Math.max(0, track.probe.trimStart ?? 0) : 0
+          const rawEnd = Number.isFinite(track.probe.trimEnd) ? (track.probe.trimEnd as number) : duration
+          const trimEnd = duration > 0 ? Math.min(duration, Math.max(trimStart, rawEnd)) : Math.max(trimStart, rawEnd)
+          return {
+            index,
+            name: track.originalName,
+            duration,
+            trimStart,
+            trimEnd,
+          }
+        })
+      : [
+          {
+            index: 0,
+            name: stored.originalName,
+            duration: stored.duration,
+            trimStart: 0,
+            trimEnd: stored.duration,
+          },
+        ]
   return {
     id: stored.id,
     name: stored.originalName,
@@ -303,9 +430,37 @@ export function audioAssetPublicView(stored: StoredAudioAsset) {
     sourceJobId: stored.sourceJobId,
     sourceApp: stored.sourceApp,
     hasRecipe: Boolean(stored.recipe && stored.origin === 'looper-plan'),
-    trackCount: stored.recipe?.tracks.length ?? 1,
+    trackCount: tracks.length,
+    tracks,
     createdAt: stored.createdAt,
   }
+}
+
+/** Absolute path for a recipe track (or the single stored file). */
+export function audioAssetTrackPath(stored: StoredAudioAsset, index: number): string | null {
+  if (!Number.isInteger(index) || index < 0) return null
+  if (stored.recipe && stored.recipeDir) {
+    const track = stored.recipe.tracks[index]
+    if (!track) return null
+    return path.join(stored.recipeDir, track.fileName)
+  }
+  if (index === 0) return stored.path
+  return null
+}
+
+/** Removes every audio asset that is not held by an active render. */
+export async function purgeAudioAssets(): Promise<void> {
+  for (const stored of [...assets.values()]) {
+    if (audioAssetIsBusy(stored.id)) continue
+    assets.delete(stored.id)
+    if (stored.recipeDir) {
+      await rm(stored.recipeDir, { recursive: true, force: true }).catch(() => undefined)
+    } else {
+      await rm(stored.path, { force: true }).catch(() => undefined)
+    }
+  }
+  await saveRegistry()
+  await purgeOrphanAudioFiles()
 }
 
 /** Drop unreferenced assets older than `maxAgeMs` (default 7 days). */

@@ -207,6 +207,11 @@ export const usePlatformStore = defineStore('platform', () => {
     renderNotifications.value = renderNotifications.value.filter((item) => item.id !== id)
   }
 
+  /** Dismisses finished/failed/cancelled rows only; leaves in-progress exports alone. */
+  function clearAllNotifications(): void {
+    renderNotifications.value = []
+  }
+
   function clearRenderQueues(): void {
     activeRenderJobs.value = []
     renderNotifications.value = []
@@ -268,6 +273,7 @@ export const usePlatformStore = defineStore('platform', () => {
     promoteActiveRenderJobToReady,
     markAllNotificationsRead,
     dismissNotification,
+    clearAllNotifications,
     clearRenderQueues,
     toast,
     dismissToast,

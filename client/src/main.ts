@@ -4,6 +4,7 @@ import App from './App.vue'
 import { router } from './app/router'
 import { migrateLegacyBrowserStorage } from './lib/legacyStorageMigration'
 import { bootstrapRenderQueuesAfterNavigation } from './lib/renderQueueBootstrap'
+import { prepareSessionCleanup } from './lib/sessionCleanup'
 import './style.css'
 import '@fontsource/inter/400.css'
 import '@fontsource/inter/600.css'
@@ -16,11 +17,16 @@ import '@fontsource/bebas-neue/400.css'
 import '@fontsource/montserrat/700.css'
 import '@fontsource/montserrat/800.css'
 
-migrateLegacyBrowserStorage()
+async function boot(): Promise<void> {
+  migrateLegacyBrowserStorage()
+  await prepareSessionCleanup()
 
-const app = createApp(App)
-const pinia = createPinia()
-app.use(pinia)
-app.use(router)
-bootstrapRenderQueuesAfterNavigation()
-app.mount('#app')
+  const app = createApp(App)
+  const pinia = createPinia()
+  app.use(pinia)
+  app.use(router)
+  bootstrapRenderQueuesAfterNavigation()
+  app.mount('#app')
+}
+
+void boot()

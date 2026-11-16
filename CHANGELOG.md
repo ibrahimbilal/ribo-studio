@@ -10,8 +10,26 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-11-16
+
+### Added
+
+- Header notifications: **Clear all** dismisses finished export rows (in-progress renders stay until cancelled).
+- Screensaver: compact audio player at the bottom of the preview when a project has background audio; Looper playlists use one full-duration seek bar with track boundary markers.
+- Audio Looper **Send to Screensaver**: choose **Same order for all projects** or **Unique order for each project** when sending a multi-track playlist.
+- Header control (left of notifications) shows temp folder size and clears disposable server temp files on click; subscribe animation cache is kept.
+
+### Fixed
+
+- Screensaver preview audio player no longer jumps to the start when seeking (audio download now supports HTTP Range).
+- Screensaver preview audio for Looper→Screensaver recipes now plays the full playlist instead of only the first track.
+
 ### Changed
 
+- Screensaver **Export all** queues projects from shortest duration to longest.
+- Screensaver Create Thumbnail no longer offers **Link to source**; new thumbnails are always a snapshot.
+- Export status opens as a floating overlay so expanding it no longer shrinks the studio work area.
+- Closing the app/tab now deletes idle Screensaver background audio under `server/tmp/audio-assets/`, and Screensaver / Thumbnail Studio projects no longer return after a full reopen (those libraries reset on each page load).
 - Screensaver Optimized CFR (and eligible Hybrid) exports use **Single-Pass Direct Mux**: assemble cached video segments straight into the final MP4 without a full-duration `cfr-video.mp4` / `video-only.mp4` intermediate, and skip full-duration `looped.mp3` when Encode-Once direct period looping is safe. Reduces temporary disk use and logical I/O on long 4K exports. Disable with `RIBO_SINGLE_PASS_DIRECT_MUX=0` (legacy multi-pass fallback remains automatic on failure).
 
 ## [1.4.0] — 2026-11-15

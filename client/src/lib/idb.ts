@@ -812,3 +812,17 @@ export async function clearScreensaverPreviewCache(): Promise<void> {
     db.close()
   }
 }
+
+/** Wipes Screensaver project library + Thumbnail Studio projects/assets (session reset on full load). */
+export async function clearSessionEditorProjects(): Promise<void> {
+  const db = await openDb()
+  try {
+    const transaction = db.transaction(['screensaver', 'thumbnail', 'assets'], 'readwrite')
+    transaction.objectStore('screensaver').clear()
+    transaction.objectStore('thumbnail').clear()
+    transaction.objectStore('assets').clear()
+    await transactionDone(transaction)
+  } finally {
+    db.close()
+  }
+}

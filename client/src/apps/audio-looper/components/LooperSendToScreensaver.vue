@@ -3,6 +3,7 @@ import { FolderOutput } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import AppCheckbox from '../../../components/ui/AppCheckbox.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
+import AppRadio from '../../../components/ui/AppRadio.vue'
 import { usePlatformStore } from '../../../stores/platform'
 import { projectHasBackgroundAudio } from '../../frame-screensaver/lib/screensaverAudioRefs'
 import { useScreensaverStore } from '../../frame-screensaver/stores/screensaver'
@@ -16,6 +17,7 @@ import {
   selectAllProjectIds,
   sendButtonLabel,
   toggleProjectSelection,
+  type PlaylistOrderMode,
 } from '../lib/sendToScreensaverSelection'
 import { useAudioLooperStore } from '../stores/audioLooper'
 
@@ -26,6 +28,7 @@ const screensaver = useScreensaverStore()
 const sendOpen = ref(false)
 const sending = ref(false)
 const selectedIds = ref<string[]>([])
+const playlistOrderMode = ref<PlaylistOrderMode>('shared')
 
 const editableProjects = computed(() =>
   screensaver.projects.filter((project) => project.mediaKind === 'image' || project.mediaKind === 'video'),
@@ -42,6 +45,7 @@ const selectAllState = computed(() =>
 const canOpen = computed(() => store.readyTracks.length > 0 && !sending.value && !store.sendBlocker)
 const canSend = computed(() => canOpen.value && selectedCount.value > 0)
 const visible = computed(() => store.hasSource)
+const showPlaylistOrder = computed(() => store.readyTracks.length >= 2)
 
 const projectsWithExistingAudio = computed(() =>
   editableProjects.value.filter(
@@ -60,6 +64,7 @@ async function openSendDialog() {
   if (!screensaver.hydrated) await screensaver.init()
   const firstId = editableIds.value[0]
   selectedIds.value = firstId ? [firstId] : []
+  playlistOrderMode.value = 'shared'
   sendOpen.value = true
 }
 
@@ -86,7 +91,9 @@ async function confirmSend() {
   if (!canSend.value || sending.value) return
   sending.value = true
   try {
-    const result = await sendLooperPlanToScreensaverProjects(selectedIds.value)
+    const result = await sendLooperPlanToScreensaverProjects(selectedIds.value, {
+      playlistOrderMode: showPlaylistOrder.value ? playlistOrderMode.value : 'shared',
+    })
     const notice = transferNotificationMessage(result)
     platform.toast(notice.text, notice.tone)
     if (result.ok.length > 0) sendOpen.value = false
@@ -169,6 +176,33 @@ async function confirmSend() {
           </p>
         </div>
       </label>
+    </div>
+
+    <div v-if="showPlaylistOrder" class="mt-4 space-y-2" role="radiogroup" aria-label="Playlist order">
+      <p class="section-label">Playlist order</p>
+      <label class="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-200">
+        <AppRadio
+          v-model="playlistOrderMode"
+          name="looper-playlist-order"
+          value="shared"
+          :disabled="sending"
+          aria-label="Same order for all projects"
+        />
+        Same order for all projects
+      </label>
+      <label class="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-200">
+        <AppRadio
+          v-model="playlistOrderMode"
+          name="looper-playlist-order"
+          value="unique"
+          :disabled="sending"
+          aria-label="Unique order for each project"
+        />
+        Unique order for each project
+      </label>
+      <p v-if="playlistOrderMode === 'unique'" class="text-xs text-zinc-500">
+        The first selected project keeps your current playlist order; the others get a different shuffle.
+      </p>
     </div>
 
     <p v-if="projectsWithExistingAudio.length > 0" class="mt-3 text-sm text-amber-200">

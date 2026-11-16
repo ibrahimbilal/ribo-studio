@@ -10,6 +10,7 @@ import ScreensaverExportBar from './components/ScreensaverExportBar.vue'
 import ScreensaverExportDetails from './components/ScreensaverExportDetails.vue'
 import EditorCanvas from './components/EditorCanvas.vue'
 import ScreensaverMediaPanel from './components/ScreensaverMediaPanel.vue'
+import ScreensaverPreviewAudio from './components/ScreensaverPreviewAudio.vue'
 import ScreensaverProjectList from './components/ScreensaverProjectList.vue'
 import ScreensaverDiagnostics from './components/ScreensaverDiagnostics.vue'
 import ScreensaverSettingsPanel from './components/ScreensaverSettingsPanel.vue'
@@ -19,7 +20,6 @@ import { useScreensaverStore } from './stores/screensaver'
 
 const store = useScreensaverStore()
 const customMinutes = ref(60)
-const linkThumbnail = ref(false)
 const tab = ref<'source' | 'preview' | 'settings'>('preview')
 const tabs = [
   { id: 'source' as const, label: 'Source', icon: ImageIcon },
@@ -84,13 +84,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     >
       <div class="studio-stage flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden p-3">
         <EditorCanvas class="flex min-h-0 w-full min-w-0 flex-1 flex-col" />
+        <ScreensaverPreviewAudio />
       </div>
       <AppStudioExportBar :status="`${store.durationLabel} · ${store.outputWidth}×${store.outputHeight}`">
         <template #actions>
           <CreateThumbnailAction
-            v-model:link="linkThumbnail"
             :disabled="!canThumbnail"
-            @create="createThumbnailFromScreensaver(linkThumbnail ? 'linked' : 'snapshot')"
+            @create="createThumbnailFromScreensaver()"
           />
           <button
             class="btn btn-ghost cursor-pointer px-2"

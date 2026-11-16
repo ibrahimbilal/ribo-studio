@@ -63,7 +63,13 @@ watch(hasImages, (has) => {
           <Download :size="15" />
           Download
         </button>
-        <button v-if="store.completedCount > 1" class="btn btn-ghost cursor-pointer" type="button" @click="store.downloadZip()">
+        <button
+          v-if="store.completedCount > 1"
+          class="btn btn-ghost cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+          type="button"
+          :disabled="store.downloadableCount === 0"
+          @click="store.downloadZip()"
+        >
           <Download :size="15" />
           Download all ZIP
         </button>

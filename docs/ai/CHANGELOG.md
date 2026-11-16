@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.4.0**).
+Version source of truth: root `package.json` (currently **1.5.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -9,12 +9,22 @@ Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
 Changes since the current `package.json` version. User-facing bullets also belong under **Unreleased** in root `CHANGELOG.md`. On release, the release-manager skill / `npm run release:*` promotes the root changelog; then summarize or clear this section as appropriate.
 
-- 2026-11-15 — Single-Pass Direct Mux for Screensaver CFR/Hybrid: concat demuxer → final MP4 (no full-duration video intermediate); Encode-Once can `-stream_loop` verified MP3 period at mux (skip `looped.mp3`); drop intermediate `+faststart`; DiskIO telemetry; free-space estimate; probe reuse after CFR validation; flags `RIBO_SINGLE_PASS_DIRECT_MUX` / `RIBO_DIRECT_AUDIO_PERIOD_LOOP`; PoC `poc:single-pass-direct-mux` (`shared/screensaverMuxStrategy.ts`, `diskIoTelemetry.ts`, `diskSpace.ts`, `renderScreensaverCfr.ts`, `screensaverAudioMux.ts`, `renderScreensaverHybrid.ts`, `docs/single-pass-direct-mux.md`).
-
 ## History
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.5.0** (2026-11-16) — Screensaver preview audio player (playlist seek/Range); Looper unique playlist order; header Clear all + temp storage; floating export status; session reset for Screensaver/Thumbnail + idle audio-asset purge; Export All shortest-first; Single-Pass Direct Mux.
+- 2026-11-16 — Header notifications panel **Clear all** dismisses finished/failed/cancelled rows (`AppNotifications.vue`, `platform.clearAllNotifications`).
+- 2026-11-16 — Screensaver Export All queues eligible projects shortest duration first (`exportAllPlan.ts`).
+- 2026-11-16 — Screensaver preview audio playlist: looper-plan meta includes `tracks[]`, per-track stream `GET /api/screensaver/audio/:id/track/:index`, one full-duration timeline with seek markers at track boundaries (`audioAssets.ts`, `screensaverAudioRoutes.ts`, `api.ts`, `ScreensaverPreviewAudio.vue`).
+- 2026-11-16 — Screensaver preview audio seek: serve `GET /api/screensaver/audio/:id` via `sendFile` (HTTP Range) so the browser can seek; player ignores timeupdate while dragging (`screensaverAudioRoutes.ts`, `ScreensaverPreviewAudio.vue`).
+- 2026-11-16 — Screensaver preview shows a compact audio player under the canvas when the project has available background audio (`ScreensaverPreviewAudio.vue`, `FrameScreensaverView.vue`).
+- 2026-11-16 — Looper Send to Screensaver playlist order: same for all projects or unique per project (hardlinked `clone-order` recipes) (`LooperSendToScreensaver.vue`, `sendToScreensaver*.ts`, `audioAssets.ts`, `screensaverAudioRoutes.ts`).
+- 2026-11-16 — Removed Screensaver Create Thumbnail **Link to source** toggle; thumbnails always snapshot (`CreateThumbnailAction.vue`, `createThumbnail.ts`, `FrameScreensaverView.vue`).
+- 2026-11-16 — Header broom control shows `server/tmp/` size and cleans disposable temp (keeps subscribe-animation-cache) via `GET/POST /api/storage/temp*` (`AppTempStorageButton.vue`, `storage.ts`, `index.ts`).
+- 2026-11-16 — Export status open state floats over the studio (`Teleport` into `main`); in-flow footprint stays the collapsed rail (`AppExportStatusPanel.vue`).
+- 2026-11-16 — Tab/window close purges idle Screensaver `audio-assets/`; full page load clears Screensaver + Thumbnail IndexedDB so those libraries start empty (`purgeAudioAssets`, `sessionCleanup.ts`, `idb.clearSessionEditorProjects`).
+- 2026-11-15 — Single-Pass Direct Mux for Screensaver CFR/Hybrid: concat demuxer → final MP4 (no full-duration video intermediate); Encode-Once can `-stream_loop` verified MP3 period at mux (skip `looped.mp3`); drop intermediate `+faststart`; DiskIO telemetry; free-space estimate; probe reuse after CFR validation; flags `RIBO_SINGLE_PASS_DIRECT_MUX` / `RIBO_DIRECT_AUDIO_PERIOD_LOOP`; PoC `poc:single-pass-direct-mux` (`shared/screensaverMuxStrategy.ts`, `diskIoTelemetry.ts`, `diskSpace.ts`, `renderScreensaverCfr.ts`, `screensaverAudioMux.ts`, `renderScreensaverHybrid.ts`, `docs/single-pass-direct-mux.md`).
 - Release **v1.4.0** (2026-11-15) — Audio Compatibility panel; Encode-Once Loop-Copy for eligible Looper→Screensaver MP4 audio; Looper format badges.
 - 2026-11-15 — Audio Looper compatibility UI: stream-signature groups, per-track indicators, panel under playlist (planner-backed suggestions, Encode-Once impact, keep/remove incompatible) (`shared/audioCompatibility.ts`, `LooperCompatibilityPanel.vue`, `LooperTrackList.vue`, looper store).
 - 2026-11-15 — Encode-Once Loop-Copy for Screensaver MP4 audio: execution planner + MP3 period encode/packet-loop (AAC period blocked by continuity POC), period cache, richer AudioPlanner/Export logs, feature flag `RIBO_ENCODE_ONCE_LOOP_COPY` (`shared/audioExecutionPlan.ts`, `encodeOnceLoopCopy.ts`, `audioPeriodCache.ts`, `screensaverAudioMux.ts`, `docs/encode-once-loop-copy-poc.md`).

@@ -84,9 +84,12 @@ import {
   getClip,
   incomingDir,
   jobsDir,
+  measureTempDirBytes,
+  purgeAllOutputFiles,
   purgeJobDirs,
   purgeOutputFiles,
   purgeScreensaverClips,
+  purgeTempAuxFolders,
   removeStoredClip,
   safeAudioExt,
   safeDownloadName,
@@ -512,6 +515,8 @@ async function handleUploadsCleanup(req: Request, res: Response): Promise<void> 
     await removeAllFrames()
     if (jobId) await dropJobOutput(jobId)
     await purgeScreensaverClips()
+    const { purgeAudioAssets } = await import('./audioAssets')
+    await purgeAudioAssets()
     await purgeOutputFiles(outputPathsInUse())
     await purgeJobDirs(jobIdsInUse())
     res.json({ ok: true })
@@ -532,6 +537,31 @@ async function handleUploadsCleanup(req: Request, res: Response): Promise<void> 
 
 app.post('/api/uploads/cleanup', handleUploadsCleanup)
 app.post('/api/screensaver/uploads/cleanup', handleUploadsCleanup)
+
+app.get('/api/storage/temp', async (_req, res) => {
+  try {
+    res.json({ bytes: await measureTempDirBytes() })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Could not measure temp storage.' })
+  }
+})
+
+app.post('/api/storage/temp/clean', async (_req, res) => {
+  try {
+    await removeAllFrames()
+    await purgeScreensaverClips()
+    const { purgeAudioAssets } = await import('./audioAssets')
+    await purgeAudioAssets()
+    await purgeAllOutputFiles(outputPathsInUse())
+    await purgeJobDirs(jobIdsInUse())
+    await purgeImageUpscaler()
+    await purgeTempAuxFolders()
+    // subscribe-animation-cache / subscribe-animation-cache.json are intentionally retained.
+    res.json({ ok: true, bytes: await measureTempDirBytes() })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Could not clean temp storage.' })
+  }
+})
 
 app.delete('/api/screensaver/frames/:id', async (req, res) => {
   if (!UUID.test(req.params.id)) {

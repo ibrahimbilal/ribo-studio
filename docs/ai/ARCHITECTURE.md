@@ -33,7 +33,7 @@ Image Upscaler uses a **separate** sequential job runner (`imageUpscalerJobs.ts`
 3. Upload media + JSON → `/api/.../export` (or upscaler `/process`).
 4. Server enqueues job; `pump` runs **one** FFmpeg pipeline at a time.
 5. Client polls `GET /api/jobs/:id`; download when `done` + verified.
-6. Tab close: `POST /api/uploads/cleanup` purges server uploads (editor state stays in IndexedDB).
+6. Tab close: `POST /api/uploads/cleanup` purges server uploads (clips, frames, outputs, job dirs, idle audio-assets). Full page load clears Screensaver + Thumbnail IndexedDB via `sessionCleanup.ts` so those apps start empty; Ranking stays in IndexedDB.
 
 ## Shared contracts
 

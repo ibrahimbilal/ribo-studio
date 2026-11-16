@@ -143,7 +143,7 @@ export function evaluateExportCandidate(candidate: ExportAllCandidate): ExportAl
   return { id: candidate.id, name: candidate.name, kind: 'eligible' }
 }
 
-/** Evaluate projects in list order; mark later ones queue-full once capacity is reached. */
+/** Evaluate projects shortest duration first; mark later ones queue-full once capacity is reached. */
 export function planExportAll(
   candidates: readonly ExportAllCandidate[],
   options: { remainingQueueSlots: number } = { remainingQueueSlots: MAX_SCREENSAVER_EXPORT_JOBS },
@@ -152,7 +152,14 @@ export function planExportAll(
   const skipped: Extract<ExportAllDecision, { kind: 'skipped' }>[] = []
   let slots = Math.max(0, options.remainingQueueSlots)
 
-  for (const candidate of candidates) {
+  const ordered = candidates
+    .map((candidate, index) => ({ candidate, index }))
+    .sort((a, b) => {
+      const byDuration = a.candidate.durationSeconds - b.candidate.durationSeconds
+      return byDuration !== 0 ? byDuration : a.index - b.index
+    })
+
+  for (const { candidate } of ordered) {
     const decision = evaluateExportCandidate(candidate)
     if (decision.kind === 'skipped') {
       skipped.push(decision)

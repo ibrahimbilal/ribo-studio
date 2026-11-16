@@ -153,6 +153,76 @@ export async function purgeOutputFiles(keepPaths: ReadonlySet<string> = new Set(
   }
 }
 
+/** Deletes every finished export in outputs/ (any extension). Skips paths still held by encoding jobs. */
+export async function purgeAllOutputFiles(keepPaths: ReadonlySet<string> = new Set()): Promise<void> {
+  const { readdir } = await import('node:fs/promises')
+  let names: string[] = []
+  try {
+    names = await readdir(outputsDir)
+  } catch {
+    return
+  }
+  for (const name of names) {
+    const full = path.join(outputsDir, name)
+    if (keepPaths.has(full)) continue
+    await rm(full, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+const PRESERVED_TMP_ENTRIES = new Set(['subscribe-animation-cache', 'subscribe-animation-cache.json'])
+
+/** Total bytes under `server/tmp/` (includes subscribe-animation-cache). */
+export async function measureTempDirBytes(): Promise<number> {
+  return sumDirBytes(tmpDir)
+}
+
+/**
+ * Clears disposable temp folders (incoming, looper previews, idle audio-period cache).
+ * Does not touch subscribe-animation-cache.
+ */
+export async function purgeTempAuxFolders(): Promise<void> {
+  await emptyDirectory(incomingDir)
+  await emptyDirectory(looperPreviewDir)
+  const { purgeAudioPeriodCache } = await import('./audioPeriodCache')
+  await purgeAudioPeriodCache()
+}
+
+async function sumDirBytes(dir: string): Promise<number> {
+  const { readdir } = await import('node:fs/promises')
+  let total = 0
+  let names: string[] = []
+  try {
+    names = await readdir(dir)
+  } catch {
+    return 0
+  }
+  for (const name of names) {
+    const full = path.join(dir, name)
+    try {
+      const info = await stat(full)
+      if (info.isDirectory()) total += await sumDirBytes(full)
+      else total += info.size
+    } catch {
+      // Ignore files removed mid-walk.
+    }
+  }
+  return total
+}
+
+async function emptyDirectory(dir: string): Promise<void> {
+  const { readdir } = await import('node:fs/promises')
+  let names: string[] = []
+  try {
+    names = await readdir(dir)
+  } catch {
+    return
+  }
+  for (const name of names) {
+    if (PRESERVED_TMP_ENTRIES.has(name)) continue
+    await rm(path.join(dir, name), { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
 /** Deletes files in clips/ that are not listed in registry.json. */
 export async function purgeOrphanClipFiles(): Promise<void> {
   const { readdir } = await import('node:fs/promises')

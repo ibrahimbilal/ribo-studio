@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   deselectAllProjectIds,
+  isIdentityTrackOrder,
+  playlistOrdersForProjects,
   selectAllCheckboxState,
   selectAllProjectIds,
   sendButtonLabel,
@@ -34,6 +36,28 @@ describe('sendToScreensaverSelection', () => {
     assert.equal(sendButtonLabel(3, false), 'Send to 3 projects')
     assert.equal(sendButtonLabel(10, false), 'Send to 10 projects')
     assert.equal(sendButtonLabel(3, true), 'Sending…')
+  })
+
+  it('keeps a shared playlist order for every project', () => {
+    assert.deepEqual(playlistOrdersForProjects(3, 4, 'shared'), [
+      [0, 1, 2],
+      [0, 1, 2],
+      [0, 1, 2],
+      [0, 1, 2],
+    ])
+    assert.equal(isIdentityTrackOrder([0, 1, 2]), true)
+    assert.equal(isIdentityTrackOrder([1, 0, 2]), false)
+  })
+
+  it('gives unique playlist orders a stable first order and shuffled later ones', () => {
+    const orders = playlistOrdersForProjects(3, 3, 'unique')
+    assert.equal(orders.length, 3)
+    assert.deepEqual(orders[0], [0, 1, 2])
+    for (const order of orders) {
+      assert.deepEqual([...order].sort((a, b) => a - b), [0, 1, 2])
+    }
+    assert.deepEqual(playlistOrdersForProjects(1, 3, 'unique'), [[0], [0], [0]])
+    assert.deepEqual(playlistOrdersForProjects(4, 1, 'unique'), [[0, 1, 2, 3]])
   })
 
   it('summarizes full and partial transfer notifications', () => {

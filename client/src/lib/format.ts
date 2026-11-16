@@ -135,6 +135,14 @@ export function formatBytes(bytes: number): string {
   return `${Math.round(mb)} MB`
 }
 
+/** Temp storage label: always two decimals, MB until ≥ 1 GiB. */
+export function formatTempSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0.00 MB'
+  const gb = bytes / (1024 * 1024 * 1024)
+  if (gb >= 1) return `${gb.toFixed(2)} GB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
+
 export function titleFromFileName(name: string): string {
   const stripped = name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
   return stripped.slice(0, 80) || 'Untitled clip'

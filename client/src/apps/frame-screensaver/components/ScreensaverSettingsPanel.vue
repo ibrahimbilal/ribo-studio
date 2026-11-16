@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Eye, RotateCcw, SquareSplitHorizontal, Trash2, X } from '@lucide/vue'
+import { Download, Eye, Loader2, RefreshCw, RotateCcw, SquareSplitHorizontal, Trash2, X } from '@lucide/vue'
 import { ADJUSTMENT_FIELDS } from '@shared/screensaverAdjust'
 import { FRAME_FILE_LIMIT } from '@shared/screensaverFrames'
 import { DURATION_PRESETS, SCREENSAVER_OUTPUTS, type ScreensaverCfrQuality, type ScreensaverRenderMode } from '@shared/screensaver'
@@ -10,6 +10,7 @@ import AdvancedAudioControls from '../../../components/audio/AdvancedAudioContro
 import AudioFileField from '../../../components/audio/AudioFileField.vue'
 import FileDropZone from '../../../components/FileDropZone.vue'
 import SettingsAccordion from '../../../components/SettingsAccordion.vue'
+import AppRadio from '../../../components/ui/AppRadio.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
 import SliderField from '../../../components/SliderField.vue'
 import ToggleSwitch from '../../../components/ToggleSwitch.vue'
@@ -218,12 +219,19 @@ const inspectorTabs = [
                             @change="store.replaceSubscribeAnimation({ channelUrl: channelUrlDraft.trim() })"
                           />
                           <button
-                            class="btn btn-ghost shrink-0 cursor-pointer text-xs"
+                            class="btn btn-ghost shrink-0 cursor-pointer px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
                             type="button"
+                            aria-label="Fetch channel"
+                            title="Fetch"
                             :disabled="store.subscribeChannelLookupLoading"
                             @click="void store.fetchSubscribeChannelFromUrl(channelUrlDraft)"
                           >
-                            {{ store.subscribeChannelLookupLoading ? 'Loading…' : 'Fetch' }}
+                            <Loader2
+                              v-if="store.subscribeChannelLookupLoading"
+                              :size="16"
+                              class="animate-spin"
+                            />
+                            <Download v-else :size="16" />
                           </button>
                         </div>
                         <p class="mt-1 text-xs text-zinc-500">Fetch adds or updates a channel in the list. The selected channel is remembered for new projects.</p>
@@ -296,12 +304,14 @@ const inspectorTabs = [
                     <div class="flex items-center justify-between gap-2">
                       <span class="text-xs font-medium text-zinc-300">Subscribe Animation Cache</span>
                       <button
-                        class="btn btn-ghost cursor-pointer text-xs"
+                        class="btn btn-ghost cursor-pointer px-2 py-1"
                         type="button"
+                        aria-label="Refresh subscribe animation cache"
+                        title="Refresh"
                         :disabled="store.subscribeCacheBusy"
                         @click="void store.refreshSubscribeCacheStats()"
                       >
-                        Refresh
+                        <RefreshCw :size="16" />
                       </button>
                     </div>
                     <p class="mt-2 text-xs text-zinc-500">
@@ -561,27 +571,34 @@ const inspectorTabs = [
           </SettingsAccordion>
 
           <SettingsAccordion v-show="store.settingsInspector === 'output'" title="Mode" :open="false">
-            <div class="space-y-2">
-              <label class="flex cursor-pointer items-center gap-2 text-sm">
-                <input v-model="store.mode" type="radio" value="static" />
+            <div class="space-y-2" role="radiogroup" aria-label="Screensaver mode">
+              <label class="flex cursor-pointer items-center gap-2.5 text-sm">
+                <AppRadio v-model="store.mode" name="screensaver-mode" value="static" aria-label="Static art" />
                 Static art (image)
               </label>
-              <label class="flex cursor-pointer items-center gap-2 text-sm">
-                <input v-model="store.mode" type="radio" value="loop" />
+              <label class="flex cursor-pointer items-center gap-2.5 text-sm">
+                <AppRadio v-model="store.mode" name="screensaver-mode" value="loop" aria-label="Looping video" />
                 Looping video
               </label>
             </div>
           </SettingsAccordion>
 
           <SettingsAccordion v-show="store.settingsInspector === 'output'" v-if="store.mode === 'loop'" title="Loop">
-            <label class="flex cursor-pointer items-center gap-2 text-sm">
-              <input v-model="store.loopType" type="radio" value="hard" />
-              Hard loop
-            </label>
-            <label class="mt-2 flex cursor-pointer items-center gap-2 text-sm">
-              <input v-model="store.loopType" type="radio" value="smooth" />
-              Smooth loop (crossfade when possible)
-            </label>
+            <div class="space-y-2" role="radiogroup" aria-label="Loop type">
+              <label class="flex cursor-pointer items-center gap-2.5 text-sm">
+                <AppRadio v-model="store.loopType" name="screensaver-loop-type" value="hard" aria-label="Hard loop" />
+                Hard loop
+              </label>
+              <label class="flex cursor-pointer items-center gap-2.5 text-sm">
+                <AppRadio
+                  v-model="store.loopType"
+                  name="screensaver-loop-type"
+                  value="smooth"
+                  aria-label="Smooth loop"
+                />
+                Smooth loop (crossfade when possible)
+              </label>
+            </div>
             <SliderField
               v-if="store.loopType === 'smooth'"
               class="mt-3"

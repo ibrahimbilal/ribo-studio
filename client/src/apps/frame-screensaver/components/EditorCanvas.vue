@@ -142,7 +142,6 @@ const cropAspects = [
 
 const viewLabel = computed(() => `${Math.round(zoom.value * 100)}%`)
 const playing = ref(false)
-const audioRef = ref<HTMLAudioElement | null>(null)
 const subscribePreviewTime = ref(0)
 let subscribePreviewRaf = 0
 let subscribePreviewStarted = 0
@@ -722,20 +721,6 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 watch(
-  () => [store.audioUrl, store.audioMode, store.audioVolume, store.loopAudio] as const,
-  () => {
-    const audio = audioRef.value
-    if (!audio) return
-    if (store.audioUrl && store.audioMode === 'upload') {
-      if (audio.src !== store.audioUrl) audio.src = store.audioUrl
-      audio.loop = store.loopAudio
-      audio.volume = store.audioVolume
-    } else {
-      audio.removeAttribute('src')
-    }
-  },
-)
-watch(
   () => [store.objectUrl, store.mediaKind] as const,
   ([url, kind]) => loadMedia(url, kind),
   { immediate: true },
@@ -888,7 +873,6 @@ onBeforeUnmount(() => {
       <canvas ref="overlayCanvas" class="absolute top-1/2 left-1/2 block max-h-full max-w-full -translate-x-1/2 -translate-y-1/2 touch-none" />
       <p v-if="!store.objectUrl" class="pointer-events-none absolute inset-0 grid place-items-center text-sm text-zinc-500">Upload media to preview</p>
     </div>
-    <audio ref="audioRef" class="hidden" />
     <p class="mt-2 text-xs text-zinc-500">
       View zoom does not change the export. The dashed outline is the export frame. Drag the image to place it. Corner handles scale it. The round handle rotates it.
       <span v-if="store.subscribeAnimation.enabled && store.subscribeAnimation.previewOnCanvas && store.mediaKind === 'image'">

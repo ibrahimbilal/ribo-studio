@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { CircleAlert, CircleCheck, FilePlus, Menu } from '@lucide/vue'
 import { computed } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import AppNotifications from './AppNotifications.vue'
+import AppTempStorageButton from './AppTempStorageButton.vue'
 import { useScreensaverStore } from '../../apps/frame-screensaver/stores/screensaver'
 import { useAudioLooperStore } from '../../apps/audio-looper/stores/audioLooper'
 import { useImageUpscalerStore } from '../../apps/image-upscaler/stores/imageUpscaler'
@@ -54,10 +55,8 @@ const emit = defineEmits<{ openNav: [trigger: HTMLElement] }>()
     >
       <Menu :size="20" />
     </button>
-    <h1 class="min-w-0 truncate text-lg font-bold tracking-tight">
-      <RouterLink :to="{ name: 'dashboard' }" class="focus-ring rounded-sm text-zinc-200 transition-colors" :aria-label="`${title}, go to dashboard`">
-        {{ title }}
-      </RouterLink>
+    <h1 class="min-w-0 truncate text-lg font-bold tracking-tight text-zinc-200">
+      {{ title }}
     </h1>
     <button
       v-if="showNewProject"
@@ -69,6 +68,7 @@ const emit = defineEmits<{ openNav: [trigger: HTMLElement] }>()
       <span class="hidden sm:inline">New project</span>
     </button>
     <div class="ml-auto flex items-center gap-1 sm:gap-2">
+      <AppTempStorageButton />
       <AppNotifications />
       <button
         class="focus-ring inline-flex cursor-pointer items-center gap-2 rounded-sm text-xs font-semibold"

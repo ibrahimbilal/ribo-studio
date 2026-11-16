@@ -442,6 +442,74 @@ input[type='color'] {
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
   }
+
+  .app-radio {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .app-radio--disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .app-radio__input {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    margin: 0;
+    cursor: inherit;
+    opacity: 0;
+  }
+
+  .app-radio__ring {
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: 1.125rem;
+    height: 1.125rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 999px;
+    background: var(--color-field);
+    transition:
+      background var(--duration-fast) ease,
+      border-color var(--duration-fast) ease,
+      box-shadow var(--duration-fast) ease;
+  }
+
+  .app-radio__dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--color-brand-on);
+    transform: scale(0);
+    opacity: 0;
+    transition:
+      transform var(--duration-fast) var(--ease-out-soft),
+      opacity var(--duration-fast) ease;
+  }
+
+  .app-radio__ring--on {
+    border-color: var(--color-brand);
+    background: var(--color-brand);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-brand) 35%, transparent);
+  }
+
+  .app-radio__ring--on .app-radio__dot {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  .app-radio__input:hover:not(:disabled) + .app-radio__ring:not(.app-radio__ring--on) {
+    border-color: #71717a;
+  }
+
+  .app-radio__input:focus-visible + .app-radio__ring {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
 }
 
 button:disabled {
@@ -593,6 +661,36 @@ button:disabled {
 .dialog-enter-from .dialog-card,
 .dialog-leave-to .dialog-card {
   transform: translateY(8px) scale(0.98);
+}
+
+.export-status-enter-active .export-status-scrim,
+.export-status-leave-active .export-status-scrim {
+  transition: opacity var(--duration-base) var(--ease-out-soft);
+}
+
+.export-status-enter-active .export-status-panel,
+.export-status-leave-active .export-status-panel {
+  transition:
+    opacity var(--duration-base) var(--ease-out-soft),
+    transform var(--duration-base) var(--ease-out-soft);
+}
+
+.export-status-enter-from .export-status-scrim,
+.export-status-leave-to .export-status-scrim {
+  opacity: 0;
+}
+
+.export-status-enter-from .export-status-panel,
+.export-status-leave-to .export-status-panel {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+@media (min-width: 1024px) {
+  .export-status-enter-from .export-status-panel,
+  .export-status-leave-to .export-status-panel {
+    transform: translateX(16px);
+  }
 }
 
 .notif-item-list {
@@ -814,6 +912,10 @@ body.card-reordering {
   .dialog-leave-active,
   .dialog-enter-active .dialog-card,
   .dialog-leave-active .dialog-card,
+  .export-status-enter-active .export-status-scrim,
+  .export-status-leave-active .export-status-scrim,
+  .export-status-enter-active .export-status-panel,
+  .export-status-leave-active .export-status-panel,
   .btn,
   .nav-link,
   .toast,
@@ -839,6 +941,10 @@ body.card-reordering {
   .dialog-leave-to,
   .dialog-enter-from .dialog-card,
   .dialog-leave-to .dialog-card,
+  .export-status-enter-from .export-status-scrim,
+  .export-status-leave-to .export-status-scrim,
+  .export-status-enter-from .export-status-panel,
+  .export-status-leave-to .export-status-panel,
   .notif-status-enter-from,
   .notif-status-leave-to {
     opacity: 1;

@@ -1079,7 +1079,7 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
   }
 
   async function downloadAllProjects(): Promise<void> {
-    const items = projectCards.value
+    const items = projectCards.value.filter((item) => !item.downloadedUnchanged)
     if (!items.length) {
       platform.toast('No thumbnail projects to download.', 'info')
       return
@@ -1092,7 +1092,7 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
         const saved = item.id === doc.value.id ? clone(doc.value) : await projectLibrary.loadThumbnailProjectRecord(item.id)
         if (!saved?.image.assetId) continue
         try {
-          await downloadStoredProject(saved)
+          await downloadStoredProject(saved, false)
           count++
         } catch {
           /* try remaining */

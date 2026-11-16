@@ -149,6 +149,29 @@ export async function materializeCachedPeriod(cachePath: string, dest: string): 
   }
 }
 
+/** Removes idle period-cache files. Entries retained by an active encode are kept. */
+export async function purgeAudioPeriodCache(): Promise<void> {
+  await ensureAudioPeriodCache()
+  let names: string[] = []
+  try {
+    names = await readdir(audioPeriodCacheDir)
+  } catch {
+    return
+  }
+  for (const name of names) {
+    if (name.includes('.partial.')) {
+      await rm(path.join(audioPeriodCacheDir, name), { force: true }).catch(() => undefined)
+      continue
+    }
+    if (!name.endsWith('.mp3')) continue
+    const keyHex = name.replace(/\.mp3$/, '')
+    if ((retainCounts.get(keyHex) ?? 0) > 0) continue
+    const file = path.join(audioPeriodCacheDir, name)
+    await rm(file, { force: true }).catch(() => undefined)
+    await rm(`${file}.ok`, { force: true }).catch(() => undefined)
+  }
+}
+
 export async function pruneAudioPeriodCache(maxBytes = AUDIO_PERIOD_CACHE_MAX_BYTES): Promise<void> {
   await ensureAudioPeriodCache()
   const names = await readdir(audioPeriodCacheDir)

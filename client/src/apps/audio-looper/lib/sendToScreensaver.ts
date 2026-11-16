@@ -3,7 +3,10 @@ import * as api from '../../../lib/api'
 import { useScreensaverStore } from '../../frame-screensaver/stores/screensaver'
 import { useAudioLooperStore } from '../stores/audioLooper'
 import {
+  isIdentityTrackOrder,
+  playlistOrdersForProjects,
   transferNotificationMessage,
+  type PlaylistOrderMode,
   type SendTransferResult,
 } from './sendToScreensaverSelection'
 
@@ -24,12 +27,12 @@ export async function sendLooperPlanToScreensaver(target: SendToScreensaverTarge
 }
 
 /**
- * Upload the Looper plan once, then attach the same durable audio asset to every selected project.
- * Does not re-encode and does not duplicate the physical audio files on disk.
+ * Upload the Looper plan once, then attach audio to every selected project.
+ * `shared` playlist order reuses one asset; `unique` clones hardlinked recipe variants per project.
  */
 export async function sendLooperPlanToScreensaverProjects(
   projectIds: string[],
-  options: { createNew?: boolean; navigate?: boolean } = {},
+  options: { createNew?: boolean; navigate?: boolean; playlistOrderMode?: PlaylistOrderMode } = {},
 ): Promise<SendTransferResult> {
   const looper = useAudioLooperStore()
   const files = looper.readyTracks.map((track) => track.file)
@@ -39,13 +42,61 @@ export async function sendLooperPlanToScreensaverProjects(
   }
 
   const settings = looper.buildExportSettings()
-  const asset = await api.uploadLooperPlanForScreensaver(files, settings)
+  const baseAsset = await api.uploadLooperPlanForScreensaver(files, settings)
   const screensaver = useScreensaverStore()
   if (!screensaver.hydrated) await screensaver.init()
 
-  const result = await screensaver.assignAudioAssetToProjects(asset, projectIds, {
-    createNew: options.createNew === true,
-  })
+  const mode: PlaylistOrderMode = options.playlistOrderMode ?? 'shared'
+  const uniqueIds = [...new Set(projectIds.filter(Boolean))]
+  const useUnique = mode === 'unique' && files.length >= 2 && uniqueIds.length > 1
+
+  if (!useUnique) {
+    const result = await screensaver.assignAudioAssetToProjects(baseAsset, uniqueIds, {
+      createNew: options.createNew === true,
+    })
+    if (options.navigate !== false && result.ok.length > 0) {
+      await router.push('/screensaver')
+    }
+    return result
+  }
+
+  const orders = playlistOrdersForProjects(files.length, uniqueIds.length, 'unique')
+  const result: SendTransferResult = { ok: [], failed: [], skipped: [] }
+  const assetsByOrder = new Map<string, api.ScreensaverAudioAsset>()
+
+  if (options.createNew) {
+    const created = await screensaver.assignAudioAssetToProjects(baseAsset, [], { createNew: true })
+    result.ok.push(...created.ok)
+    result.failed.push(...created.failed)
+    result.skipped.push(...created.skipped)
+  }
+
+  for (let index = 0; index < uniqueIds.length; index += 1) {
+    const projectId = uniqueIds[index]!
+    const order = orders[index] ?? orders[0]!
+    const orderKey = order.join(',')
+    try {
+      let asset = assetsByOrder.get(orderKey)
+      if (!asset) {
+        asset =
+          isIdentityTrackOrder(order)
+            ? baseAsset
+            : await api.cloneLooperPlanOrderForScreensaver(baseAsset.id, order)
+        assetsByOrder.set(orderKey, asset)
+      }
+      const partial = await screensaver.assignAudioAssetToProjects(asset, [projectId])
+      result.ok.push(...partial.ok)
+      result.failed.push(...partial.failed)
+      result.skipped.push(...partial.skipped)
+    } catch (error) {
+      const summary = screensaver.projects.find((item) => item.id === projectId)
+      result.failed.push({
+        id: projectId,
+        name: summary?.name || 'Screensaver project',
+        reason: error instanceof Error ? error.message : 'Could not attach audio.',
+      })
+    }
+  }
 
   if (options.navigate !== false && result.ok.length > 0) {
     await router.push('/screensaver')

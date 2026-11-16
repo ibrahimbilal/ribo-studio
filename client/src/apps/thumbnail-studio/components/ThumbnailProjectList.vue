@@ -16,6 +16,9 @@ const infoTip = ref<{ id: string; x: number; y: number; above: boolean } | null>
 
 const deleteTarget = computed(() => store.projects.find((item) => item.id === deleteId.value) ?? null)
 const infoProject = computed(() => store.projects.find((item) => item.id === infoTip.value?.id) ?? null)
+const downloadableCount = computed(
+  () => store.projects.filter((item) => !item.downloadedUnchanged).length,
+)
 
 function uploadIconClass(state: 'uploading' | 'processing' | 'ready' | 'error'): string {
   if (state === 'uploading' || state === 'processing') return 'text-brand'
@@ -213,7 +216,7 @@ async function downloadAll() {
       <button
         class="btn btn-ghost w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
-        :disabled="store.projects.length === 0 || downloadingAll || store.exporting"
+        :disabled="downloadableCount === 0 || downloadingAll || store.exporting"
         @click="downloadAll"
       >
         <Download :size="16" />

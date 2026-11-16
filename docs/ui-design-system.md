@@ -37,6 +37,7 @@ Reuse these instead of copying color and radius values:
 - `.toast`, `.toast-error`, `.toast-success` — header toasts.
 - `.toggle-switch` — used by `ToggleSwitch`.
 - `.app-checkbox` — used by `AppCheckbox` (checked / indeterminate).
+- `.app-radio` — used by `AppRadio` (brand circular radio).
 - `.nav-link` / `.nav-link--active` — sidebar and mobile nav items; active gets a one-shot brand pulse.
 - `.dash-enter` / `.dash-enter-delay-*` — dashboard card and hero entrance.
 - `.page-enter-*` / `.page-leave-*` — `RouterView` transition in `App.vue`.
@@ -59,10 +60,11 @@ Motion tokens: `--ease-out-soft`, `--duration-fast` / `--duration-base` / `--dur
 | `AppMobileTabs` | Settings / Preview / Clips rows. `v-model` is the tab id. `hide-from` is `lg` or `xl`. | Which panels that id shows |
 | `AppSettingsTabs` | Settings strip (Shorts: Clip / Style / Output / Sound). `v-model` is the tab id; optional `cols` `3` or `4`. | Which panels that id shows; wrap pane content in `Transition name="settings-pane"` |
 | `AppExportAction` | Primary export button, blocker text, optional hint, extra slot | Store handler, queue label, CPU fallback, status copy |
-| `AppExportStatusPanel` | Export progress card: percent, bar, stat rows, collapsed rail | Which rows, progress, and tone to pass; when it is allowed to show |
+| `AppExportStatusPanel` | Export progress card: percent, bar, stat rows; collapsed rail in-flow, open state floats over the studio | Which rows, progress, and tone to pass; when it is allowed to show |
 | `AppEmptyState` | Title and short guidance when nothing is loaded | When the empty state is allowed to show |
 | `AppPanel` | Titled elevated card | — |
 | `AppCheckbox` | Brand checkbox with optional indeterminate state | Selection lists / select-all |
+| `AppRadio` | Brand circular radio (`v-model` + `value`) | Exclusive option groups |
 
 `SettingsAccordion` expands and collapses with a height + fade animation (chevron rotates). Do not reintroduce native `<details>` for settings sections.
 

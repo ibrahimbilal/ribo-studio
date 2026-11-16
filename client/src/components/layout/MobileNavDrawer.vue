@@ -74,15 +74,17 @@ function onNavigate() {
         aria-label="Navigation"
       >
         <div class="flex h-14 items-center justify-between border-b border-zinc-800 px-4">
-          <RouterLink
-            :to="{ name: 'dashboard' }"
-            class="focus-ring flex min-w-0 items-center gap-2 rounded-sm text-zinc-100 transition-colors hover:text-brand"
-            aria-label="Ribo Studio, go to dashboard"
-            @click="onNavigate"
-          >
-            <img src="/logo.png" alt="" class="h-8 w-8 shrink-0 object-contain" />
+          <div class="flex min-w-0 items-center gap-2 text-zinc-100">
+            <RouterLink
+              :to="{ name: 'dashboard' }"
+              class="focus-ring shrink-0 rounded-sm"
+              aria-label="Ribo Studio, go to dashboard"
+              @click="onNavigate"
+            >
+              <img src="/logo.png" alt="" class="h-8 w-8 object-contain" />
+            </RouterLink>
             <span class="truncate text-sm font-black tracking-[0.06em]">Ribo Studio</span>
-          </RouterLink>
+          </div>
           <button class="btn btn-ghost cursor-pointer" type="button" aria-label="Close menu" @click="emit('close')">
             <X :size="20" />
           </button>

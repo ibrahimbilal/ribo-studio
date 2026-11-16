@@ -44,7 +44,9 @@ Progress on the client: overlays/upload are local; queued/preparing/rendering/ve
 | POST | `/api/screensaver/frames` | one PNG, field `file`, max 40 MB |
 | GET | `/api/screensaver/frames/:id` | that PNG |
 | DELETE | `/api/screensaver/frames/:id` | remove a saved frame |
-| POST | `/api/uploads/cleanup` | JSON `{ purgeAll?: true, jobId? }` (default) — remove all frame PNGs, leftover `jobs/` work dirs, every clip not held by a render, and export MP4s in `outputs/` (optional `jobId` for the just-downloaded file; skips outputs and job dirs for jobs still encoding). Same handler at `/api/screensaver/uploads/cleanup`. Legacy `{ mediaId, frameIds }` when `purgeAll: false` |
+| POST | `/api/uploads/cleanup` | JSON `{ purgeAll?: true, jobId? }` (default) — remove all frame PNGs, leftover `jobs/` work dirs, every clip not held by a render, idle `audio-assets/`, and export MP4s in `outputs/` (optional `jobId` for the just-downloaded file; skips outputs, job dirs, and retained audio for jobs still encoding). Same handler at `/api/screensaver/uploads/cleanup`. Legacy `{ mediaId, frameIds }` when `purgeAll: false` |
+| GET | `/api/storage/temp` | `{ bytes }` — recursive size of `server/tmp/` |
+| POST | `/api/storage/temp/clean` | Purge disposable temp (frames, idle clips/audio-assets, all `outputs/`, idle `jobs/`, upscaler, incoming, looper-previews, idle audio-period cache). Keeps `subscribe-animation-cache/` (+ JSON). Returns `{ ok, bytes }` |
 | POST | `/api/screensaver/audio` | background audio upload, field `file`, max **1 GiB** → durable `audio-assets/` registry |
 | POST | `/api/screensaver/audio/from-job` | `{ jobId }` adopt finished Audio Looper output into `audio-assets/` (copy/hardlink) |
 | GET | `/api/screensaver/audio/:id` | stream asset (`?meta=1` for JSON metadata) |
@@ -76,7 +78,7 @@ Unknown `/api` routes return 404 JSON. If `client/dist/index.html` exists, Expre
 - `jobs/<id>/` — overlays, composition PNG, and music for the active render. Removed when the job ends, on tab/window close, and on server boot. Leftovers from a crashed or restarted render do not wait for the 6-hour sweep.
 - `outputs/<id>.mp4` — finished ranking/screensaver files.
 - `outputs/<id>.mp3|wav|flac` — finished Audio Looper files. Tab-close purge skips non-mp4 outputs.
-- `audio-assets/` and `audio-assets.json` — Screensaver background audio (uploads + adopted looper outputs). Retained while a screensaver render holds `audioAssetId`. Tab-close purge does **not** wipe this folder.
+- `audio-assets/` and `audio-assets.json` — Screensaver background audio (uploads + adopted looper outputs). Retained while a screensaver render holds `audioAssetId`. Tab/window close (`POST /api/uploads/cleanup`) purges idle assets via `purgeAudioAssets()`.
 - `subscribe-animation-cache/` and `subscribe-animation-cache.json` — persistent subscribe-animation PNG sequences (static + per-channel dynamic). Retained while a screensaver render holds `animationCacheKey`. Tab-close purge does **not** wipe this folder; LRU sweep from `sweepStorage`.
 - `upscaler/<jobId>/` — Image Upscaler inputs and outputs. Removed on boot, on purge, and after the job TTL (2 hours). Not part of the FFmpeg queue.
 

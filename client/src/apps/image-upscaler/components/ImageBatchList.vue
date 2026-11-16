@@ -128,7 +128,7 @@ async function confirmDeleteAll() {
       <button
         class="btn btn-ghost w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
-        :disabled="store.completedCount === 0"
+        :disabled="store.downloadableCount === 0"
         @click="store.downloadZip()"
       >
         <Download :size="16" />

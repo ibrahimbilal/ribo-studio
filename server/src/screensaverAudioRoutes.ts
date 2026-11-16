@@ -1,6 +1,5 @@
 import { Router } from 'express'
 import multer from 'multer'
-import { createReadStream } from 'node:fs'
 import { rm, statfs } from 'node:fs/promises'
 import path from 'node:path'
 import { MAX_AUDIO_LOOPER_TRACKS } from '../../shared/audioLooper'
@@ -14,11 +13,32 @@ import {
   addAudioAssetFromLooperPlan,
   addAudioAssetFromUpload,
   audioAssetPublicView,
+  audioAssetTrackPath,
+  cloneLooperPlanWithTrackOrder,
   getAudioAsset,
   removeAudioAsset,
 } from './audioAssets'
 import { getJob, jobOutput } from './jobs'
 import { incomingDir, safeAudioExt, safeDownloadName } from './storage'
+
+function mimeForAudioExt(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case '.mp3':
+      return 'audio/mpeg'
+    case '.wav':
+      return 'audio/wav'
+    case '.flac':
+      return 'audio/flac'
+    case '.m4a':
+      return 'audio/mp4'
+    case '.aac':
+      return 'audio/aac'
+    case '.ogg':
+      return 'audio/ogg'
+    default:
+      return 'application/octet-stream'
+  }
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -160,6 +180,58 @@ export function createScreensaverAudioRouter(): Router {
     })
   })
 
+  /** Clone a looper-plan recipe with a reordered playlist (hardlink sources; no re-upload). */
+  router.post('/audio/:id/clone-order', async (req, res) => {
+    const id = String(req.params.id || '')
+    if (!UUID.test(id)) {
+      res.status(400).json({ error: 'Invalid audio id.' })
+      return
+    }
+    try {
+      const stored = await cloneLooperPlanWithTrackOrder(id, req.body?.order)
+      res.json(audioAssetPublicView(stored))
+    } catch (error) {
+      const message = messageOf(error, 'Could not reorder that Looper audio plan.')
+      const missing = /no longer available/i.test(message)
+      res.status(missing ? 404 : 400).json({ error: message })
+    }
+  })
+
+  router.get('/audio/:id/track/:index', async (req, res) => {
+    const id = String(req.params.id || '')
+    const index = Number(req.params.index)
+    if (!UUID.test(id)) {
+      res.status(400).json({ error: 'Invalid audio id.' })
+      return
+    }
+    if (!Number.isInteger(index) || index < 0) {
+      res.status(400).json({ error: 'Invalid track index.' })
+      return
+    }
+    const stored = getAudioAsset(id)
+    if (!stored) {
+      res.status(404).json({ error: 'That background audio file is no longer available.' })
+      return
+    }
+    const filePath = audioAssetTrackPath(stored, index)
+    if (!filePath) {
+      res.status(404).json({ error: 'That playlist track is no longer available.' })
+      return
+    }
+    const recipeTrack = stored.recipe?.tracks[index]
+    const fileName = (recipeTrack?.originalName || stored.originalName).replace(/"/g, '')
+    const mime =
+      recipeTrack != null
+        ? mimeForAudioExt(path.extname(recipeTrack.fileName))
+        : stored.mimeType || mimeForAudioExt(path.extname(filePath))
+    res.sendFile(filePath, {
+      headers: {
+        'Content-Type': mime || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${fileName}"`,
+      },
+    })
+  })
+
   router.get('/audio/:id', async (req, res) => {
     const id = String(req.params.id || '')
     if (!UUID.test(id)) {
@@ -175,13 +247,13 @@ export function createScreensaverAudioRouter(): Router {
       res.json(audioAssetPublicView(stored))
       return
     }
-    res.setHeader('Content-Type', stored.mimeType || 'application/octet-stream')
-    res.setHeader('Content-Length', String(stored.size))
-    res.setHeader(
-      'Content-Disposition',
-      `inline; filename="${stored.originalName.replace(/"/g, '')}"`,
-    )
-    createReadStream(stored.path).pipe(res)
+    // sendFile supports HTTP Range so the browser preview player can seek.
+    res.sendFile(stored.path, {
+      headers: {
+        'Content-Type': stored.mimeType || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${stored.originalName.replace(/"/g, '')}"`,
+      },
+    })
   })
 
   router.delete('/audio/:id', async (req, res) => {

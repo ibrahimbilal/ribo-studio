@@ -103,6 +103,22 @@ describe('exportAllPlan', () => {
     assert.equal(plan.skipped.filter((item) => item.reason === 'queue-full').length, 2)
   })
 
+  it('prefers shorter projects when queue capacity is limited', () => {
+    const plan = planExportAll(
+      [
+        candidate({ id: 'long', name: 'Long', durationSeconds: 4 * 3600 }),
+        candidate({ id: 'short', name: 'Short', durationSeconds: 30 * 60 }),
+        candidate({ id: 'mid', name: 'Mid', durationSeconds: 2 * 3600 }),
+      ],
+      { remainingQueueSlots: 1 },
+    )
+    assert.deepEqual(
+      plan.eligible.map((item) => item.id),
+      ['short'],
+    )
+    assert.equal(plan.skipped.filter((item) => item.reason === 'queue-full').length, 2)
+  })
+
   it('prevents download filename collisions within a batch', () => {
     assert.deepEqual(uniqueDownloadFilenames(['Sunset', 'Sunset', 'Night']), [
       'Sunset.mp4',
@@ -111,15 +127,16 @@ describe('exportAllPlan', () => {
     ])
   })
 
-  it('keeps independent project order for sequential batch processing', () => {
+  it('orders eligible projects from shortest to longest duration', () => {
     const plan = planExportAll([
-      candidate({ id: 'a', name: 'A' }),
-      candidate({ id: 'b', name: 'B' }),
-      candidate({ id: 'c', name: 'C' }),
+      candidate({ id: 'c', name: 'C', durationSeconds: 4 * 3600 }),
+      candidate({ id: 'a', name: 'A', durationSeconds: 30 * 60 }),
+      candidate({ id: 'b', name: 'B', durationSeconds: 2 * 3600 }),
+      candidate({ id: 'a2', name: 'A2', durationSeconds: 30 * 60 }),
     ])
     assert.deepEqual(
       plan.eligible.map((item) => item.id),
-      ['a', 'b', 'c'],
+      ['a', 'a2', 'b', 'c'],
     )
   })
 

@@ -5,7 +5,6 @@ import { frameImageUrl } from './frameImageUrl'
 import { useScreensaverStore } from '../stores/screensaver'
 
 export async function createThumbnailFromScreensaver(
-  linkMode: 'snapshot' | 'linked',
   screensaverProjectId?: string,
 ): Promise<void> {
   const store = useScreensaverStore()
@@ -34,7 +33,7 @@ export async function createThumbnailFromScreensaver(
       {
         sourceApp: 'frame-screensaver',
         sourceProjectId: projectId,
-        linkMode,
+        linkMode: 'snapshot',
         returnPath: '/screensaver',
         title: store.name,
       artwork,

@@ -35,7 +35,11 @@ const deleteTarget = computed(() => store.projects.find((item) => item.id === de
 const downloadableCount = computed(
   () =>
     store.projects.filter(
-      (item) => item.render.outputUrl && !item.outputMissing && item.render.status === 'completed',
+      (item) =>
+        item.render.outputUrl &&
+        !item.outputMissing &&
+        item.render.status === 'completed' &&
+        !item.downloadedUnchanged,
     ).length,
 )
 const infoProject = computed(() => store.projects.find((item) => item.id === infoTip.value?.id) ?? null)
@@ -241,7 +245,7 @@ async function ensureProjectOpen(id: string): Promise<boolean> {
 
 async function createThumbnailFor(id: string) {
   if (!(await ensureProjectOpen(id))) return
-  await createThumbnailFromScreensaver('snapshot', id)
+  await createThumbnailFromScreensaver(id)
 }
 
 async function sendToImageMotionFor(id: string) {
