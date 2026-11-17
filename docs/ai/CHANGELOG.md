@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.6.0**).
+Version source of truth: root `package.json` (currently **1.6.1**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,8 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.6.1** (2026-11-17) — Toast border/ink theme tokens for light + dark (`style.css`).
+- 2026-11-17 — Toast success/error borders and text use `--color-toast-*` tokens so light theme is readable (`style.css`).
 - Release **v1.6.0** (2026-11-17) — Global Settings (Appearance, Integrations, Backup & Restore, shared Screensaver/Shorts encoding prefs); header theme toggle; fixed icon-rail sidebar; dark-theme contrast fixes; channel-card cache per theme.
 - 2026-11-17 — Header quick theme toggle (light/dark) left of temp storage (`AppThemeToggle.vue`, `AppHeader.vue`).
 - 2026-11-17 — Dark theme shell/icon-action contrast after Appearance rollout (`style.css`, dashboard/sidebar/header).

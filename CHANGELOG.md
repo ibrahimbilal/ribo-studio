@@ -10,6 +10,12 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-11-17
+
+### Fixed
+
+- Toast borders and success/error text use theme tokens so light mode no longer keeps dark-only toast colors.
+
 ## [1.6.0] — 2026-11-17
 
 ### Added
