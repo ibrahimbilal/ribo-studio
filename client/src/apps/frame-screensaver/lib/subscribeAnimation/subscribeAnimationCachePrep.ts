@@ -1,6 +1,6 @@
 import {
+  defaultSubscribeAnimation,
   defaultSubscribeSizePercent,
-  DEFAULT_SUBSCRIBE_EDGE_DISTANCE,
   sanitizeSubscribeAnimation,
   SUBSCRIBE_ANIMATION_DURATION_SEC,
   SUBSCRIBE_ANIMATION_FPS,
@@ -297,16 +297,12 @@ export async function prepareDefaultStaticAnimations(outputWidth: number): Promi
   const candidates: Array<{ cacheKey: string; templateId: SubscribeAnimationStyle; settings: SubscribeAnimationSettings }> = []
   for (const style of staticSubscribeAnimationStyles()) {
     const settings: SubscribeAnimationSettings = {
-      enabled: true,
+      ...defaultSubscribeAnimation(),
       channelName: '',
       startSec: 0,
-      durationSec: SUBSCRIBE_ANIMATION_DURATION_SEC,
-      position: 'bottom-center',
       sizePercent: defaultSubscribeSizePercent(style),
-      edgeDistance: DEFAULT_SUBSCRIBE_EDGE_DISTANCE,
       style,
       previewOnCanvas: false,
-      channelCardTheme: 'light',
       channelUrl: '',
       channelId: null,
       channelAvatarUrl: null,

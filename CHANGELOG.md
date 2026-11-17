@@ -10,6 +10,16 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-11-17
+
+### Added
+
+- Screensaver subscribe animation: optional **repeat every** N minutes or hours during export (Optimized CFR and Fast VFR).
+
+### Changed
+
+- Screensaver subscribe animation default start time is **20 seconds** (was 3 seconds).
+
 ## [1.7.0] — 2026-11-17
 
 ### Added

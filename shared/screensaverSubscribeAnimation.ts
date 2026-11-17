@@ -32,6 +32,17 @@ export const DEFAULT_SUBSCRIBE_EDGE_DISTANCE = 0
 export const MIN_SUBSCRIBE_EDGE_DISTANCE = 0
 export const MAX_SUBSCRIBE_EDGE_DISTANCE = 240
 
+export const SUBSCRIBE_REPEAT_UNITS = ['off', 'minutes', 'hours'] as const
+
+export type SubscribeRepeatUnit = (typeof SUBSCRIBE_REPEAT_UNITS)[number]
+
+/** Default amount when the user enables minutes/hours repeat. */
+export const DEFAULT_SUBSCRIBE_REPEAT_EVERY_VALUE = 30
+
+export const MIN_SUBSCRIBE_REPEAT_EVERY_VALUE = 1
+export const MAX_SUBSCRIBE_REPEAT_EVERY_VALUE_MINUTES = 24 * 60
+export const MAX_SUBSCRIBE_REPEAT_EVERY_VALUE_HOURS = 24
+
 /** Animation content width as a percent of export frame width. */
 export const MIN_SUBSCRIBE_SIZE_PERCENT = 5
 export const MAX_SUBSCRIBE_SIZE_PERCENT = 75
@@ -75,6 +86,13 @@ export interface SubscribeAnimationSettings {
   channelName: string
   startSec: number
   durationSec: number
+  /**
+   * When not `off`, replay the clip every N minutes/hours during export
+   * (starts at `startSec`, then `startSec + k * interval`).
+   */
+  repeatEveryUnit: SubscribeRepeatUnit
+  /** Amount paired with `repeatEveryUnit` (ignored when unit is `off`). */
+  repeatEveryValue: number
   position: SubscribeAnimationPosition
   /** Content width as a percent of export frame width (see `subscribeAnimationLayout`). */
   sizePercent: number
@@ -99,8 +117,10 @@ export function defaultSubscribeAnimation(): SubscribeAnimationSettings {
   return {
     enabled: true,
     channelName: DEFAULT_SUBSCRIBE_CHANNEL_NAME,
-    startSec: 3,
+    startSec: 20,
     durationSec: SUBSCRIBE_ANIMATION_DURATION_SEC,
+    repeatEveryUnit: 'off',
+    repeatEveryValue: DEFAULT_SUBSCRIBE_REPEAT_EVERY_VALUE,
     position: 'bottom-center',
     sizePercent: defaultSubscribeSizePercent('channel-card'),
     edgeDistance: DEFAULT_SUBSCRIBE_EDGE_DISTANCE,
@@ -112,6 +132,53 @@ export function defaultSubscribeAnimation(): SubscribeAnimationSettings {
     channelAvatarUrl: null,
     channelSubscriberCount: null,
   }
+}
+
+export function isSubscribeRepeatUnit(value: unknown): value is SubscribeRepeatUnit {
+  return typeof value === 'string' && (SUBSCRIBE_REPEAT_UNITS as readonly string[]).includes(value)
+}
+
+/** Interval between animation starts in seconds, or `null` when repeat is off. */
+export function subscribeRepeatIntervalSec(settings: Pick<SubscribeAnimationSettings, 'repeatEveryUnit' | 'repeatEveryValue'>): number | null {
+  if (settings.repeatEveryUnit === 'off') return null
+  const value = Math.max(0, Number(settings.repeatEveryValue))
+  if (!Number.isFinite(value) || value < MIN_SUBSCRIBE_REPEAT_EVERY_VALUE) return null
+  return settings.repeatEveryUnit === 'hours' ? value * 3600 : value * 60
+}
+
+export interface SubscribeAnimationOccurrence {
+  startSec: number
+  durationSec: number
+}
+
+/**
+ * Wall-clock placements for export. Plays once at `startSec`, or repeats every
+ * interval while each full clip still fits inside `exportDurationSec`.
+ */
+export function subscribeAnimationOccurrences(
+  settings: Pick<SubscribeAnimationSettings, 'enabled' | 'startSec' | 'durationSec' | 'repeatEveryUnit' | 'repeatEveryValue'>,
+  exportDurationSec: number,
+): SubscribeAnimationOccurrence[] {
+  if (!settings.enabled) return []
+  if (!Number.isFinite(exportDurationSec) || exportDurationSec <= 0) return []
+  const durationSec = Math.max(0, settings.durationSec)
+  if (durationSec <= 0) return []
+  const firstStart = Math.max(0, settings.startSec)
+  if (firstStart + durationSec > exportDurationSec + 0.01) return []
+
+  const intervalSec = subscribeRepeatIntervalSec(settings)
+  if (intervalSec == null) {
+    return [{ startSec: firstStart, durationSec }]
+  }
+
+  const step = Math.max(intervalSec, durationSec)
+  const occurrences: SubscribeAnimationOccurrence[] = []
+  let startSec = firstStart
+  while (startSec + durationSec <= exportDurationSec + 0.01) {
+    occurrences.push({ startSec, durationSec })
+    startSec += step
+  }
+  return occurrences
 }
 
 export function subscribeAnimationFrameCount(durationSec: number): number {
@@ -159,6 +226,13 @@ export function sanitizeSubscribeAnimation(raw: unknown): SubscribeAnimationSett
       : defaults.channelName
   const startSec = Number.isFinite(Number(data.startSec)) ? Math.max(0, Number(data.startSec)) : defaults.startSec
   const durationSec = SUBSCRIBE_ANIMATION_DURATION_SEC
+  const repeatEveryUnit = isSubscribeRepeatUnit(data.repeatEveryUnit) ? data.repeatEveryUnit : defaults.repeatEveryUnit
+  const repeatRaw = Number(data.repeatEveryValue)
+  const repeatMax =
+    repeatEveryUnit === 'hours' ? MAX_SUBSCRIBE_REPEAT_EVERY_VALUE_HOURS : MAX_SUBSCRIBE_REPEAT_EVERY_VALUE_MINUTES
+  const repeatEveryValue = Number.isFinite(repeatRaw)
+    ? Math.max(MIN_SUBSCRIBE_REPEAT_EVERY_VALUE, Math.min(repeatMax, Math.round(repeatRaw)))
+    : defaults.repeatEveryValue
   const position = isSubscribeAnimationPosition(data.position) ? data.position : defaults.position
   const style = isSubscribeAnimationStyle(data.style) ? data.style : defaults.style
   const sizePercent = resolveSubscribeSizePercent(data, style, defaultSubscribeSizePercent(style))
@@ -193,6 +267,8 @@ export function sanitizeSubscribeAnimation(raw: unknown): SubscribeAnimationSett
     channelName,
     startSec,
     durationSec,
+    repeatEveryUnit,
+    repeatEveryValue,
     position,
     sizePercent,
     edgeDistance,
@@ -250,7 +326,17 @@ export function validateSubscribeAnimation(
   if (settings.startSec < 0) {
     return { ok: false, message: 'Animation start time must be zero or greater.' }
   }
-  if (settings.startSec + settings.durationSec > exportDurationSec + 0.01) {
+  if (settings.repeatEveryUnit !== 'off') {
+    const intervalSec = subscribeRepeatIntervalSec(settings)
+    if (intervalSec == null) {
+      return { ok: false, message: 'Repeat interval must be at least 1 minute or 1 hour.' }
+    }
+    if (intervalSec + 0.01 < settings.durationSec) {
+      return { ok: false, message: 'Repeat interval must be at least as long as the animation.' }
+    }
+  }
+  const occurrences = subscribeAnimationOccurrences(settings, exportDurationSec)
+  if (occurrences.length < 1) {
     return { ok: false, message: 'The animation must fit inside the export duration.' }
   }
   if (subscribeAnimationFrameCount(settings.durationSec) < 1) {

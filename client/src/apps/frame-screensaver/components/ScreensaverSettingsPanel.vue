@@ -4,7 +4,24 @@ import { Eye, RotateCcw, SquareSplitHorizontal, Trash2, X } from '@lucide/vue'
 import { ADJUSTMENT_FIELDS } from '@shared/screensaverAdjust'
 import { FRAME_FILE_LIMIT } from '@shared/screensaverFrames'
 import { DURATION_PRESETS, SCREENSAVER_OUTPUTS } from '@shared/screensaver'
-import { SUBSCRIBE_ANIMATION_DURATION_SEC, SUBSCRIBE_ANIMATION_FPS, SUBSCRIBE_ANIMATION_POSITIONS, SUBSCRIBE_ANIMATION_STYLES, SUBSCRIBE_CHANNEL_CARD_THEMES, MAX_SUBSCRIBE_EDGE_DISTANCE, MIN_SUBSCRIBE_EDGE_DISTANCE, MIN_SUBSCRIBE_SIZE_PERCENT, MAX_SUBSCRIBE_SIZE_PERCENT, defaultSubscribeSizePercent, type SubscribeAnimationStyle } from '@shared/screensaverSubscribeAnimation'
+import {
+  SUBSCRIBE_ANIMATION_DURATION_SEC,
+  SUBSCRIBE_ANIMATION_FPS,
+  SUBSCRIBE_ANIMATION_POSITIONS,
+  SUBSCRIBE_ANIMATION_STYLES,
+  SUBSCRIBE_CHANNEL_CARD_THEMES,
+  SUBSCRIBE_REPEAT_UNITS,
+  MAX_SUBSCRIBE_EDGE_DISTANCE,
+  MIN_SUBSCRIBE_EDGE_DISTANCE,
+  MIN_SUBSCRIBE_SIZE_PERCENT,
+  MAX_SUBSCRIBE_SIZE_PERCENT,
+  MIN_SUBSCRIBE_REPEAT_EVERY_VALUE,
+  MAX_SUBSCRIBE_REPEAT_EVERY_VALUE_HOURS,
+  MAX_SUBSCRIBE_REPEAT_EVERY_VALUE_MINUTES,
+  defaultSubscribeSizePercent,
+  type SubscribeAnimationStyle,
+  type SubscribeRepeatUnit,
+} from '@shared/screensaverSubscribeAnimation'
 import AdvancedAudioControls from '../../../components/audio/AdvancedAudioControls.vue'
 import AudioFileField from '../../../components/audio/AudioFileField.vue'
 import FileDropZone from '../../../components/FileDropZone.vue'
@@ -53,6 +70,23 @@ function onSubscribeStyleChange(event: Event) {
     sizePercent: defaultSubscribeSizePercent(style),
     edgeDistance: 0,
   })
+}
+
+function repeatUnitLabel(unit: SubscribeRepeatUnit): string {
+  if (unit === 'minutes') return t(S('settings.subscribe.repeatUnitMinutes'))
+  if (unit === 'hours') return t(S('settings.subscribe.repeatUnitHours'))
+  return t(S('settings.subscribe.repeatUnitOff'))
+}
+
+const repeatEveryMax = computed(() =>
+  store.subscribeAnimation.repeatEveryUnit === 'hours'
+    ? MAX_SUBSCRIBE_REPEAT_EVERY_VALUE_HOURS
+    : MAX_SUBSCRIBE_REPEAT_EVERY_VALUE_MINUTES,
+)
+
+function onSubscribeRepeatUnitChange(event: Event) {
+  const unit = (event.target as HTMLSelectElement).value as SubscribeRepeatUnit
+  store.replaceSubscribeAnimation({ repeatEveryUnit: unit })
 }
 
 function onSubscribeChannelSelect(channelId: string) {
@@ -225,6 +259,29 @@ const inspectorTabs = computed(() => [
                     :value="store.subscribeAnimation.startSec"
                     @change="store.replaceSubscribeAnimation({ startSec: Number(($event.target as HTMLInputElement).value) })"
                   />
+                  <label class="mt-3 block text-xs text-zinc-500">{{ t(S('settings.subscribe.repeatEvery')) }}</label>
+                  <div class="mt-1 flex gap-2">
+                    <select
+                      class="field min-w-0 flex-1"
+                      :value="store.subscribeAnimation.repeatEveryUnit"
+                      @change="onSubscribeRepeatUnitChange"
+                    >
+                      <option v-for="unit in SUBSCRIBE_REPEAT_UNITS" :key="unit" :value="unit">
+                        {{ repeatUnitLabel(unit) }}
+                      </option>
+                    </select>
+                    <input
+                      v-if="store.subscribeAnimation.repeatEveryUnit !== 'off'"
+                      class="field w-24 shrink-0"
+                      type="number"
+                      :min="MIN_SUBSCRIBE_REPEAT_EVERY_VALUE"
+                      :max="repeatEveryMax"
+                      step="1"
+                      :value="store.subscribeAnimation.repeatEveryValue"
+                      @change="store.replaceSubscribeAnimation({ repeatEveryValue: Number(($event.target as HTMLInputElement).value) })"
+                    />
+                  </div>
+                  <p class="mt-1 text-xs text-zinc-500">{{ t(S('settings.subscribe.repeatEveryHint')) }}</p>
                   <label class="mt-3 block text-xs text-zinc-500">{{ t(S('settings.subscribe.position')) }}</label>
                   <select
                     class="field mt-1"

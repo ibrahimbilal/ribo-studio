@@ -2,7 +2,10 @@ import {
   SCREENSAVER_CFR_DEFAULT_SEGMENT_SEC,
   SCREENSAVER_CFR_SEGMENT_CANDIDATES_SEC,
 } from '../../../shared/screensaver'
-import type { SubscribeAnimationSettings } from '../../../shared/screensaverSubscribeAnimation'
+import {
+  subscribeAnimationOccurrences,
+  type SubscribeAnimationSettings,
+} from '../../../shared/screensaverSubscribeAnimation'
 
 export type TimelineRegionKind = 'static' | 'dynamic'
 
@@ -56,7 +59,8 @@ export function buildCfrTimeline(input: BuildTimelineInput): CfrTimeline {
 
   const regions: TimelineRegion[] = []
   const anim = input.subscribeAnimation
-  if (!anim || !anim.enabled) {
+  const occurrences = anim?.enabled ? subscribeAnimationOccurrences(anim, input.durationSec) : []
+  if (occurrences.length < 1) {
     regions.push({
       kind: 'static',
       startFrame: 0,
@@ -64,35 +68,40 @@ export function buildCfrTimeline(input: BuildTimelineInput): CfrTimeline {
       compositionKey: input.compositionKey,
     })
   } else {
-    const startFrame = Math.max(0, Math.min(totalFrames, Math.round(anim.startSec * fps)))
-    const animFrames = Math.max(1, Math.round(anim.durationSec * fps))
-    const endFrame = Math.min(totalFrames, startFrame + animFrames)
-    const actualAnimFrames = endFrame - startFrame
-    if (actualAnimFrames < 1) throw new Error('Subscribe animation does not fit in the export duration.')
+    let cursor = 0
+    for (const occurrence of occurrences) {
+      const startFrame = Math.max(cursor, Math.min(totalFrames, Math.round(occurrence.startSec * fps)))
+      const animFrames = Math.max(1, Math.round(occurrence.durationSec * fps))
+      const endFrame = Math.min(totalFrames, startFrame + animFrames)
+      const actualAnimFrames = endFrame - startFrame
+      if (actualAnimFrames < 1) continue
 
-    if (startFrame > 0) {
+      if (startFrame > cursor) {
+        regions.push({
+          kind: 'static',
+          startFrame: cursor,
+          frameCount: startFrame - cursor,
+          compositionKey: input.compositionKey,
+        })
+      }
       regions.push({
-        kind: 'static',
-        startFrame: 0,
-        frameCount: startFrame,
-        compositionKey: input.compositionKey,
+        kind: 'dynamic',
+        startFrame,
+        frameCount: actualAnimFrames,
+        compositionKey: `${input.compositionKey}|anim`,
+        animation: {
+          startSec: startFrame / fps,
+          durationSec: actualAnimFrames / fps,
+        },
       })
+      cursor = endFrame
     }
-    regions.push({
-      kind: 'dynamic',
-      startFrame,
-      frameCount: actualAnimFrames,
-      compositionKey: `${input.compositionKey}|anim`,
-      animation: {
-        startSec: startFrame / fps,
-        durationSec: actualAnimFrames / fps,
-      },
-    })
-    const tail = totalFrames - endFrame
+    if (cursor < 1) throw new Error('Subscribe animation does not fit in the export duration.')
+    const tail = totalFrames - cursor
     if (tail > 0) {
       regions.push({
         kind: 'static',
-        startFrame: endFrame,
+        startFrame: cursor,
         frameCount: tail,
         compositionKey: input.compositionKey,
       })

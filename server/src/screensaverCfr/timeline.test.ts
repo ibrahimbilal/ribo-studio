@@ -82,6 +82,28 @@ describe('buildCfrTimeline', () => {
     assert.equal(timeline.regions[1]!.frameCount, 420)
   })
 
+  it('repeats subscribe animation on the configured interval', () => {
+    const anim = defaultSubscribeAnimation()
+    anim.enabled = true
+    anim.startSec = 10
+    anim.durationSec = 7
+    anim.repeatEveryUnit = 'minutes'
+    anim.repeatEveryValue = 1
+    const timeline = buildCfrTimeline({
+      fps: 30,
+      durationSec: 190,
+      compositionKey: 'art',
+      subscribeAnimation: anim,
+    })
+    const kinds = timeline.regions.map((region) => region.kind)
+    assert.deepEqual(kinds, ['static', 'dynamic', 'static', 'dynamic', 'static', 'dynamic', 'static'])
+    assert.equal(timeline.regions.filter((region) => region.kind === 'dynamic').length, 3)
+    assert.equal(
+      timeline.regions.reduce((sum, region) => sum + region.frameCount, 0),
+      timeline.totalFrames,
+    )
+  })
+
   it('supports all CFR frame rates without drifting the sum', () => {
     for (const fps of [24, 25, 30, 50, 60]) {
       const timeline = buildCfrTimeline({

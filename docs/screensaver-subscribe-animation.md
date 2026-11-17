@@ -32,9 +32,10 @@ dynamic/<youtube-channel-id>/
 
 ## Editor
 
-- Enable the toggle, pick a **style**, set **start time**, **position**, **size (% of output width)**, and **distance from edges**.
+- Enable the toggle, pick a **style**, set **start time** (default **20 s**), optional **repeat every** N minutes/hours (export timeline only), **position**, **size (% of output width)**, and **distance from edges**.
 - **Show on preview canvas** loops the animation on the main editor canvas while tuning (default on).
 - **Channel card** style: YouTube **Fetch** for channel name, avatar, subscriber count, and canonical **channel ID** (`POST /api/youtube-channel-lookup`).
+- Repeat placements are computed by `subscribeAnimationOccurrences()` and applied in both Optimized CFR and Fast VFR hybrid export (animation segment encoded once, reused in concat).
 
 ### Styles
 

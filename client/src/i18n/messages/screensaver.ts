@@ -44,6 +44,11 @@ export const screensaver = {
       themeDark: 'Dark',
       channel: 'Channel',
       startSec: 'Start time (seconds)',
+      repeatEvery: 'Repeat every',
+      repeatUnitOff: 'Off (once)',
+      repeatUnitMinutes: 'Minutes',
+      repeatUnitHours: 'Hours',
+      repeatEveryHint: 'Replays the animation during export at this interval after the start time.',
       position: 'Position',
       positions: {
         bottomLeft: 'Bottom left',

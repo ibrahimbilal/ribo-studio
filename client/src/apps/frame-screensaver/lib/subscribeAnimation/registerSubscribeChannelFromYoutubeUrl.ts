@@ -1,7 +1,6 @@
 import {
-  DEFAULT_SUBSCRIBE_EDGE_DISTANCE,
+  defaultSubscribeAnimation,
   defaultSubscribeSizePercent,
-  SUBSCRIBE_ANIMATION_DURATION_SEC,
   type SubscribeAnimationSettings,
 } from '@shared/screensaverSubscribeAnimation'
 import * as api from '../../../../lib/api'
@@ -73,13 +72,10 @@ export async function registerSubscribeChannelFromYoutubeUrl(
   const prepareWidth = options?.prepareCacheWidth
   if (prepareWidth && lookup.channelId) {
     const prepSettings: SubscribeAnimationSettings = {
-      enabled: true,
+      ...defaultSubscribeAnimation(),
       channelName: settings.channelName || preference?.channelName || '',
       startSec: 0,
-      durationSec: SUBSCRIBE_ANIMATION_DURATION_SEC,
-      position: 'bottom-center',
       sizePercent: defaultSubscribeSizePercent('channel-card'),
-      edgeDistance: DEFAULT_SUBSCRIBE_EDGE_DISTANCE,
       style: 'channel-card',
       previewOnCanvas: false,
       channelCardTheme,

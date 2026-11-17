@@ -1,7 +1,11 @@
 import { rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { SCREENSAVER_CFR_TIMESCALE } from '../../shared/screensaver'
-import { SUBSCRIBE_ANIMATION_FPS, type SubscribeAnimationSettings } from '../../shared/screensaverSubscribeAnimation'
+import {
+  SUBSCRIBE_ANIMATION_FPS,
+  subscribeAnimationOccurrences,
+  type SubscribeAnimationSettings,
+} from '../../shared/screensaverSubscribeAnimation'
 import { resolveScreensaverMuxEligibility } from '../../shared/screensaverMuxStrategy'
 import type { EncoderId } from './encoders'
 import { n, RenderCancelled, spawnFfmpeg, verifyVideoOutput } from './ffmpegUtil'
@@ -64,40 +68,61 @@ export async function renderScreensaverHybrid(
 }> {
   if (hooks.cancelled()) throw new RenderCancelled()
   hooks.onStatus('rendering', 'Encoding subscribe animation segments')
-  const startSec = job.subscribeAnimation.startSec
-  const animSec = job.subscribeAnimation.durationSec
-  const tailSec = job.duration - startSec - animSec
-  if (tailSec < -0.01) throw new Error('Subscribe animation does not fit in the export duration.')
+  const occurrences = subscribeAnimationOccurrences(job.subscribeAnimation, job.duration)
+  if (occurrences.length < 1) throw new Error('Subscribe animation does not fit in the export duration.')
 
-  const segA = path.join(workDir, 'seg-a.mp4')
-  const segB = path.join(workDir, 'seg-b.mp4')
-  const segC = path.join(workDir, 'seg-c.mp4')
+  const animSec = occurrences[0]!.durationSec
+  const animPath = path.join(workDir, 'seg-anim.mp4')
   const concatList = path.join(workDir, 'segments.txt')
   const videoOnly = path.join(workDir, 'video-only.mp4')
+  const tempFiles: string[] = [animPath, concatList, videoOnly]
   let warning = inheritedWarning
   const eligibility = resolveScreensaverMuxEligibility()
   const expectAudio = wantsAudio(job)
 
   try {
-    if (startSec >= 0.05) {
-      await encodeStaticSegment(job, encoder, segA, startSec, hooks, 0.33, eligibility.skipIntermediateFaststart)
+    await encodeAnimationSegment(job, encoder, animPath, animSec, hooks, 0.5, eligibility.skipIntermediateFaststart)
+    if (hooks.cancelled()) throw new RenderCancelled()
+
+    type HybridPiece = { kind: 'static' | 'dynamic'; durationSec: number; path: string }
+    const pieces: HybridPiece[] = []
+    const staticByDuration = new Map<string, string>()
+    let cursor = 0
+    let staticIndex = 0
+
+    const ensureStatic = async (durationSec: number, progressCap: number): Promise<string> => {
+      const key = n(durationSec)
+      const existing = staticByDuration.get(key)
+      if (existing) return existing
+      const file = path.join(workDir, `seg-static-${staticIndex}.mp4`)
+      staticIndex += 1
+      tempFiles.push(file)
+      await encodeStaticSegment(job, encoder, file, durationSec, hooks, progressCap, eligibility.skipIntermediateFaststart)
+      staticByDuration.set(key, file)
+      return file
     }
-    await encodeAnimationSegment(job, encoder, segB, animSec, hooks, 0.66, eligibility.skipIntermediateFaststart)
+
+    for (let index = 0; index < occurrences.length; index += 1) {
+      const occurrence = occurrences[index]!
+      const gap = occurrence.startSec - cursor
+      if (gap >= 0.05) {
+        const file = await ensureStatic(gap, 0.35 + (0.4 * index) / Math.max(1, occurrences.length))
+        pieces.push({ kind: 'static', durationSec: gap, path: file })
+      }
+      pieces.push({ kind: 'dynamic', durationSec: occurrence.durationSec, path: animPath })
+      cursor = occurrence.startSec + occurrence.durationSec
+    }
+    const tailSec = job.duration - cursor
     if (tailSec >= 0.05) {
-      await encodeStaticSegment(job, encoder, segC, tailSec, hooks, 0.9, eligibility.skipIntermediateFaststart)
+      const file = await ensureStatic(tailSec, 0.9)
+      pieces.push({ kind: 'static', durationSec: tailSec, path: file })
     }
     if (hooks.cancelled()) throw new RenderCancelled()
 
     const entries: string[] = ['ffconcat version 1.0']
-    if (startSec >= 0.05) {
-      entries.push(`file '${escapeConcatPath(segA)}'`)
-      entries.push(`duration ${n(startSec)}`)
-    }
-    entries.push(`file '${escapeConcatPath(segB)}'`)
-    entries.push(`duration ${n(animSec)}`)
-    if (tailSec >= 0.05) {
-      entries.push(`file '${escapeConcatPath(segC)}'`)
-      entries.push(`duration ${n(tailSec)}`)
+    for (const piece of pieces) {
+      entries.push(`file '${escapeConcatPath(piece.path)}'`)
+      entries.push(`duration ${n(piece.durationSec)}`)
     }
     await writeFile(concatList, `${entries.join('\n')}\n`)
 
@@ -181,11 +206,7 @@ export async function renderScreensaverHybrid(
       ...audioMeta,
     }
   } finally {
-    await rm(segA, { force: true }).catch(() => undefined)
-    await rm(segB, { force: true }).catch(() => undefined)
-    await rm(segC, { force: true }).catch(() => undefined)
-    await rm(concatList, { force: true }).catch(() => undefined)
-    await rm(videoOnly, { force: true }).catch(() => undefined)
+    await Promise.all(tempFiles.map((file) => rm(file, { force: true }).catch(() => undefined)))
   }
 }
 

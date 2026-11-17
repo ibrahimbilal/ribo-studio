@@ -2,9 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ChevronDown, Download, FolderOpen, Loader2, RefreshCw } from '@lucide/vue'
 import {
-  DEFAULT_SUBSCRIBE_EDGE_DISTANCE,
+  defaultSubscribeAnimation,
   defaultSubscribeSizePercent,
-  SUBSCRIBE_ANIMATION_DURATION_SEC,
   type SubscribeAnimationSettings,
   type SubscribeAnimationStyle,
 } from '@shared/screensaverSubscribeAnimation'
@@ -100,16 +99,12 @@ function formatDate(value: number | null): string {
 
 function staticSettings(style: SubscribeAnimationStyle): SubscribeAnimationSettings {
   return {
-    enabled: true,
+    ...defaultSubscribeAnimation(),
     channelName: '',
     startSec: 0,
-    durationSec: SUBSCRIBE_ANIMATION_DURATION_SEC,
-    position: 'bottom-center',
     sizePercent: defaultSubscribeSizePercent(style),
-    edgeDistance: DEFAULT_SUBSCRIBE_EDGE_DISTANCE,
     style,
     previewOnCanvas: false,
-    channelCardTheme: 'light',
     channelUrl: '',
     channelId: null,
     channelAvatarUrl: null,
