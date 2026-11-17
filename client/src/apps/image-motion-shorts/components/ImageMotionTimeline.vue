@@ -1,14 +1,16 @@
 <script setup lang="ts">
+import { useI18n } from '../../../i18n'
 import { formatClock } from '../../../lib/format'
 import { useImageMotionStore } from '../stores/imageMotion'
 
 const store = useImageMotionStore()
+const { t } = useI18n()
 </script>
 
 <template>
   <div class="studio-panel hidden xl:flex min-h-0 shrink-0 flex-col gap-2 p-3">
     <div class="flex items-center justify-between text-xs text-zinc-500">
-      <span class="section-label">Timeline</span>
+      <span class="section-label">{{ t('imageMotion.timeline.title') }}</span>
       <span class="tabular-nums text-zinc-300">{{ formatClock(store.duration) }}</span>
     </div>
     <div class="flex gap-2 overflow-x-auto">
@@ -16,7 +18,7 @@ const store = useImageMotionStore()
         v-for="(segment, index) in store.segments"
         :key="segment.id"
         type="button"
-        class="flex flex-col cursor-pointer shrink-0 rounded-lg border bg-inset p-1 text-left"
+        class="flex flex-col cursor-pointer shrink-0 rounded-lg border bg-inset p-1 text-start"
         :class="store.selectedSegmentId === segment.id ? 'border-zinc-200' : 'border-zinc-800'"
         @click="store.selectSegment(segment.id)"
       >
@@ -27,10 +29,10 @@ const store = useImageMotionStore()
           <span class="font-semibold text-brand">{{ index + 1 }}</span>
           <span class="tabular-nums">{{ formatClock(segment.motion.duration) }}</span>
         </p>
-        <p v-if="segment.transitionAfter.type === 'fade'" class="text-[10px] font-semibold text-brand">Fade</p>
+        <p v-if="segment.transitionAfter.type === 'fade'" class="text-[10px] font-semibold text-brand">{{ t('imageMotion.timeline.fade') }}</p>
       </button>
-      <p v-if="store.segments.length === 0" class="py-2 text-sm text-zinc-500">Images appear here in playback order.</p>
+      <p v-if="store.segments.length === 0" class="py-2 text-sm text-zinc-500">{{ t('imageMotion.timeline.empty') }}</p>
     </div>
-    <p v-if="store.musicName" class="truncate text-xs text-zinc-500">Audio · {{ store.musicName }}</p>
+    <p v-if="store.musicName" class="truncate text-xs text-zinc-500">{{ t('imageMotion.timeline.audioPrefix', { name: store.musicName }) }}</p>
   </div>
 </template>

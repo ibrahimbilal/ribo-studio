@@ -29,7 +29,7 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Shell, toasts, page transition | `client/src/App.vue` |
 | Design tokens / shared classes | `client/src/style.css`, `docs/ui-design-system.md` |
 | Sidebar / header / mobile drawer / app version | `client/src/components/layout/` (`AppVersionLabel.vue`, `AppTempStorageButton.vue`, `AppThemeToggle.vue`) |
-| Global Settings modal + panels | `client/src/components/settings/` (Appearance / Integrations / Backup), store `client/src/stores/globalSettings.ts`, schema `shared/globalSettings.ts`, backup `shared/settingsBackup.ts`, appearance `client/src/lib/appearance.ts` |
+| Global Settings modal + panels | `client/src/components/settings/` (Appearance / Integrations / Backup), store `client/src/stores/globalSettings.ts`, schema `shared/globalSettings.ts`, backup `shared/settingsBackup.ts`, appearance `client/src/lib/appearance.ts`, language `client/src/lib/locale.ts`, i18n `client/src/i18n/` (`messages/*` + `locales/*`) |
 | Shared UI primitives | `client/src/components/ui/` |
 | Renderer health, notifications | `client/src/stores/platform.ts` |
 | Export queue / job poll / notifications | `client/src/lib/managedExportJobs.ts`, `exportQueueRunner.ts`, `jobPoll.ts`, `renderNotifications.ts` |

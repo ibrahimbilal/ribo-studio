@@ -7,6 +7,7 @@ client/node_modules
 server/tmp
 .DS_Store
 *.log
+client/scripts/.locale-translation-cache.json
 .idea
 .vscode
 client/public/samples

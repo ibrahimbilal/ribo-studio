@@ -2,8 +2,20 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { navItems } from '../app/navigation'
+import { useI18n } from '../i18n'
+import { NAV_DESC_KEYS, NAV_LABEL_KEYS } from '../lib/navLabels'
 
-const apps = computed(() => navItems.filter((item) => item.description))
+const { t } = useI18n()
+
+const apps = computed(() =>
+  navItems
+    .filter((item) => item.description)
+    .map((item) => ({
+      ...item,
+      label: NAV_LABEL_KEYS[item.path] ? t(NAV_LABEL_KEYS[item.path]!) : item.label,
+      description: NAV_DESC_KEYS[item.path] ? t(NAV_DESC_KEYS[item.path]!) : item.description,
+    })),
+)
 const featured = computed(() => apps.value.filter((item) => item.path === '/shorts' || item.path === '/screensaver'))
 const rest = computed(() => apps.value.filter((item) => item.path !== '/shorts' && item.path !== '/screensaver'))
 </script>
@@ -13,10 +25,10 @@ const rest = computed(() => apps.value.filter((item) => item.path !== '/shorts' 
     <div class="mx-auto grid max-w-6xl gap-10 px-5 py-8 lg:grid-cols-[17rem_minmax(0,1fr)] lg:px-10 lg:py-12">
       <section class="dash-enter lg:sticky lg:top-12 lg:self-start">
         <img src="/logo.png" alt="" class="h-16 w-16 object-contain" />
-        <p class="mt-8 text-xs font-semibold uppercase tracking-[0.22em] text-brand">All-in-One Creative Studio</p>
+        <p class="mt-8 text-xs font-semibold uppercase tracking-[0.22em] text-brand">{{ t('dashboard.tagline') }}</p>
         <h2 class="mt-3 text-4xl font-black leading-none tracking-tight text-zinc-50">Ribo Studio</h2>
         <p class="mt-4 max-w-xs text-sm leading-relaxed text-zinc-400">
-          Build Shorts rankings, ambient screensaver videos, YouTube thumbnails, exact-size image upscales, and looped audio tracks — each in its own editor, all on your machine.
+          {{ t('dashboard.blurb') }}
         </p>
       </section>
 
@@ -29,7 +41,7 @@ const rest = computed(() => apps.value.filter((item) => item.path !== '/shorts' 
             class="dash-enter group relative min-h-52 overflow-hidden rounded-2xl border border-white/10 bg-elevated p-6 transition duration-200 hover:-translate-y-1 hover:border-brand/60 hover:shadow-[0_12px_32px_rgb(0_120_248_/_0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
             :class="`dash-enter-delay-${index + 1}`"
           >
-            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Open</p>
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand">{{ t('dashboard.open') }}</p>
             <h3 class="mt-3 text-2xl font-black text-zinc-50 transition-colors group-hover:text-white">{{ app.label }}</h3>
             <p class="relative mt-2 max-w-sm text-sm leading-relaxed text-zinc-400">{{ app.description }}</p>
           </RouterLink>

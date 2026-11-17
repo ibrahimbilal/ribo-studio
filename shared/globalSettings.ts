@@ -41,6 +41,48 @@ export type AccentColorId =
 
 export type InterfaceDensity = 'compact' | 'comfortable'
 
+/**
+ * Interface language preference (UI chrome).
+ * Codes cover the most-used languages worldwide (native + L2 speakers / common localization).
+ */
+export type AppLanguage =
+  | 'en'
+  | 'zh'
+  | 'hi'
+  | 'es'
+  | 'ar'
+  | 'fr'
+  | 'bn'
+  | 'pt'
+  | 'ru'
+  | 'ur'
+  | 'id'
+  | 'de'
+  | 'ja'
+
+export type AppLanguageMeta = {
+  id: AppLanguage
+  /** Endonym shown in the language picker (not translated). */
+  nativeLabel: string
+  dir: 'ltr' | 'rtl'
+}
+
+export const APP_LANGUAGES: readonly AppLanguageMeta[] = [
+  { id: 'en', nativeLabel: 'English', dir: 'ltr' },
+  { id: 'zh', nativeLabel: '中文', dir: 'ltr' },
+  { id: 'hi', nativeLabel: 'हिन्दी', dir: 'ltr' },
+  { id: 'es', nativeLabel: 'Español', dir: 'ltr' },
+  { id: 'ar', nativeLabel: 'العربية', dir: 'rtl' },
+  { id: 'fr', nativeLabel: 'Français', dir: 'ltr' },
+  { id: 'bn', nativeLabel: 'বাংলা', dir: 'ltr' },
+  { id: 'pt', nativeLabel: 'Português', dir: 'ltr' },
+  { id: 'ru', nativeLabel: 'Русский', dir: 'ltr' },
+  { id: 'ur', nativeLabel: 'اردو', dir: 'rtl' },
+  { id: 'id', nativeLabel: 'Bahasa Indonesia', dir: 'ltr' },
+  { id: 'de', nativeLabel: 'Deutsch', dir: 'ltr' },
+  { id: 'ja', nativeLabel: '日本語', dir: 'ltr' },
+] as const
+
 export type GlobalSettingsCategory =
   | 'general'
   | 'appearance'
@@ -52,6 +94,7 @@ export type GlobalSettingsCategory =
   | 'about'
 
 export interface GlobalSettingsGeneral {
+  language: AppLanguage
   desktopNotifications: boolean
   exportCompletionNotifications: boolean
   rememberLastApp: boolean
@@ -124,6 +167,7 @@ export const DEFAULT_FILENAME_PATTERN = '{projectName}-{appName}-{date}.{extensi
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   schemaVersion: GLOBAL_SETTINGS_SCHEMA_VERSION,
   general: {
+    language: 'en',
     desktopNotifications: false,
     exportCompletionNotifications: true,
     rememberLastApp: false,
@@ -184,8 +228,17 @@ const ACCENT_VALUES: readonly AccentColorId[] = [
   'slate',
 ]
 const DENSITY_VALUES: readonly InterfaceDensity[] = ['compact', 'comfortable']
+const LANGUAGE_VALUES: readonly AppLanguage[] = APP_LANGUAGES.map((item) => item.id)
 
 const APP_PATHS = new Set(['/', '/shorts', '/screensaver', '/thumbnails', '/upscale', '/looper'])
+
+export function isAppLanguage(value: unknown): value is AppLanguage {
+  return typeof value === 'string' && (LANGUAGE_VALUES as readonly string[]).includes(value)
+}
+
+export function appLanguageMeta(id: AppLanguage): AppLanguageMeta {
+  return APP_LANGUAGES.find((item) => item.id === id) ?? APP_LANGUAGES[0]!
+}
 
 export function isThemePreference(value: unknown): value is ThemePreference {
   return typeof value === 'string' && (THEME_VALUES as readonly string[]).includes(value)
@@ -305,6 +358,7 @@ export function applyOverwriteProtection(filename: string, existingNames: Iterab
 function normalizeGeneral(raw: unknown, fallback: GlobalSettingsGeneral): GlobalSettingsGeneral {
   const data = raw && typeof raw === 'object' ? (raw as Partial<GlobalSettingsGeneral>) : {}
   return {
+    language: isAppLanguage(data.language) ? data.language : fallback.language,
     desktopNotifications: asBool(data.desktopNotifications, fallback.desktopNotifications),
     exportCompletionNotifications: asBool(
       data.exportCompletionNotifications,

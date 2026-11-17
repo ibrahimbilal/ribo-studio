@@ -2,11 +2,14 @@
 import { computed } from 'vue'
 import AppExportAction from '../../../components/ui/AppExportAction.vue'
 import { useScreensaverStore } from '../stores/screensaver'
+import { useI18n } from '../../../i18n'
+import { S } from '../lib/screensaverI18n'
 
 const store = useScreensaverStore()
+const { t } = useI18n()
 
 const label = computed(() =>
-  store.activeExportCount > 0 ? 'Queue export' : 'Export MP4',
+  store.activeExportCount > 0 ? t(S('exportBar.queue')) : t(S('exportBar.exportMp4')),
 )
 </script>
 
@@ -24,7 +27,7 @@ const label = computed(() =>
       type="button"
       @click="store.exportWithCpu()"
     >
-      Export with CPU instead
+      {{ t(S('exportBar.cpuFallback')) }}
     </button>
   </AppExportAction>
 </template>

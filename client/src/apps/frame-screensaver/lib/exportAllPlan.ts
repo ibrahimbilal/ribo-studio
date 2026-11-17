@@ -15,6 +15,23 @@ const DUPLICATE_EXPORT_SKIP_LABEL = 'Change the project before exporting again.'
 
 export const MAX_SCREENSAVER_EXPORT_JOBS = 12
 
+/** Maps skip reason id to `screensaver.exportAll.skip.*` message path (without `screensaver.` prefix). */
+export const EXPORT_ALL_SKIP_I18N: Record<ExportAllSkipReason, string> = {
+  'no-media': 'exportAll.skip.noMedia',
+  'source-missing': 'exportAll.skip.sourceMissing',
+  'not-uploaded': 'exportAll.skip.notUploaded',
+  'already-exporting': 'exportAll.skip.alreadyExporting',
+  'invalid-mode': 'exportAll.skip.invalidMode',
+  'invalid-cfr': 'exportAll.skip.invalidCfr',
+  'invalid-duration': 'exportAll.skip.invalidDuration',
+  'audio-missing': 'exportAll.skip.audioMissing',
+  'audio-busy': 'exportAll.skip.audioBusy',
+  'frame-missing': 'exportAll.skip.frameMissing',
+  'subscribe-invalid': 'exportAll.skip.subscribeInvalid',
+  'duplicate-export': 'exportAll.skip.duplicateExport',
+  'queue-full': 'exportAll.skip.queueFull',
+}
+
 export type ExportAllSkipReason =
   | 'no-media'
   | 'source-missing'

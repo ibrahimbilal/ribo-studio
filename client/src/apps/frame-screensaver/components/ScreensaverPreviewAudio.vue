@@ -4,6 +4,8 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import * as api from '../../../lib/api'
 import { formatClock } from '../../../lib/format'
 import { useScreensaverStore } from '../stores/screensaver'
+import { useI18n } from '../../../i18n'
+import { S } from '../lib/screensaverI18n'
 
 type PlaylistTrack = {
   index: number
@@ -21,6 +23,7 @@ type TimelineSegment = {
 }
 
 const store = useScreensaverStore()
+const { t } = useI18n()
 const audioEl = ref<HTMLAudioElement | null>(null)
 const playing = ref(false)
 const muted = ref(false)
@@ -62,7 +65,7 @@ const boundaryMarks = computed(() => {
   }))
 })
 const label = computed(
-  () => currentSegment.value?.track.name || store.audioFileName || 'Background audio',
+  () => currentSegment.value?.track.name || store.audioFileName || t(S('previewAudio.fallbackLabel')),
 )
 
 function trackWindow(track: PlaylistTrack): { start: number; end: number; length: number } {
@@ -261,7 +264,7 @@ function fallbackTracks(): PlaylistTrack[] {
   return [
     {
       index: 0,
-      name: store.audioFileName || 'Background audio',
+      name: store.audioFileName || t(S('previewAudio.fallbackLabel')),
       url,
       duration: durationSec,
       trimStart: 0,
@@ -335,7 +338,7 @@ async function loadPlaylist() {
     await bindCurrentTrack({ autoplay: false })
   } catch (error) {
     if (loadId !== playlistLoadId) return
-    playlistError.value = error instanceof Error ? error.message : 'Could not load audio.'
+    playlistError.value = error instanceof Error ? error.message : t(S('previewAudio.loadError'))
     tracks.value = fallbackTracks()
     trackIndex.value = 0
     await bindCurrentTrack({ autoplay: false })
@@ -389,8 +392,8 @@ onBeforeUnmount(() => {
       <button
         class="cursor-pointer disabled:cursor-default disabled:opacity-40"
         type="button"
-        :aria-label="playing ? 'Pause audio' : 'Play audio'"
-        :title="playing ? 'Pause' : 'Play'"
+        :aria-label="playing ? t(S('previewAudio.pauseAria')) : t(S('previewAudio.playAria'))"
+        :title="playing ? t(S('previewAudio.pauseTitle')) : t(S('previewAudio.playTitle'))"
         :disabled="!ready"
         @click="togglePlay"
       >
@@ -400,8 +403,8 @@ onBeforeUnmount(() => {
       <button
         class="cursor-pointer"
         type="button"
-        :aria-label="muted ? 'Unmute audio' : 'Mute audio'"
-        :title="muted ? 'Unmute' : 'Mute'"
+        :aria-label="muted ? t(S('previewAudio.unmuteAria')) : t(S('previewAudio.muteAria'))"
+        :title="muted ? t(S('previewAudio.unmuteTitle')) : t(S('previewAudio.muteTitle'))"
         @click="toggleMute"
       >
         <VolumeX v-if="muted" :size="18" />
@@ -430,7 +433,7 @@ onBeforeUnmount(() => {
         :value="Math.min(timelineTime, totalDuration || timelineTime)"
         :disabled="!ready || totalDuration <= 0"
         :style="{ '--progress': `${progress}%` }"
-        aria-label="Audio playback position"
+        :aria-label="t(S('previewAudio.seekAria'))"
         @pointerdown="seeking = true"
         @input="onSeekInput"
         @change="onSeekCommit"

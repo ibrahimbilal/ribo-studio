@@ -10,10 +10,12 @@ import {
   WAVEFORM_PLAYED_OPACITY,
   WAVEFORM_UNPLAYED_OPACITY,
 } from '../lib/waveform'
+import { useI18n } from '../../../i18n'
 import { useAudioLooperStore } from '../stores/audioLooper'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 
 const store = useAudioLooperStore()
+const { t } = useI18n()
 const globalSettings = useGlobalSettingsStore()
 const audioEl = ref<HTMLAudioElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -261,7 +263,7 @@ async function toggle(): Promise<void> {
     try {
       await audio.play()
     } catch {
-      error.value = 'This browser could not play the audio file.'
+      error.value = t('looper.preview.playError')
     }
   } else {
     audio.pause()
@@ -308,7 +310,7 @@ function onEnded(): void {
 function onError(): void {
   playing.value = false
   ready.value = false
-  error.value = 'This browser could not play the audio file.'
+  error.value = t('looper.preview.playError')
   stopLoop()
 }
 
@@ -440,7 +442,7 @@ onBeforeUnmount(() => {
         class="h-24 w-full cursor-pointer touch-none rounded-md sm:h-28"
         role="slider"
         tabindex="0"
-        aria-label="Seek"
+        :aria-label="t('looper.preview.seek')"
         :aria-valuemin="0"
         :aria-valuemax="duration || 0"
         :aria-valuenow="currentTime"
@@ -458,8 +460,8 @@ onBeforeUnmount(() => {
         <button
           class="cursor-pointer disabled:cursor-default disabled:opacity-40"
           type="button"
-          :aria-label="playing ? 'Pause' : 'Play'"
-          :title="playing ? 'Pause' : 'Play'"
+          :aria-label="playing ? t('common.pause') : t('common.play')"
+          :title="playing ? t('common.pause') : t('common.play')"
           :disabled="!canPlay"
           @click="toggle"
         >
@@ -469,8 +471,8 @@ onBeforeUnmount(() => {
         <button
           class="cursor-pointer"
           type="button"
-          :aria-label="muted ? 'Unmute' : 'Mute'"
-          :title="muted ? 'Unmute' : 'Mute'"
+          :aria-label="muted ? t('common.unmute') : t('common.mute')"
+          :title="muted ? t('common.unmute') : t('common.mute')"
           @click="toggleMute"
         >
           <VolumeX v-if="muted" :size="18" />

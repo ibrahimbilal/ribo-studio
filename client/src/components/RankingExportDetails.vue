@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from '../i18n'
 import AppExportStatusPanel from './ui/AppExportStatusPanel.vue'
 import { usePlayback } from '../composables/usePlayback'
 import { formatClock } from '../lib/format'
@@ -7,6 +8,7 @@ import { useProjectStore } from '../stores/project'
 
 const store = useProjectStore()
 const playback = usePlayback()
+const { t } = useI18n()
 const open = ref(false)
 
 const visible = computed(
@@ -37,29 +39,37 @@ const renderedFramesLabel = computed(() => {
 })
 
 const rows = computed(() => [
-  { label: 'Stage', value: store.exportState.stage || store.exportState.message || '—' },
-  { label: 'Total frames', value: totalFrames.value.toLocaleString() },
-  { label: 'Rendered frames', value: renderedFramesLabel.value },
-  { label: 'Encoding', value: store.exportState.encoder || '—' },
+  { label: t('ranking.export.rows.stage'), value: store.exportState.stage || store.exportState.message || '—' },
+  { label: t('ranking.export.rows.totalFrames'), value: totalFrames.value.toLocaleString() },
+  { label: t('ranking.export.rows.renderedFrames'), value: renderedFramesLabel.value },
+  { label: t('ranking.export.rows.encoding'), value: store.exportState.encoder || '—' },
   {
-    label: 'Acceleration',
-    value: store.exportState.hardware == null ? '—' : store.exportState.hardware ? 'Active' : 'Off',
+    label: t('ranking.export.rows.acceleration'),
+    value:
+      store.exportState.hardware == null
+        ? '—'
+        : store.exportState.hardware
+          ? t('ranking.export.rows.accelerationActive')
+          : t('ranking.export.rows.accelerationOff'),
   },
   {
-    label: 'Speed',
-    value: store.exportState.encodeSpeed != null ? `${store.exportState.encodeSpeed.toFixed(2)}x realtime` : '—',
+    label: t('ranking.export.rows.speed'),
+    value:
+      store.exportState.encodeSpeed != null
+        ? t('ranking.export.rows.speedRealtime', { n: store.exportState.encodeSpeed.toFixed(2) })
+        : '—',
   },
   {
-    label: 'Encode fps',
+    label: t('ranking.export.rows.encodeFps'),
     value: store.exportState.encodeFps != null ? store.exportState.encodeFps.toFixed(1) : '—',
   },
-  { label: 'Elapsed', value: formatSeconds(store.exportState.elapsedSec) },
+  { label: t('ranking.export.rows.elapsed'), value: formatSeconds(store.exportState.elapsedSec) },
   {
-    label: 'Remaining',
-    value: store.exportState.etaSec == null ? 'Estimating…' : formatSeconds(store.exportState.etaSec),
+    label: t('ranking.export.rows.remaining'),
+    value: store.exportState.etaSec == null ? t('common.estimating') : formatSeconds(store.exportState.etaSec),
   },
   {
-    label: 'Output',
+    label: t('ranking.export.rows.output'),
     value: `${store.style.video.width}×${store.style.video.height} · ${store.style.video.fps} fps · ${formatClock(playback.duration.value)}`,
   },
 ])

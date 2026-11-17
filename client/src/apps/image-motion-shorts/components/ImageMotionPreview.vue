@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { Maximize, Minimize, Pause, Play, Volume2, VolumeX } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from '../../../i18n'
 import { formatClock } from '../../../lib/format'
 import { useImageMotionPlayback } from '../composables/useImageMotionPlayback'
 import { useImageMotionStore } from '../stores/imageMotion'
 
 const store = useImageMotionStore()
+const { t } = useI18n()
 const playback = useImageMotionPlayback()
 const root = ref<HTMLElement | null>(null)
 const player = ref<HTMLElement | null>(null)
@@ -104,29 +106,29 @@ watch(
     >
       <div class="absolute inset-0 flex items-center justify-center overflow-hidden">
       <div class="relative" :style="scaleBoxStyle">
-        <div class="preview-well relative cursor-pointer" :style="stageStyle" title="Play or pause" @click="playback.toggle()">
+        <div class="preview-well relative cursor-pointer" :style="stageStyle" :title="t('imageMotion.preview.playOrPause')" @click="playback.toggle()">
           <canvas ref="canvasRef" class="block" :style="{ width: `${store.video.width}px`, height: `${store.video.height}px` }" />
         </div>
         <p
           v-if="store.segments.length === 0"
           class="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-zinc-400"
         >
-          Add an image to preview the pan.
+          {{ t('imageMotion.preview.empty') }}
         </p>
       </div>
       </div>
       <div ref="controlsEl" class="absolute bottom-0 left-0 right-0 w-full shrink-0 px-3 pb-3 pt-2">
         <div class="flex items-center gap-3 text-white">
-          <button class="cursor-pointer disabled:cursor-default disabled:opacity-40" type="button" :aria-label="playback.playing.value ? 'Pause' : 'Play'" :disabled="playback.duration.value <= 0" @click="playback.toggle()">
+          <button class="cursor-pointer disabled:cursor-default disabled:opacity-40" type="button" :aria-label="playback.playing.value ? t('common.pause') : t('common.play')" :disabled="playback.duration.value <= 0" @click="playback.toggle()">
             <Pause v-if="playback.playing.value" :size="18" />
             <Play v-else :size="18" />
           </button>
-          <button class="cursor-pointer" type="button" :aria-label="playback.muted.value ? 'Unmute' : 'Mute'" @click="playback.muted.value = !playback.muted.value">
+          <button class="cursor-pointer" type="button" :aria-label="playback.muted.value ? t('common.unmute') : t('common.mute')" @click="playback.muted.value = !playback.muted.value">
             <VolumeX v-if="playback.muted.value" :size="18" />
             <Volume2 v-else :size="18" />
           </button>
           <span class="text-sm tabular-nums">{{ formatClock(playback.playhead.value) }} / {{ formatClock(playback.duration.value) }}</span>
-          <button class="ml-auto cursor-pointer" type="button" :aria-label="fullscreen ? 'Exit fullscreen' : 'Fullscreen'" @click="toggleFullscreen">
+          <button class="ms-auto cursor-pointer" type="button" :aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')" @click="toggleFullscreen">
             <Minimize v-if="fullscreen" :size="18" />
             <Maximize v-else :size="18" />
           </button>
@@ -140,7 +142,7 @@ watch(
           :value="Math.min(playback.playhead.value, playback.duration.value)"
           :disabled="playback.duration.value <= 0"
           :style="{ '--progress': `${progress}%` }"
-          aria-label="Playback position"
+          :aria-label="t('imageMotion.preview.playbackPosition')"
           @input="onSeek"
         />
       </div>

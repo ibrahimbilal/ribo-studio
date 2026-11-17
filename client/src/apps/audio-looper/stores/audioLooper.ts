@@ -5,7 +5,6 @@ import {
   DEFAULT_PLAYLIST_CROSSFADE_SECONDS,
   defaultAudioLooperSettings,
   estimateOutputBytes,
-  formatDurationLabel,
   MAX_AUDIO_LOOPER_TRACKS,
   maxCrossfadeForSource,
   MAX_DURATION_SECONDS,
@@ -33,7 +32,10 @@ import { computed, ref, watch } from 'vue'
 import { probeLooperAudio } from '../../../lib/api'
 import { audioFormatLabel } from '../../../lib/media'
 import { formatBytes, formatClock } from '../../../lib/format'
-import { DUPLICATE_EXPORT_MESSAGE, stableExportFingerprint } from '../../../lib/exportFingerprint'
+import { translate } from '../../../i18n'
+import { formatDurationLabelI18n } from '../../../lib/formatDurationLabelI18n'
+import { stableExportFingerprint } from '../../../lib/exportFingerprint'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { useManagedExportJobs } from '../../../lib/managedExportJobs'
 import { usePlatformStore } from '../../../stores/platform'
 import { requestAudioLooperPreview, submitAudioLooperExport } from '../lib/audioLooperExport'
@@ -121,6 +123,9 @@ function durationFromElement(url: string): Promise<number | null> {
 
 export const useAudioLooperStore = defineStore('audio-looper', () => {
   const platform = usePlatformStore()
+  const globalSettings = useGlobalSettingsStore()
+  const t = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
+    translate(globalSettings.general.language, key, params)
   const persisted = loadPersisted()
   const exportQueue = useManagedExportJobs()
 
@@ -209,7 +214,7 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
   })
 
   const durationPresetKey = computed(() => String(targetDurationSeconds.value))
-  const durationLabel = computed(() => formatDurationLabel(targetDurationSeconds.value))
+  const durationLabel = computed(() => formatDurationLabelI18n(targetDurationSeconds.value, t))
 
   /** Average bitrate from file size ÷ duration (Web Audio sampleRate is often the context rate, not the file). */
   function estimateBitrateKbps(track: LooperTrack): number | null {
@@ -235,12 +240,12 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
 
   const mp3BitrateHint = computed(() => {
     if (!hasSourceBitrate.value) {
-      return 'Defaults to 320 kbps until a track bitrate is known.'
+      return t('looper.settings.mp3BitrateDefault')
     }
     if (mp3Bitrate.value === suggestedMp3Bitrate.value) {
-      return `Auto-selected from the highest bitrate of your uploaded tracks.`
+      return t('looper.settings.mp3BitrateAuto')
     }
-    return `Manual override. Source match would be ${suggestedMp3Bitrate.value} kbps.`
+    return t('looper.settings.mp3BitrateManual', { rate: suggestedMp3Bitrate.value })
   })
 
   const currentSettings = computed((): AudioLooperSettings => ({
@@ -268,7 +273,7 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
       if (playlistPlan.value.error) return playlistPlan.value.error
       return null
     } catch (error) {
-      return error instanceof Error ? error.message : 'Check the loop settings.'
+      return error instanceof Error ? error.message : t('looper.settings.checkSettings')
     }
   })
 
@@ -321,11 +326,11 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
   const exportStatusLabel = computed(() => {
     const mode = isPlaylist.value
       ? playlistCrossfade.value
-        ? 'Crossfade'
-        : 'Playlist'
+        ? t('looper.export.statusCrossfade')
+        : t('looper.export.statusPlaylist')
       : loopMode.value === 'seamless'
-        ? 'Seamless'
-        : 'Simple'
+        ? t('looper.export.statusSeamless')
+        : t('looper.export.statusSimple')
     const base = `${durationLabel.value} · ${mode} · ${format.value.toUpperCase()}`
     const label = readyExport.value?.state.processingLabel
     return label ? `${base} · ${label}` : base
@@ -333,12 +338,12 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
 
   /** Shared readiness for Export and Send-to-Screensaver (excludes duplicate-export lock). */
   const sendBlocker = computed(() => {
-    if (!platform.serverOnline) return 'The renderer is offline.'
-    if (tracks.value.length === 0) return 'Choose an audio file to loop.'
-    if (playbackTracks.value.some((track) => track.status === 'reading')) return 'Wait for the audio duration to load.'
+    if (!platform.serverOnline) return t('looper.blockers.offline')
+    if (tracks.value.length === 0) return t('looper.blockers.noFile')
+    if (playbackTracks.value.some((track) => track.status === 'reading')) return t('looper.blockers.waitDuration')
     const failed = playbackTracks.value.find((track) => track.status === 'error')
-    if (failed) return failed.error ?? 'Remove the track that could not be read.'
-    if (readyTracks.value.length === 0) return 'Wait for the audio duration to load.'
+    if (failed) return failed.error ?? t('looper.blockers.removeBadTrack')
+    if (readyTracks.value.length === 0) return t('looper.blockers.waitDuration')
     if (settingsError.value) return settingsError.value
     return null
   })
@@ -349,7 +354,7 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
       lastEnqueuedExportFingerprint.value &&
       lastEnqueuedExportFingerprint.value === currentExportFingerprint.value
     ) {
-      return DUPLICATE_EXPORT_MESSAGE
+      return t('looper.duplicateExportBlocker')
     }
     return null
   })
@@ -793,7 +798,7 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     try {
       settings = buildExportSettings()
     } catch (error) {
-      platform.toast(error instanceof Error ? error.message : 'Check the loop settings.', 'error')
+      platform.toast(error instanceof Error ? error.message : t('looper.settings.checkSettings'), 'error')
       return
     }
     const displayNameText = name.value.trim() || 'Untitled loop'
@@ -850,7 +855,7 @@ export const useAudioLooperStore = defineStore('audio-looper', () => {
     } catch (error) {
       if (controller.signal.aborted) return
       mixPreviewState.value = 'error'
-      mixPreviewError.value = error instanceof Error ? error.message : 'The preview could not be created.'
+      mixPreviewError.value = error instanceof Error ? error.message : t('looper.preview.previewMixFailed')
     }
   }
 

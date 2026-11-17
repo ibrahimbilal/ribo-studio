@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatDurationLabel } from '@shared/screensaver'
+import { formatDurationLabel, MAX_DURATION_SECONDS, MIN_DURATION_SECONDS } from '@shared/screensaver'
 import { Copy, Download, FileOutput, FolderOutput, ImagePlay, ImagePlus, Info, Music, Pencil, RotateCcw, Trash2 } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { formatBytes, formatClock } from '../../../lib/format'
@@ -12,13 +12,21 @@ import {
   selectAllProjectIds,
   toggleProjectSelection,
 } from '../../../lib/multiSelect'
-import { skipReasonLabel, type ExportAllDecision } from '../lib/exportAllPlan'
-import { screensaverStatusLabel, type ScreensaverProjectStatus } from '../lib/screensaverProjectModel'
+import {
+  EXPORT_ALL_SKIP_I18N,
+  MAX_SCREENSAVER_EXPORT_JOBS,
+  type ExportAllDecision,
+  type ExportAllSkipReason,
+} from '../lib/exportAllPlan'
+import type { ScreensaverProjectStatus } from '../lib/screensaverProjectModel'
+import { useI18n } from '../../../i18n'
+import { S } from '../lib/screensaverI18n'
 import { createThumbnailFromScreensaver } from '../lib/createThumbnail'
 import { sendScreensaverImageToImageMotion } from '../lib/sendToImageMotion'
 import { useScreensaverStore } from '../stores/screensaver'
 
 const store = useScreensaverStore()
+const { t } = useI18n()
 const renameId = ref<string | null>(null)
 const renameValue = ref('')
 const deleteId = ref<string | null>(null)
@@ -90,20 +98,51 @@ function audioIconClass(state: string): string {
   return 'text-zinc-400'
 }
 
+function projectStatusLabel(status: ScreensaverProjectStatus, queuePosition?: number | null): string {
+  if (status === 'queued' && queuePosition != null && queuePosition > 0) {
+    return t(S('status.queuedPosition'), { n: queuePosition })
+  }
+  return t(S(`status.${status}`))
+}
+
 function uploadStatusLabel(project: (typeof store.projects)[number]): string {
-  if (project.upload.state === 'uploading') return `Uploading ${Math.round(project.upload.progress * 100)}%`
-  if (project.upload.state === 'error') return 'Upload failed'
-  return 'Uploaded'
+  if (project.upload.state === 'uploading') {
+    return t(S('projects.upload.uploading'), { percent: Math.round(project.upload.progress * 100) })
+  }
+  if (project.upload.state === 'error') return t(S('projects.upload.failed'))
+  return t(S('projects.upload.uploaded'))
 }
 
 function audioStatusLabel(project: (typeof store.projects)[number]): string {
   const audio = project.audio
-  if (audio.state === 'uploading') return `Uploading ${Math.round(audio.progress * 100)}%`
-  if (audio.state === 'validating') return 'Checking audio…'
-  if (audio.state === 'missing') return 'Audio missing'
-  if (audio.state === 'error') return 'Audio failed'
-  if (audio.state === 'available') return 'Audio ready'
-  return 'Background audio'
+  if (audio.state === 'uploading') {
+    return t(S('projects.audio.uploading'), { percent: Math.round(audio.progress * 100) })
+  }
+  if (audio.state === 'validating') return t(S('projects.audio.validating'))
+  if (audio.state === 'missing') return t(S('projects.audio.missing'))
+  if (audio.state === 'error') return t(S('projects.audio.failed'))
+  if (audio.state === 'available') return t(S('projects.audio.ready'))
+  return t(S('projects.audio.background'))
+}
+
+function mediaKindLabel(kind: 'image' | 'video' | null): string {
+  if (kind === 'image') return t(S('mediaKind.oneImage'))
+  if (kind === 'video') return t(S('mediaKind.oneVideo'))
+  return t(S('mediaKind.none'))
+}
+
+function skipReasonText(reason: ExportAllSkipReason): string {
+  const path = EXPORT_ALL_SKIP_I18N[reason]
+  if (reason === 'invalid-duration') {
+    return t(S(path), {
+      min: formatDurationLabel(MIN_DURATION_SECONDS),
+      max: formatDurationLabel(MAX_DURATION_SECONDS),
+    })
+  }
+  if (reason === 'queue-full') {
+    return t(S(path), { max: MAX_SCREENSAVER_EXPORT_JOBS })
+  }
+  return t(S(path))
 }
 
 function uploadMeta(project: (typeof store.projects)[number]): string {
@@ -263,17 +302,17 @@ async function openSoundSettingsFor(id: string) {
 <template>
   <section class="flex min-h-0 flex-1 flex-col">
     <div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-      <h3 class="section-label">Projects</h3>
+      <h3 class="section-label">{{ t(S('projects.title')) }}</h3>
       <div class="flex items-center gap-1">
         <button
           class="btn btn-ghost cursor-pointer px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40"
           type="button"
           :disabled="approxExportableCount === 0 || exportingAll"
-          :title="exportingAll ? 'Submitting…' : 'Export all eligible projects'"
+          :title="exportingAll ? t(S('projects.submitting')) : t(S('projects.exportAllTitle'))"
           @click="openExportAll"
         >
           <FolderOutput  :size="14" />
-          Export all
+          {{ t(S('projects.exportAll')) }}
         </button>
         <button
           class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
@@ -282,14 +321,14 @@ async function openSoundSettingsFor(id: string) {
           @click="deleteAllOpen = true"
         >
           <Trash2 :size="14" />
-          Delete all
+          {{ t('common.deleteAll') }}
         </button>
       </div>
     </div>
 
     <div class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">
       <p v-if="store.projects.length === 0" class="px-2 py-8 text-center text-sm text-zinc-500">
-        Drop an image or video to create a project.
+        {{ t(S('projects.empty')) }}
       </p>
 
       <article
@@ -307,17 +346,17 @@ async function openSoundSettingsFor(id: string) {
         <div class="flex gap-2">
           <div class="h-14 w-24 shrink-0 overflow-hidden rounded bg-zinc-900">
             <img v-if="project.thumbnail" :src="project.thumbnail" alt="" class="h-full w-full object-cover" />
-            <span v-else class="flex h-full items-center justify-center text-[10px] text-zinc-600">No image</span>
+            <span v-else class="flex h-full items-center justify-center text-[10px] text-zinc-600">{{ t(S('projects.noImage')) }}</span>
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-start gap-2">
               <p class="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100" :title="project.name">{{ project.name }}</p>
               <span class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" :class="statusClass(project.render.status)">
-                {{ screensaverStatusLabel(project.render.status, project.queuePosition) }}
+                {{ projectStatusLabel(project.render.status, project.queuePosition) }}
               </span>
             </div>
             <p class="mt-0.5 truncate text-xs text-zinc-500">
-              {{ project.mediaLabel }} · {{ formatDurationLabel(project.durationSeconds) }} · {{ project.outputWidth }}×{{ project.outputHeight }}
+              {{ mediaKindLabel(project.mediaKind) }} · {{ formatDurationLabel(project.durationSeconds) }} · {{ project.outputWidth }}×{{ project.outputHeight }}
             </p>
             <p class="mt-0.5 text-xs text-zinc-500">{{ formatUpdated(project.updatedAt) }}</p>
           </div>
@@ -330,9 +369,9 @@ async function openSoundSettingsFor(id: string) {
           />
         </div>
 
-        <p v-if="project.sourceMissing" class="mt-2 text-xs text-amber-200">Source file is no longer available.</p>
-        <p v-if="project.frameMissing" class="mt-1 text-xs text-amber-200">Selected frame is no longer on the server.</p>
-        <p v-if="project.outputMissing" class="mt-1 text-xs text-amber-200">Rendered video is no longer available.</p>
+        <p v-if="project.sourceMissing" class="mt-2 text-xs text-amber-200">{{ t(S('projects.sourceMissing')) }}</p>
+        <p v-if="project.frameMissing" class="mt-1 text-xs text-amber-200">{{ t(S('projects.frameMissing')) }}</p>
+        <p v-if="project.outputMissing" class="mt-1 text-xs text-amber-200">{{ t(S('projects.outputMissing')) }}</p>
         <p v-if="project.render.status === 'failed' && project.render.error" class="mt-1 text-xs text-red-300">{{ project.render.error }}</p>
 
         <div class="mt-2 flex" @click.stop>
@@ -340,7 +379,7 @@ async function openSoundSettingsFor(id: string) {
             class="icon-action"
             :class="uploadIconClass(project.upload.state)"
             type="button"
-            aria-label="Upload details"
+            :aria-label="t('common.uploadDetails')"
             @mouseenter="showInfoTip($event, project.id, 'source')"
             @mouseleave="hideInfoTip"
             @focus="showInfoTip($event, project.id, 'source')"
@@ -353,8 +392,8 @@ async function openSoundSettingsFor(id: string) {
             class="icon-action"
             :class="audioIconClass(project.audio.state)"
             type="button"
-            aria-label="Open Sound settings"
-            title="Sound settings"
+            :aria-label="t(S('projects.openSound'))"
+            :title="t(S('projects.soundSettings'))"
             @mouseenter="showInfoTip($event, project.id, 'audio')"
             @mouseleave="hideInfoTip"
             @focus="showInfoTip($event, project.id, 'audio')"
@@ -366,8 +405,8 @@ async function openSoundSettingsFor(id: string) {
           <button
             class="icon-action"
             type="button"
-            aria-label="Rename project"
-            title="Rename"
+            :aria-label="t(S('dialogs.rename.title'))"
+            :title="t('common.rename')"
             @click="startRename(project.id, project.name)"
           >
             <Pencil :size="16" />
@@ -375,8 +414,8 @@ async function openSoundSettingsFor(id: string) {
           <button
             class="icon-action"
             type="button"
-            aria-label="Duplicate project"
-            title="Duplicate"
+            :aria-label="t(S('projects.duplicateAria'))"
+            :title="t('common.duplicate')"
             @click="store.duplicateProject(project.id)"
           >
             <Copy :size="16" />
@@ -385,8 +424,8 @@ async function openSoundSettingsFor(id: string) {
             v-if="canImageHandoff(project)"
             class="icon-action"
             type="button"
-            aria-label="Create Thumbnail"
-            title="Create Thumbnail"
+            :aria-label="t(S('projects.createThumbnailAria'))"
+            :title="t(S('projects.createThumbnailTitle'))"
             @click="createThumbnailFor(project.id)"
           >
             <ImagePlus :size="16" />
@@ -395,8 +434,8 @@ async function openSoundSettingsFor(id: string) {
             v-if="canImageHandoff(project)"
             class="icon-action"
             type="button"
-            aria-label="Send image to Image Motion Shorts"
-            title="Send image to Image Motion Shorts"
+            :aria-label="t(S('sendToImageMotion.aria'))"
+            :title="t(S('sendToImageMotion.title'))"
             @click="sendToImageMotionFor(project.id)"
           >
             <ImagePlay :size="16" />
@@ -405,8 +444,8 @@ async function openSoundSettingsFor(id: string) {
             v-if="project.render.outputUrl && !project.outputMissing"
             class="icon-action"
             type="button"
-            aria-label="Download video"
-            title="Download"
+            :aria-label="t(S('projects.downloadAria'))"
+            :title="t('common.download')"
             @click="store.downloadProjectOutput(project.id)"
           >
             <Download :size="16" />
@@ -415,17 +454,17 @@ async function openSoundSettingsFor(id: string) {
             v-if="project.render.status === 'failed'"
             class="icon-action"
             type="button"
-            aria-label="Retry render"
-            title="Retry"
+            :aria-label="t(S('projects.retryAria'))"
+            :title="t('common.retry')"
             @click="store.retryProject(project.id)"
           >
             <RotateCcw :size="16" />
           </button>
           <button
-            class="icon-action icon-action--danger ml-auto"
+            class="icon-action icon-action--danger ms-auto"
             type="button"
-            aria-label="Delete project"
-            title="Delete"
+            :aria-label="t(S('projects.deleteAria'))"
+            :title="t('common.delete')"
             :disabled="project.live"
             @click="startDelete(project.id)"
           >
@@ -443,7 +482,7 @@ async function openSoundSettingsFor(id: string) {
         @click="downloadAll"
       >
         <Download :size="16" />
-        Download all
+        {{ t(S('projects.downloadAll')) }}
       </button>
     </div>
 
@@ -472,40 +511,40 @@ async function openSoundSettingsFor(id: string) {
       </div>
     </Teleport>
 
-    <AppDialog :open="renameId !== null" title="Rename project" @cancel="closeRename">
+    <AppDialog :open="renameId !== null" :title="t(S('dialogs.rename.title'))" @cancel="closeRename">
       <label class="block">
-        <span class="section-label mb-1 block">Name</span>
+        <span class="section-label mb-1 block">{{ t(S('dialogs.rename.name')) }}</span>
         <input v-model="renameValue" class="field text-sm" type="text" maxlength="80" @keydown.enter.prevent="confirmRename" />
       </label>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeRename">Cancel</button>
-        <button class="btn btn-primary cursor-pointer" type="button" @click="confirmRename">Save</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeRename">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary cursor-pointer" type="button" @click="confirmRename">{{ t('common.save') }}</button>
       </template>
     </AppDialog>
 
-    <AppDialog :open="deleteTarget !== null" title="Delete project" @cancel="closeDelete">
+    <AppDialog :open="deleteTarget !== null" :title="t(S('dialogs.delete.title'))" @cancel="closeDelete">
       <p class="text-sm text-zinc-300">
-        Delete “{{ deleteTarget?.name }}”? The project is removed from this browser. A render that is still running is left alone.
+        {{ t(S('dialogs.delete.body'), { name: deleteTarget?.name ?? '' }) }}
       </p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDelete">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDelete">Delete</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDelete">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDelete">{{ t('common.delete') }}</button>
       </template>
     </AppDialog>
 
-    <AppDialog :open="deleteAllOpen" title="Delete all projects" @cancel="closeDeleteAll">
+    <AppDialog :open="deleteAllOpen" :title="t(S('dialogs.deleteAll.title'))" @cancel="closeDeleteAll">
       <p class="text-sm text-zinc-300">
-        Delete every screensaver project on this browser? Projects that are still rendering are kept.
+        {{ t(S('dialogs.deleteAll.body')) }}
       </p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">Delete all</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">{{ t('common.deleteAll') }}</button>
       </template>
     </AppDialog>
 
-    <AppDialog :open="exportAllOpen" title="Export all projects" @cancel="closeExportAll">
+    <AppDialog :open="exportAllOpen" :title="t(S('dialogs.exportAll.title'))" @cancel="closeExportAll">
       <p class="text-sm text-zinc-300">
-        Submit selected projects to the existing render queue using each project’s saved settings.
+        {{ t(S('dialogs.exportAll.intro')) }}
       </p>
 
       <div
@@ -517,19 +556,23 @@ async function openSoundSettingsFor(id: string) {
             :checked="exportAllSelectAllState === 'checked'"
             :indeterminate="exportAllSelectAllState === 'indeterminate'"
             :disabled="exportingAll"
-            aria-label="Select all eligible projects"
+            :aria-label="t(S('dialogs.exportAll.selectAllAria'))"
             @change="onExportAllSelectAllChange"
           />
-          Select all
+          {{ t(S('dialogs.exportAll.selectAll')) }}
         </label>
         <p class="text-xs text-zinc-400">
-          {{ exportAllSelectedCount }} of {{ exportAllEligible.length }} selected
-          <span v-if="exportAllSkipped.length > 0"> · {{ exportAllSkipped.length }} skipped</span>
+          {{ t(S('dialogs.exportAll.selected'), { selected: exportAllSelectedCount, total: exportAllEligible.length }) }}
+          <span v-if="exportAllSkipped.length > 0">
+            {{ t(S('dialogs.exportAll.skippedSuffix'), { n: exportAllSkipped.length }) }}
+          </span>
         </p>
       </div>
       <p v-else class="mt-3 text-sm text-zinc-400">
-        No eligible projects
-        <span v-if="exportAllSkipped.length > 0"> · {{ exportAllSkipped.length }} skipped</span>
+        {{ t(S('dialogs.exportAll.noEligible')) }}
+        <span v-if="exportAllSkipped.length > 0">
+          {{ t(S('dialogs.exportAll.skippedSuffixShort'), { n: exportAllSkipped.length }) }}
+        </span>
       </p>
 
       <div
@@ -550,7 +593,7 @@ async function openSoundSettingsFor(id: string) {
             class="shrink-0"
             :checked="exportAllSelectedIds.includes(item.id)"
             :disabled="exportingAll"
-            :aria-label="`Select ${item.name}`"
+            :aria-label="t(S('dialogs.exportAll.selectProject'), { name: item.name })"
             @change="() => toggleExportAllProject(item.id)"
           />
           <span class="min-w-0 flex-1 truncate text-sm text-zinc-100" :title="item.name">{{ item.name }}</span>
@@ -559,12 +602,12 @@ async function openSoundSettingsFor(id: string) {
 
       <ul v-if="exportAllSkipped.length > 0" class="mt-3 max-h-28 space-y-1 overflow-y-auto text-xs text-zinc-500">
         <li v-for="item in exportAllSkipped" :key="item.id">
-          {{ item.name }} — {{ skipReasonLabel(item.reason) }}
+          {{ t(S('dialogs.exportAll.skippedLine'), { name: item.name, reason: skipReasonText(item.reason) }) }}
         </li>
       </ul>
       <template #actions>
         <button class="btn btn-ghost cursor-pointer" type="button" :disabled="exportingAll" @click="closeExportAll">
-          Cancel
+          {{ t('common.cancel') }}
         </button>
         <button
           class="btn btn-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
@@ -575,10 +618,10 @@ async function openSoundSettingsFor(id: string) {
           <FileOutput :size="16" aria-hidden="true" />
           {{
             exportingAll
-              ? 'Submitting…'
+              ? t(S('dialogs.exportAll.submitting'))
               : exportAllSelectedCount === 1
-                ? 'Export 1 project'
-                : `Export ${exportAllSelectedCount} projects`
+                ? t(S('dialogs.exportAll.exportOne'))
+                : t(S('dialogs.exportAll.exportMany'), { n: exportAllSelectedCount })
           }}
         </button>
       </template>

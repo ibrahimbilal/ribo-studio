@@ -17,7 +17,7 @@ import { computed, ref, watch } from 'vue'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { usePlatformStore } from '../../../stores/platform'
 import * as api from '../../../lib/api'
-import { DUPLICATE_EXPORT_MESSAGE } from '../../../lib/exportFingerprint'
+import { translate, type MessageKey, type MessageParams } from '../../../i18n'
 import { useManagedExportJobs } from '../../../lib/managedExportJobs'
 import { triggerDownload } from '../../../lib/triggerDownload'
 import * as idb from '../../../lib/idb'
@@ -74,12 +74,34 @@ export const useImageMotionStore = defineStore('image-motion', () => {
 
   const duration = computed(() => timelineDuration(segments.value))
 
+  function msg(key: MessageKey, params?: MessageParams) {
+    return translate(globalSettings.general.language, key, params)
+  }
+
+  async function imageValidationMessage(file: File): Promise<string | null> {
+    const problem = await validateImageFile(file)
+    if (!problem) return null
+    if (problem.includes('not a JPG')) return msg('imageMotion.validation.notImage', { name: file.name })
+    if (problem.includes('looks empty')) return msg('imageMotion.validation.empty', { name: file.name })
+    if (problem.includes('larger than 80')) return msg('imageMotion.validation.tooLarge', { name: file.name })
+    return problem
+  }
+
+  function audioValidationMessage(file: File): string | null {
+    const problem = validateAudioFile(file)
+    if (!problem) return null
+    if (problem.startsWith('Background music must be an')) return msg('imageMotion.validation.audioType')
+    const limit = problem.match(/must be (.+) or smaller\./)?.[1]
+    if (limit) return msg('imageMotion.validation.audioTooLarge', { limit })
+    return problem
+  }
+
   const exportBlocker = computed((): string | null => {
-    if (!platform.serverOnline) return 'The renderer is offline.'
-    if (segments.value.length === 0) return 'Add at least one image.'
-    if (segments.value.some((s) => !s.serverId || !fileMap.has(s.id))) return 'Wait for every image to finish uploading.'
-    if (duration.value > MAX_SEQUENCE_SECONDS) return 'The timeline is longer than 30 minutes.'
-    if (duration.value < 0.3) return 'The timeline is too short.'
+    if (!platform.serverOnline) return msg('imageMotion.toast.rendererOffline')
+    if (segments.value.length === 0) return msg('imageMotion.toast.addImage')
+    if (segments.value.some((s) => !s.serverId || !fileMap.has(s.id))) return msg('imageMotion.toast.waitUploads')
+    if (duration.value > MAX_SEQUENCE_SECONDS) return msg('imageMotion.toast.timelineTooLong')
+    if (duration.value < 0.3) return msg('imageMotion.toast.timelineTooShort')
     return null
   })
 
@@ -159,7 +181,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
     await init()
     const before = segments.value.length
     await addFiles([file])
-    if (segments.value.length === before) throw new Error('Could not add the image to Image Motion.')
+    if (segments.value.length === before) throw new Error(msg('imageMotion.toast.importFailed'))
   }
 
   async function deleteAllSegments(): Promise<void> {
@@ -171,11 +193,11 @@ export const useImageMotionStore = defineStore('image-motion', () => {
   async function addFiles(files: File[]) {
     const room = MAX_IMAGE_MOTION_SEGMENTS - segments.value.length
     if (room <= 0) {
-      toast(`You can add up to ${MAX_IMAGE_MOTION_SEGMENTS} images.`)
+      toast(msg('imageMotion.toast.maxImages', { n: MAX_IMAGE_MOTION_SEGMENTS }))
       return
     }
     for (const file of files.slice(0, room)) {
-      const problem = await validateImageFile(file)
+      const problem = await imageValidationMessage(file)
       if (problem) {
         toast(problem, 'error')
         continue
@@ -184,7 +206,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
       const meta = await readImageFile(url)
       if (!meta) {
         URL.revokeObjectURL(url)
-        toast(`${file.name} could not be decoded.`, 'error')
+        toast(msg('imageMotion.toast.decodeFailed', { name: file.name }), 'error')
         continue
       }
       const segment = blankSegment(file.name, meta.width, meta.height, meta.thumbnail)
@@ -193,7 +215,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
       segments.value.push(segment)
       selectedSegmentId.value = segment.id
       void idb.saveImageMotionFile(segment.id, file).catch(() => {
-        toast('This image will work until you refresh, but it could not be saved locally.', 'info')
+        toast(msg('imageMotion.toast.localSaveFailed'), 'info')
       })
       void uploadSegment(segment.id)
     }
@@ -211,7 +233,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
       segment.height = uploaded.height
       scheduleSave()
     } catch (error) {
-      toast(error instanceof Error ? error.message : 'Image upload failed.', 'error')
+      toast(error instanceof Error ? error.message : msg('imageMotion.toast.uploadFailed'), 'error')
     }
   }
 
@@ -310,7 +332,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
       scheduleSave()
       return
     }
-    const problem = validateAudioFile(file)
+    const problem = audioValidationMessage(file)
     if (problem) {
       toast(problem, 'error')
       return
@@ -324,7 +346,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
   }
 
   async function newProject() {
-    if (segments.value.length > 0 && !window.confirm('Start a new image motion project?')) return
+    if (segments.value.length > 0 && !window.confirm(msg('imageMotion.toast.newProjectConfirm'))) return
     for (const url of previewUrlMap.values()) URL.revokeObjectURL(url)
     previewUrlMap.clear()
     fileMap.clear()
@@ -358,7 +380,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
       musicName.value,
     )
     if (fingerprint === lastEnqueuedExportFingerprint.value) {
-      toast(DUPLICATE_EXPORT_MESSAGE, 'info')
+      toast(msg('imageMotion.export.duplicateBlocked'), 'info')
       return
     }
     const filename =

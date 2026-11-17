@@ -8,16 +8,18 @@ import SettingsAccordion from '../../../components/SettingsAccordion.vue'
 import SliderField from '../../../components/SliderField.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
+import { useI18n } from '../../../i18n'
 import { useImageMotionStore } from '../stores/imageMotion'
 
 const store = useImageMotionStore()
 const globalSettings = useGlobalSettingsStore()
+const { t } = useI18n()
 const tab = ref<'motion' | 'output' | 'sound'>('motion')
-const tabs = [
-  { id: 'motion' as const, label: 'Motion' },
-  { id: 'output' as const, label: 'Output' },
-  { id: 'sound' as const, label: 'Sound' },
-]
+const tabs = computed(() => [
+  { id: 'motion' as const, label: t('imageMotion.settings.motion') },
+  { id: 'output' as const, label: t('imageMotion.settings.output') },
+  { id: 'sound' as const, label: t('imageMotion.settings.sound') },
+])
 
 const selectedSegment = computed(() => store.selectedSegment)
 const motion = computed(() => selectedSegment.value?.motion)
@@ -40,76 +42,76 @@ const start = computed({
 <template>
   <div class="flex h-full min-h-0 flex-col">
     <div class="shrink-0 border-b border-zinc-800">
-      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">Settings</h2>
+      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">{{ t('imageMotion.settings.title') }}</h2>
       <AppSettingsTabs v-model="tab" :items="tabs" :cols="3" />
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto">
       <Transition name="settings-pane" mode="out-in">
         <div :key="tab">
           <div v-if="tab === 'motion' && !selectedSegment" class="px-4 py-8 text-center text-sm text-zinc-500">
-            Select an image to edit motion and transitions.
+            {{ t('imageMotion.settings.selectImageHint') }}
           </div>
           <template v-else-if="tab === 'motion' && motion">
-            <SettingsAccordion title="Motion" open>
+            <SettingsAccordion :title="t('imageMotion.settings.motion')" open>
               <div class="space-y-3">
                 <label class="block">
-                  <span class="section-label mb-1 block">Mode</span>
+                  <span class="section-label mb-1 block">{{ t('imageMotion.settings.mode') }}</span>
                   <select
                     class="field w-full"
                     :value="motion.mode"
                     @change="store.patchSelectedMotion({ mode: ($event.target as HTMLSelectElement).value as 'full' | 'slow' })"
                   >
-                    <option value="full">Full pan</option>
-                    <option value="slow">Slow cinematic pan</option>
+                    <option value="full">{{ t('imageMotion.settings.modeFull') }}</option>
+                    <option value="slow">{{ t('imageMotion.settings.modeSlow') }}</option>
                   </select>
                 </label>
                 <label class="block">
-                  <span class="section-label mb-1 block">Direction</span>
+                  <span class="section-label mb-1 block">{{ t('imageMotion.settings.direction') }}</span>
                   <select
                     class="field w-full"
                     :value="motion.direction"
                     @change="store.patchSelectedMotion({ direction: ($event.target as HTMLSelectElement).value as 'rtl' | 'ltr' })"
                   >
-                    <option value="rtl">Right to left</option>
-                    <option value="ltr">Left to right</option>
+                    <option value="rtl">{{ t('imageMotion.settings.directionRtl') }}</option>
+                    <option value="ltr">{{ t('imageMotion.settings.directionLtr') }}</option>
                   </select>
                 </label>
                 <label class="block">
-                  <span class="section-label mb-1 block">Easing</span>
+                  <span class="section-label mb-1 block">{{ t('imageMotion.settings.easing') }}</span>
                   <select
                     class="field w-full"
                     :value="motion.easing"
                     @change="store.patchSelectedMotion({ easing: ($event.target as HTMLSelectElement).value as MotionEasing })"
                   >
-                    <option value="linear">Linear</option>
-                    <option value="easeInOut">Ease in-out</option>
-                    <option value="easeIn">Ease in</option>
-                    <option value="easeOut">Ease out</option>
+                    <option value="linear">{{ t('imageMotion.settings.easingLinear') }}</option>
+                    <option value="easeInOut">{{ t('imageMotion.settings.easingEaseInOut') }}</option>
+                    <option value="easeIn">{{ t('imageMotion.settings.easingEaseIn') }}</option>
+                    <option value="easeOut">{{ t('imageMotion.settings.easingEaseOut') }}</option>
                   </select>
                 </label>
-                <SliderField v-model="zoom" label="Zoom" :min="1" :max="2" :step="0.05" suffix="×" />
+                <SliderField v-model="zoom" :label="t('imageMotion.settings.zoom')" :min="1" :max="2" :step="0.05" suffix="×" />
                 <template v-if="slowMode">
-                  <SliderField v-model="travel" label="Travel distance" :min="5" :max="100" suffix="%" />
-                  <SliderField v-model="start" label="Start position" :min="0" :max="100" suffix="%" />
+                  <SliderField v-model="travel" :label="t('imageMotion.settings.travelDistance')" :min="5" :max="100" suffix="%" />
+                  <SliderField v-model="start" :label="t('imageMotion.settings.startPosition')" :min="0" :max="100" suffix="%" />
                 </template>
-                <button type="button" class="btn btn-ghost w-full cursor-pointer" @click="store.resetMotionDefaults()">Reset to defaults</button>
+                <button type="button" class="btn btn-ghost w-full cursor-pointer" @click="store.resetMotionDefaults()">{{ t('imageMotion.settings.resetDefaults') }}</button>
               </div>
             </SettingsAccordion>
-            <SettingsAccordion title="Transition to next" open>
+            <SettingsAccordion :title="t('imageMotion.settings.transitionNext')" open>
               <div class="space-y-3">
                 <label class="block">
-                  <span class="section-label mb-1 block">Type</span>
+                  <span class="section-label mb-1 block">{{ t('imageMotion.settings.type') }}</span>
                   <select
                     class="field w-full"
                     :value="selectedSegment!.transitionAfter.type"
                     @change="store.patchSelectedTransition({ type: ($event.target as HTMLSelectElement).value as 'cut' | 'fade' })"
                   >
-                    <option value="cut">Cut</option>
-                    <option value="fade">Crossfade</option>
+                    <option value="cut">{{ t('imageMotion.settings.transitionCut') }}</option>
+                    <option value="fade">{{ t('imageMotion.settings.transitionFade') }}</option>
                   </select>
                 </label>
                 <label v-if="selectedSegment!.transitionAfter.type === 'fade'" class="block">
-                  <span class="section-label mb-1 block">Crossfade</span>
+                  <span class="section-label mb-1 block">{{ t('imageMotion.settings.crossfade') }}</span>
                   <input
                     class="field w-full"
                     type="number"
@@ -124,10 +126,10 @@ const start = computed({
             </SettingsAccordion>
           </template>
 
-          <SettingsAccordion v-else-if="tab === 'output'" title="Video" open>
+          <SettingsAccordion v-else-if="tab === 'output'" :title="t('imageMotion.settings.video')" open>
             <div class="space-y-3">
               <label class="block">
-                <span class="section-label mb-1 block">Resolution</span>
+                <span class="section-label mb-1 block">{{ t('imageMotion.settings.resolution') }}</span>
                 <select
                   class="field w-full"
                   :value="`${store.video.width}x${store.video.height}`"
@@ -140,21 +142,26 @@ const start = computed({
                 </select>
               </label>
               <label class="block">
-                <span class="section-label mb-1 block">Frame rate</span>
+                <span class="section-label mb-1 block">{{ t('imageMotion.settings.frameRate') }}</span>
                 <select class="field w-full" :value="store.video.fps" @change="store.setFps(Number(($event.target as HTMLSelectElement).value))">
-                  <option v-for="fps in FRAME_RATES" :key="fps" :value="fps">{{ fps }} fps</option>
+                  <option v-for="fps in FRAME_RATES" :key="fps" :value="fps">{{ t('imageMotion.settings.fpsSuffix', { fps }) }}</option>
                 </select>
               </label>
             </div>
           </SettingsAccordion>
 
-          <SettingsAccordion v-else title="Background music" open>
+          <SettingsAccordion v-else :title="t('imageMotion.settings.backgroundMusic')" open>
             <div class="space-y-3">
               <AudioFileField
                 :file-name="store.musicName"
                 :file-size="store.musicFileSize"
                 :preview-url="store.musicUrl"
-                label="Drop audio here"
+                :label="t('imageMotion.settings.dropAudio')"
+                :drop-label="t('common.dropHere')"
+                :replace-label="t('ranking.style.dropNewAudio')"
+                :replace-drop-label="t('ranking.style.dropToReplaceAudio')"
+                :background-audio-label="t('ranking.style.backgroundAudioName')"
+                :remove-audio-label="t('ranking.style.removeAudio')"
                 @files="(files) => void store.setMusic(files[0] ?? null)"
                 @clear="void store.setMusic(null)"
               />
@@ -163,6 +170,10 @@ const start = computed({
                 v-model:fade-in="store.audio.musicFadeIn"
                 v-model:fade-out="store.audio.musicFadeOut"
                 v-model:loop="store.audio.loopMusic"
+                :volume-label="t('imageMotion.settings.volume')"
+                :loop-label="t('imageMotion.settings.loopAudio')"
+                :fade-in-label="t('imageMotion.settings.fadeIn')"
+                :fade-out-label="t('imageMotion.settings.fadeOut')"
               />
             </div>
           </SettingsAccordion>

@@ -17,10 +17,34 @@ import ToggleSwitch from '../../../components/ToggleSwitch.vue'
 import { useScreensaverStore } from '../stores/screensaver'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { DEFAULT_FRAMES } from '../lib/defaultFrames'
-import { positionLabel } from '../lib/subscribeAnimation/subscribeAnimationLayout'
+import type { SubscribeAnimationPosition } from '@shared/screensaverSubscribeAnimation'
+import { useI18n } from '../../../i18n'
+import { S } from '../lib/screensaverI18n'
+import { DURATION_PRESET_I18N } from '../lib/durationPresetI18n'
+import { SUBSCRIBE_STYLE_I18N } from '../lib/subscribeStyleI18n'
 
 const store = useScreensaverStore()
 const globalSettings = useGlobalSettingsStore()
+const { t } = useI18n()
+
+const POSITION_I18N: Record<SubscribeAnimationPosition, string> = {
+  'bottom-left': 'settings.subscribe.positions.bottomLeft',
+  'bottom-center': 'settings.subscribe.positions.bottomCenter',
+  'bottom-right': 'settings.subscribe.positions.bottomRight',
+}
+
+function positionLabel(position: SubscribeAnimationPosition): string {
+  return t(S(POSITION_I18N[position]))
+}
+
+function adjustmentLabel(key: (typeof ADJUSTMENT_FIELDS)[number]['key']): string {
+  return t(S(`settings.adjustments.fields.${key}`))
+}
+
+function durationPresetLabel(seconds: number, fallback: string): string {
+  const path = DURATION_PRESET_I18N[seconds]
+  return path ? t(S(path)) : fallback
+}
 
 function onSubscribeStyleChange(event: Event) {
   const style = (event.target as HTMLSelectElement).value as SubscribeAnimationStyle
@@ -113,33 +137,40 @@ function onCustomMinutes() {
   store.setCustomDurationMinutes(customMinutes.value)
 }
 
-const inspectorTabs = [
-  { id: 'content' as const, label: 'Content' },
-  { id: 'output' as const, label: 'Output' },
-  { id: 'sound' as const, label: 'Sound' },
-  { id: 'style' as const, label: 'Style' },
-]
+const inspectorTabs = computed(() => [
+  { id: 'content' as const, label: t(S('settings.inspector.content')) },
+  { id: 'output' as const, label: t(S('settings.inspector.output')) },
+  { id: 'sound' as const, label: t(S('settings.inspector.sound')) },
+  { id: 'style' as const, label: t(S('settings.inspector.style')) },
+])
 </script>
 
 <template>
   <div class="flex h-full min-h-0 flex-col">
     <div class="shrink-0 border-b border-zinc-800">
-      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">Settings</h2>
+      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">{{ t(S('settings.title')) }}</h2>
       <AppSettingsTabs v-model="store.settingsInspector" :items="inspectorTabs" :cols="4" />
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto">
       <Transition name="settings-pane" mode="out-in">
         <div :key="store.settingsInspector">
-          <SettingsAccordion v-show="store.settingsInspector === 'content'" title="Subscribe Animation" :open="true">
+          <SettingsAccordion v-show="store.settingsInspector === 'content'" :title="t(S('settings.subscribe.accordion'))" :open="true">
             <div class="flex items-center justify-between gap-3">
-              <span class="text-sm">Enable subscribe animation</span>
+              <span class="text-sm">{{ t(S('settings.subscribe.enable')) }}</span>
               <ToggleSwitch
                 :model-value="store.subscribeAnimation.enabled"
-                aria-label="Enable subscribe animation"
+                :aria-label="t(S('settings.subscribe.enableAria'))"
                 @update:model-value="(value) => store.replaceSubscribeAnimation({ enabled: value })"
               />
             </div>
-            <p class="mt-1 text-xs text-zinc-500">Static image exports only. Adds a {{ SUBSCRIBE_ANIMATION_FPS }} fps overlay for {{ SUBSCRIBE_ANIMATION_DURATION_SEC }} seconds (1 s pause between each click).</p>
+            <p class="mt-1 text-xs text-zinc-500">
+              {{
+                t(S('settings.subscribe.hint'), {
+                  fps: SUBSCRIBE_ANIMATION_FPS,
+                  seconds: SUBSCRIBE_ANIMATION_DURATION_SEC,
+                })
+              }}
+            </p>
             <div
               class="settings-reveal"
               :class="{ 'is-open': store.subscribeAnimation.enabled }"
@@ -147,13 +178,15 @@ const inspectorTabs = [
             >
               <div class="settings-reveal__inner">
                 <div class="space-y-0 pt-3">
-                  <label class="block text-xs text-zinc-500">Style</label>
+                  <label class="block text-xs text-zinc-500">{{ t(S('settings.subscribe.style')) }}</label>
                   <select
                     class="field mt-1"
                     :value="store.subscribeAnimation.style"
                     @change="onSubscribeStyleChange"
                   >
-                    <option v-for="item in SUBSCRIBE_ANIMATION_STYLES" :key="item.id" :value="item.id">{{ item.label }}</option>
+                    <option v-for="item in SUBSCRIBE_ANIMATION_STYLES" :key="item.id" :value="item.id">
+                      {{ t(S(SUBSCRIBE_STYLE_I18N[item.id])) }}
+                    </option>
                   </select>
                   <div
                     class="settings-reveal"
@@ -162,15 +195,17 @@ const inspectorTabs = [
                   >
                     <div class="settings-reveal__inner">
                       <div class="pt-3">
-                        <label class="block text-xs text-zinc-500">Channel card theme</label>
+                        <label class="block text-xs text-zinc-500">{{ t(S('settings.subscribe.channelCardTheme')) }}</label>
                         <select
                           class="field mt-1"
                           :value="store.subscribeAnimation.channelCardTheme"
                           @change="store.replaceSubscribeAnimation({ channelCardTheme: ($event.target as HTMLSelectElement).value as never })"
                         >
-                          <option v-for="item in SUBSCRIBE_CHANNEL_CARD_THEMES" :key="item" :value="item">{{ item === 'light' ? 'Light' : 'Dark' }}</option>
+                          <option v-for="item in SUBSCRIBE_CHANNEL_CARD_THEMES" :key="item" :value="item">
+                            {{ item === 'light' ? t(S('settings.subscribe.themeLight')) : t(S('settings.subscribe.themeDark')) }}
+                          </option>
                         </select>
-                        <label class="mt-3 block text-xs text-zinc-500">Channel</label>
+                        <label class="mt-3 block text-xs text-zinc-500">{{ t(S('settings.subscribe.channel')) }}</label>
                         <YoutubeChannelSelector
                           class="mt-1"
                           :model-value="store.subscribeAnimation.channelId"
@@ -180,7 +215,7 @@ const inspectorTabs = [
                       </div>
                     </div>
                   </div>
-                  <label class="mt-3 block text-xs text-zinc-500">Start time (seconds)</label>
+                  <label class="mt-3 block text-xs text-zinc-500">{{ t(S('settings.subscribe.startSec')) }}</label>
                   <input
                     class="field mt-1"
                     type="number"
@@ -190,7 +225,7 @@ const inspectorTabs = [
                     :value="store.subscribeAnimation.startSec"
                     @change="store.replaceSubscribeAnimation({ startSec: Number(($event.target as HTMLInputElement).value) })"
                   />
-                  <label class="mt-3 block text-xs text-zinc-500">Position</label>
+                  <label class="mt-3 block text-xs text-zinc-500">{{ t(S('settings.subscribe.position')) }}</label>
                   <select
                     class="field mt-1"
                     :value="store.subscribeAnimation.position"
@@ -200,7 +235,7 @@ const inspectorTabs = [
                   </select>
                   <SliderField
                     class="mt-3"
-                    label="Size (% of output width)"
+                    :label="t(S('settings.subscribe.size'))"
                     :min="MIN_SUBSCRIBE_SIZE_PERCENT"
                     :max="MAX_SUBSCRIBE_SIZE_PERCENT"
                     :step="1"
@@ -209,34 +244,34 @@ const inspectorTabs = [
                   />
                   <SliderField
                     class="mt-3"
-                    label="Distance from edges"
+                    :label="t(S('settings.subscribe.edgeDistance'))"
                     :min="MIN_SUBSCRIBE_EDGE_DISTANCE"
                     :max="MAX_SUBSCRIBE_EDGE_DISTANCE"
                     :step="4"
                     :model-value="store.subscribeAnimation.edgeDistance"
                     @update:model-value="(v) => store.replaceSubscribeAnimation({ edgeDistance: v })"
                   />
-                  <p class="mt-1 text-xs text-zinc-500">Export pixels: inset from the left/right edges; adds the same amount as transparent space below the UI inside the animation (for slide-out).</p>
+                  <p class="mt-1 text-xs text-zinc-500">{{ t(S('settings.subscribe.edgeHint')) }}</p>
                   <div class="mt-3 flex items-center justify-between gap-3">
-                    <span class="text-sm">Show on preview canvas</span>
+                    <span class="text-sm">{{ t(S('settings.subscribe.previewOnCanvas')) }}</span>
                     <ToggleSwitch
                       :model-value="store.subscribeAnimation.previewOnCanvas"
-                      aria-label="Show subscribe animation on preview canvas"
+                      :aria-label="t(S('settings.subscribe.previewOnCanvasAria'))"
                       @update:model-value="(value) => store.replaceSubscribeAnimation({ previewOnCanvas: value })"
                     />
                   </div>
-                  <p class="mt-1 text-xs text-zinc-500">Loops on the main canvas so you can tune position, size, and edge distance while editing.</p>
+                  <p class="mt-1 text-xs text-zinc-500">{{ t(S('settings.subscribe.previewOnCanvasHint')) }}</p>
                   <p class="mt-3 text-xs text-zinc-500">
-                    Subscribe Animation cache management lives in
+                    {{ t(S('settings.subscribe.cacheHintBefore')) }}
                     <button class="cursor-pointer font-semibold text-brand underline-offset-2 hover:underline" type="button" @click="openGlobalCacheSettings">
-                      Global Settings → Storage &amp; Cache
-                    </button>.
+                      {{ t(S('settings.subscribe.cacheHintLink')) }}
+                    </button>{{ t(S('settings.subscribe.cacheHintAfter')) }}
                   </p>
                 </div>
               </div>
             </div>
           </SettingsAccordion>
-          <SettingsAccordion v-show="store.settingsInspector === 'content'" title="Frames" :open="false">
+          <SettingsAccordion v-show="store.settingsInspector === 'content'" :title="t(S('settings.frames.accordion'))" :open="false">
             <div v-if="DEFAULT_FRAMES.length > 0" class="grid grid-cols-2 gap-2">
               <div v-for="frame in DEFAULT_FRAMES" :key="frame.id" class="group/frame relative">
                 <button
@@ -260,8 +295,8 @@ const inspectorTabs = [
                   v-if="store.composition.frameId === frame.id"
                   class="absolute inset-0 flex cursor-pointer items-center justify-center rounded-md bg-black/55 opacity-0 transition-opacity duration-150 group-hover/frame:opacity-100"
                   type="button"
-                  :aria-label="`Remove ${frame.name} from preview`"
-                  :title="`Remove ${frame.name}`"
+                  :aria-label="t(S('settings.frames.removeFromPreview'), { name: frame.name })"
+                  :title="t(S('settings.frames.remove'), { name: frame.name })"
                   @click.stop="clearSelectedFrame(frame.id)"
                 >
                   <X :size="22" class="text-white drop-shadow" aria-hidden="true" />
@@ -274,14 +309,14 @@ const inspectorTabs = [
               accept="image/png,.png"
               multiple
               :disabled="store.frameUploading"
-              label="Upload PNG frames"
-              drop-label="Drop PNG frames"
-              busy-label="Uploading…"
-              :hint="`PNG only, up to ${frameLimitMb} MB`"
+              :label="t(S('settings.frames.uploadLabel'))"
+              :drop-label="t(S('settings.frames.uploadDrop'))"
+              :busy-label="t(S('settings.frames.uploadBusy'))"
+              :hint="t(S('settings.frames.uploadHint'), { mb: frameLimitMb })"
               @files="onFrameFiles"
             />
             <p v-if="store.frames.length === 0" class="mt-2 text-xs text-zinc-500">
-              Choose a frame above or upload your own PNG. Click a frame to select it. Hover the selected frame and use the remove control to clear or delete it.
+              {{ t(S('settings.frames.emptyHint')) }}
             </p>
             <div v-else class="mt-3 grid grid-cols-2 gap-2">
               <div v-for="frame in store.frames" :key="frame.id" class="group/frame relative min-w-0">
@@ -300,8 +335,8 @@ const inspectorTabs = [
                   v-if="store.composition.frameId === frame.id"
                   class="absolute inset-0 flex cursor-pointer items-center justify-center rounded-md bg-black/55 opacity-0 transition-opacity duration-150 group-hover/frame:opacity-100"
                   type="button"
-                  :aria-label="`Remove ${frame.name}`"
-                  :title="`Remove ${frame.name}`"
+                  :aria-label="t(S('settings.frames.remove'), { name: frame.name })"
+                  :title="t(S('settings.frames.remove'), { name: frame.name })"
                   @click.stop="removeUploadedFrame(frame.id)"
                 >
                   <Trash2 :size="20" class="text-white drop-shadow" aria-hidden="true" />
@@ -310,7 +345,7 @@ const inspectorTabs = [
             </div>
           </SettingsAccordion>
 
-          <SettingsAccordion v-show="store.settingsInspector === 'output'" title="Duration" :open="true">
+          <SettingsAccordion v-show="store.settingsInspector === 'output'" :title="t(S('settings.duration.accordion'))" :open="true">
             <div class="grid grid-cols-2 gap-2">
               <button
                 v-for="preset in DURATION_PRESETS"
@@ -320,21 +355,21 @@ const inspectorTabs = [
                 type="button"
                 @click="store.setDurationPreset(String(preset.seconds), preset.seconds)"
               >
-                {{ preset.label }}
+                {{ durationPresetLabel(preset.seconds, preset.label) }}
               </button>
             </div>
             <div class="mt-3 space-y-1">
-              <label class="text-xs text-zinc-500">Custom (minutes)</label>
+              <label class="text-xs text-zinc-500">{{ t(S('settings.duration.customMinutes')) }}</label>
               <div class="flex gap-2">
                 <input v-model.number="customMinutes" class="field flex-1" type="number" min="5" max="600" step="1" />
-                <button class="btn btn-ghost cursor-pointer" type="button" @click="onCustomMinutes">Apply</button>
+                <button class="btn btn-ghost cursor-pointer" type="button" @click="onCustomMinutes">{{ t('common.apply') }}</button>
               </div>
-              <p class="text-xs text-zinc-500">Output: {{ store.durationLabel }}</p>
+              <p class="text-xs text-zinc-500">{{ t(S('settings.duration.output'), { label: store.durationLabel }) }}</p>
             </div>
           </SettingsAccordion>
 
-          <SettingsAccordion v-show="store.settingsInspector === 'output'" title="Output" :open="false">
-            <label class="text-xs text-zinc-500">Resolution</label>
+          <SettingsAccordion v-show="store.settingsInspector === 'output'" :title="t(S('settings.output.accordion'))" :open="false">
+            <label class="text-xs text-zinc-500">{{ t(S('settings.output.resolution')) }}</label>
             <select
               class="field mt-1"
               :value="`${store.outputWidth}x${store.outputHeight}`"
@@ -349,65 +384,65 @@ const inspectorTabs = [
                 {{ output.label }}
               </option>
             </select>
-            <label class="mb-0 block text-xs text-zinc-500">Frame rate</label>
+            <label class="mb-0 block text-xs text-zinc-500">{{ t(S('settings.output.frameRate')) }}</label>
             <select v-model.number="store.fps" class="field mt-1 mb-0">
-              <option v-for="rate in fpsOptions" :key="rate" :value="rate">{{ rate }} fps</option>
+              <option v-for="rate in fpsOptions" :key="rate" :value="rate">{{ t(S('settings.output.fpsOption'), { fps: rate }) }}</option>
             </select>
             <p class="mt-1 text-xs text-zinc-500">
               {{
                 store.effectiveRenderingMode === 'optimized-cfr'
-                  ? 'Constant frame rate for the whole timeline.'
-                  : 'Static Art defaults to 1 fps. Mixed frame rates may be transcoded differently by YouTube.'
+                  ? t(S('settings.output.cfrHint'))
+                  : t(S('settings.output.vfrHint'))
               }}
             </p>
-            <label class="mt-3 mb-0 block text-xs text-zinc-500">Fit</label>
+            <label class="mt-3 mb-0 block text-xs text-zinc-500">{{ t(S('settings.output.fit')) }}</label>
             <select class="field mt-1" :value="store.fit" @change="store.setFit(($event.target as HTMLSelectElement).value as 'contain' | 'cover' | 'blur')">
-              <option value="contain">Contain</option>
-              <option value="cover">Cover</option>
-              <option value="blur">Blurred background</option>
+              <option value="contain">{{ t(S('settings.output.fitContain')) }}</option>
+              <option value="cover">{{ t(S('settings.output.fitCover')) }}</option>
+              <option value="blur">{{ t(S('settings.output.fitBlur')) }}</option>
             </select>
 
             <p class="text-xs text-zinc-500">
-              Rendering mode, quality, preview rendering, and encoding method live in
+              {{ t(S('settings.output.globalHintBefore')) }}
               <button class="cursor-pointer font-semibold text-brand underline-offset-2 hover:underline" type="button" @click="openGlobalOutputSettings">
-                Global Settings → Export
-              </button>.
+                {{ t(S('settings.output.globalHintLink')) }}
+              </button>{{ t(S('settings.output.globalHintAfter')) }}
             </p>
           </SettingsAccordion>
 
-          <SettingsAccordion v-show="store.settingsInspector === 'output'" title="Mode" :open="false">
-            <div class="space-y-2" role="radiogroup" aria-label="Screensaver mode">
+          <SettingsAccordion v-show="store.settingsInspector === 'output'" :title="t(S('settings.mode.accordion'))" :open="false">
+            <div class="space-y-2" role="radiogroup" :aria-label="t(S('settings.mode.groupAria'))">
               <label class="flex cursor-pointer items-center gap-2.5 text-sm">
-                <AppRadio v-model="store.mode" name="screensaver-mode" value="static" aria-label="Static art" />
-                Static art (image)
+                <AppRadio v-model="store.mode" name="screensaver-mode" value="static" :aria-label="t(S('settings.mode.staticArt'))" />
+                {{ t(S('settings.mode.staticArtLabel')) }}
               </label>
               <label class="flex cursor-pointer items-center gap-2.5 text-sm">
-                <AppRadio v-model="store.mode" name="screensaver-mode" value="loop" aria-label="Looping video" />
-                Looping video
+                <AppRadio v-model="store.mode" name="screensaver-mode" value="loop" :aria-label="t(S('settings.mode.loopingVideo'))" />
+                {{ t(S('settings.mode.loopingVideoLabel')) }}
               </label>
             </div>
           </SettingsAccordion>
 
-          <SettingsAccordion v-show="store.settingsInspector === 'output'" v-if="store.mode === 'loop'" title="Loop">
-            <div class="space-y-2" role="radiogroup" aria-label="Loop type">
+          <SettingsAccordion v-show="store.settingsInspector === 'output'" v-if="store.mode === 'loop'" :title="t(S('settings.loop.accordion'))">
+            <div class="space-y-2" role="radiogroup" :aria-label="t(S('settings.loop.groupAria'))">
               <label class="flex cursor-pointer items-center gap-2.5 text-sm">
-                <AppRadio v-model="store.loopType" name="screensaver-loop-type" value="hard" aria-label="Hard loop" />
-                Hard loop
+                <AppRadio v-model="store.loopType" name="screensaver-loop-type" value="hard" :aria-label="t(S('settings.loop.hardAria'))" />
+                {{ t(S('settings.loop.hard')) }}
               </label>
               <label class="flex cursor-pointer items-center gap-2.5 text-sm">
                 <AppRadio
                   v-model="store.loopType"
                   name="screensaver-loop-type"
                   value="smooth"
-                  aria-label="Smooth loop"
+                  :aria-label="t(S('settings.loop.smoothAria'))"
                 />
-                Smooth loop (crossfade when possible)
+                {{ t(S('settings.loop.smooth')) }}
               </label>
             </div>
             <SliderField
               v-if="store.loopType === 'smooth'"
               class="mt-3"
-              label="Crossfade (seconds)"
+              :label="t(S('settings.loop.crossfade'))"
               :min="0.25"
               :max="5"
               :step="0.25"
@@ -416,11 +451,11 @@ const inspectorTabs = [
             />
           </SettingsAccordion>
 
-          <SettingsAccordion v-show="store.settingsInspector === 'sound'" title="Audio" :open="true">
+          <SettingsAccordion v-show="store.settingsInspector === 'sound'" :title="t(S('settings.audio.accordion'))" :open="true">
             <select v-model="store.audioMode" class="field">
-              <option value="none">No audio</option>
-              <option value="source" :disabled="!store.hasAudio">Original video audio</option>
-              <option value="upload">Background audio</option>
+              <option value="none">{{ t(S('settings.audio.none')) }}</option>
+              <option value="source" :disabled="!store.hasAudio">{{ t(S('settings.audio.source')) }}</option>
+              <option value="upload">{{ t(S('settings.audio.upload')) }}</option>
             </select>
             <AudioFileField
               v-if="store.audioMode === 'upload'"
@@ -434,6 +469,12 @@ const inspectorTabs = [
               :error="store.audioError"
               accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
               formats="MP3, WAV, FLAC, M4A, AAC, OGG"
+              :label="t(S('settings.audio.dropAudio'))"
+              :drop-label="t(S('settings.audio.dropToUpload'))"
+              :replace-label="t(S('settings.audio.dropNewAudio'))"
+              :replace-drop-label="t(S('settings.audio.dropToReplace'))"
+              :background-audio-label="t(S('settings.audio.upload'))"
+              :remove-audio-label="t(S('settings.audio.removeAudio'))"
               @files="onAudioFiles"
               @clear="store.clearAudio()"
             />
@@ -445,11 +486,14 @@ const inspectorTabs = [
               v-model:fade-out="store.audioFadeOut"
               v-model:loop="store.loopAudio"
               volume-as-percent
-              loop-label="Loop background audio"
+              :volume-label="t(S('settings.audio.volume'))"
+              :fade-in-label="t(S('settings.audio.fadeIn'))"
+              :fade-out-label="t(S('settings.audio.fadeOut'))"
+              :loop-label="t(S('settings.audio.loopBackground'))"
             />
           </SettingsAccordion>
 
-          <SettingsAccordion v-show="store.settingsInspector === 'style'" title="Adjustments">
+          <SettingsAccordion v-show="store.settingsInspector === 'style'" :title="t(S('settings.adjustments.accordion'))">
             <div
               @pointerdown="store.setPreviewInteracting(true)"
               @pointerup="store.setPreviewInteracting(false)"
@@ -457,15 +501,21 @@ const inspectorTabs = [
               @pointercancel="store.setPreviewInteracting(false)"
             >
             <div class="mb-2 flex gap-2">
-              <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Reset all" title="Reset all" @click="store.resetAdjustments()">
+              <button
+                class="btn btn-ghost cursor-pointer px-2 py-1"
+                type="button"
+                :aria-label="t(S('settings.adjustments.resetAllAria'))"
+                :title="t(S('settings.adjustments.resetAll'))"
+                @click="store.resetAdjustments()"
+              >
                 <RotateCcw :size="16" />
               </button>
               <button
                 class="btn cursor-pointer px-2 py-1"
                 :class="store.compareAdjustments ? 'btn-primary' : 'btn-ghost'"
                 type="button"
-                :aria-label="store.compareAdjustments ? 'Showing original' : 'Before / after'"
-                :title="store.compareAdjustments ? 'Showing original' : 'Before / after'"
+                :aria-label="store.compareAdjustments ? t(S('settings.adjustments.showingOriginalAria')) : t(S('settings.adjustments.beforeAfterAria'))"
+                :title="store.compareAdjustments ? t(S('settings.adjustments.showingOriginal')) : t(S('settings.adjustments.beforeAfter'))"
                 @click="store.compareAdjustments = !store.compareAdjustments"
               >
                 <Eye v-if="store.compareAdjustments" :size="16" />
@@ -475,7 +525,7 @@ const inspectorTabs = [
             <div v-for="field in ADJUSTMENT_FIELDS" :key="field.key" class="flex items-center gap-2">
               <SliderField
                 class="flex-1"
-                :label="field.label"
+                :label="adjustmentLabel(field.key)"
                 :min="field.min"
                 :max="field.max"
                 :step="1"
@@ -483,29 +533,35 @@ const inspectorTabs = [
                 @update:model-value="(value) => (store.composition.adjustments[field.key] = value)"
                 @change="store.commitComposition()"
               />
-              <button class="btn btn-ghost mt-4 shrink-0 cursor-pointer px-2 py-1" type="button" :aria-label="`Reset ${field.label}`" :title="`Reset ${field.label}`" @click="resetOne(field.key)">
+              <button
+                class="btn btn-ghost mt-4 shrink-0 cursor-pointer px-2 py-1"
+                type="button"
+                :aria-label="t(S('settings.adjustments.resetField'), { label: adjustmentLabel(field.key) })"
+                :title="t(S('settings.adjustments.resetField'), { label: adjustmentLabel(field.key) })"
+                @click="resetOne(field.key)"
+              >
                 <RotateCcw :size="16" />
               </button>
             </div>
             </div>
           </SettingsAccordion>
 
-          <SettingsAccordion v-show="store.settingsInspector === 'style'" title="Background">
+          <SettingsAccordion v-show="store.settingsInspector === 'style'" :title="t(S('settings.background.accordion'))">
             <select v-model="store.composition.background.mode" class="field" @change="store.commitComposition()">
-              <option value="color">Custom color</option>
-              <option value="black">Black</option>
-              <option value="white">White</option>
-              <option value="blur">Blurred image</option>
-              <option value="transparent">Transparent in the editor</option>
+              <option value="color">{{ t(S('settings.background.color')) }}</option>
+              <option value="black">{{ t(S('settings.background.black')) }}</option>
+              <option value="white">{{ t(S('settings.background.white')) }}</option>
+              <option value="blur">{{ t(S('settings.background.blur')) }}</option>
+              <option value="transparent">{{ t(S('settings.background.transparent')) }}</option>
             </select>
             <label v-if="store.composition.background.mode === 'color' || store.composition.background.mode === 'transparent'" class="mt-2 block text-xs text-zinc-500">
-              Color
+              {{ t(S('settings.background.colorLabel')) }}
               <input v-model="store.composition.background.color" class="mt-1" type="color" @change="store.backgroundColor = store.composition.background.color; store.commitComposition()" />
             </label>
             <SliderField
               v-if="store.composition.background.mode === 'blur'"
               class="mt-2"
-              label="Blur strength"
+              :label="t(S('settings.background.blurStrength'))"
               :min="0"
               :max="100"
               :step="1"
@@ -513,26 +569,26 @@ const inspectorTabs = [
               @update:model-value="(value) => (store.composition.background.blur = value)"
               @change="store.commitComposition()"
             />
-            <p class="mt-2 text-xs text-zinc-500">MP4 files flatten transparency onto this color.</p>
+            <p class="mt-2 text-xs text-zinc-500">{{ t(S('settings.background.mp4Hint')) }}</p>
           </SettingsAccordion>
 
-          <SettingsAccordion v-show="store.settingsInspector === 'style'" title="Transform">
+          <SettingsAccordion v-show="store.settingsInspector === 'style'" :title="t(S('settings.transform.accordion'))">
             <div class="grid grid-cols-2 gap-2">
-              <label class="text-xs text-zinc-500">X<input class="field mt-1" type="number" :value="Math.round(store.composition.x * store.outputWidth)" @change="setPixel('x', $event)" /></label>
-              <label class="text-xs text-zinc-500">Y<input class="field mt-1" type="number" :value="Math.round(store.composition.y * store.outputHeight)" @change="setPixel('y', $event)" /></label>
-              <label class="text-xs text-zinc-500">Width<input class="field mt-1" type="number" min="2" :value="Math.round(store.composition.width * store.outputWidth)" @change="setPixel('width', $event)" /></label>
-              <label class="text-xs text-zinc-500">Height<input class="field mt-1" type="number" min="2" :value="Math.round(store.composition.height * store.outputHeight)" @change="setPixel('height', $event)" /></label>
-              <label class="text-xs text-zinc-500">Rotation<input class="field mt-1" type="number" min="-180" max="180" step="0.1" :value="store.composition.rotation" @change="setNumber('rotation', $event)" /></label>
-              <label class="text-xs text-zinc-500">Opacity<input class="field mt-1" type="number" min="0" max="100" :value="Math.round(store.composition.opacity * 100)" @change="setOpacity($event)" /></label>
+              <label class="text-xs text-zinc-500">{{ t(S('settings.transform.x')) }}<input class="field mt-1" type="number" :value="Math.round(store.composition.x * store.outputWidth)" @change="setPixel('x', $event)" /></label>
+              <label class="text-xs text-zinc-500">{{ t(S('settings.transform.y')) }}<input class="field mt-1" type="number" :value="Math.round(store.composition.y * store.outputHeight)" @change="setPixel('y', $event)" /></label>
+              <label class="text-xs text-zinc-500">{{ t(S('settings.transform.width')) }}<input class="field mt-1" type="number" min="2" :value="Math.round(store.composition.width * store.outputWidth)" @change="setPixel('width', $event)" /></label>
+              <label class="text-xs text-zinc-500">{{ t(S('settings.transform.height')) }}<input class="field mt-1" type="number" min="2" :value="Math.round(store.composition.height * store.outputHeight)" @change="setPixel('height', $event)" /></label>
+              <label class="text-xs text-zinc-500">{{ t(S('settings.transform.rotation')) }}<input class="field mt-1" type="number" min="-180" max="180" step="0.1" :value="store.composition.rotation" @change="setNumber('rotation', $event)" /></label>
+              <label class="text-xs text-zinc-500">{{ t(S('settings.transform.opacity')) }}<input class="field mt-1" type="number" min="0" max="100" :value="Math.round(store.composition.opacity * 100)" @change="setOpacity($event)" /></label>
             </div>
             <div class="mt-2 grid grid-cols-2 gap-2">
-              <button class="btn cursor-pointer" :class="store.composition.flipH ? 'btn-primary' : 'btn-ghost'" type="button" @click="toggleFlip('flipH')">Flip horizontal</button>
-              <button class="btn cursor-pointer" :class="store.composition.flipV ? 'btn-primary' : 'btn-ghost'" type="button" @click="toggleFlip('flipV')">Flip vertical</button>
+              <button class="btn cursor-pointer" :class="store.composition.flipH ? 'btn-primary' : 'btn-ghost'" type="button" @click="toggleFlip('flipH')">{{ t(S('settings.transform.flipH')) }}</button>
+              <button class="btn cursor-pointer" :class="store.composition.flipV ? 'btn-primary' : 'btn-ghost'" type="button" @click="toggleFlip('flipV')">{{ t(S('settings.transform.flipV')) }}</button>
             </div>
           </SettingsAccordion>
 
           <p class="px-4 pb-4 mt-3 text-xs text-zinc-500">
-            Approximate output size: ~{{ (store.sizeEstimate / (1024 * 1024 * 1024)).toFixed(2) }} GB (estimate only)
+            {{ t(S('settings.sizeEstimate'), { gb: (store.sizeEstimate / (1024 * 1024 * 1024)).toFixed(2) }) }}
           </p>
         </div>
       </Transition>

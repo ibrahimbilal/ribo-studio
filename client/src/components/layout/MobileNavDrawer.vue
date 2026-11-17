@@ -3,13 +3,21 @@ import { Settings, X } from '@lucide/vue'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { navItems } from '../../app/navigation'
+import { useI18n } from '../../i18n'
+import { NAV_LABEL_KEYS } from '../../lib/navLabels'
 import { useGlobalSettingsStore } from '../../stores/globalSettings'
 import { usePlatformStore } from '../../stores/platform'
 import AppVersionLabel from './AppVersionLabel.vue'
 
 const platform = usePlatformStore()
+const { t } = useI18n()
 const globalSettings = useGlobalSettingsStore()
 const route = useRoute()
+
+function navLabel(path: string): string {
+  const key = NAV_LABEL_KEYS[path]
+  return key ? t(key) : path
+}
 const panelRef = ref<HTMLElement | null>(null)
 let triggerEl: HTMLElement | null = null
 
@@ -75,24 +83,24 @@ function onNavigate() {
       <div class="drawer-scrim-enter absolute inset-0 bg-black/60" aria-hidden="true" @click="onBackdropClick" />
       <div
         ref="panelRef"
-        class="drawer-panel-enter absolute left-0 top-0 flex h-full w-[min(280px,85vw)] flex-col border-r border-zinc-800 bg-chrome shadow-xl"
+        class="drawer-panel-enter absolute inset-y-0 start-0 flex h-full w-[min(280px,85vw)] flex-col border-e border-zinc-800 bg-chrome shadow-xl"
         role="dialog"
         aria-modal="true"
-        aria-label="Navigation"
+        :aria-label="t('layout.navigation')"
       >
         <div class="flex h-14 items-center justify-between border-b border-zinc-800 px-4">
           <div class="flex min-w-0 items-center gap-2 text-zinc-100">
             <RouterLink
               :to="{ name: 'dashboard' }"
               class="focus-ring shrink-0 rounded-sm"
-              aria-label="Ribo Studio, go to dashboard"
+              :aria-label="t('shell.goToDashboard')"
               @click="onNavigate"
             >
               <img src="/logo.png" alt="" class="h-8 w-8 object-contain" />
             </RouterLink>
             <span class="truncate text-sm font-black tracking-[0.06em]">Ribo Studio</span>
           </div>
-          <button class="btn btn-ghost cursor-pointer" type="button" aria-label="Close menu" @click="emit('close')">
+          <button class="btn btn-ghost cursor-pointer" type="button" :aria-label="t('common.closeMenu')" @click="emit('close')">
             <X :size="20" />
           </button>
         </div>
@@ -102,7 +110,7 @@ function onNavigate() {
             :key="item.path"
             :to="item.path"
             class="nav-link focus-ring flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold"
-            :aria-label="item.label"
+            :aria-label="navLabel(item.path)"
             :aria-current="isActive(item.path) ? 'page' : undefined"
             :class="
               isActive(item.path)
@@ -112,7 +120,7 @@ function onNavigate() {
             @click="onNavigate"
           >
             <component :is="item.icon" :size="18" />
-            {{ item.label }}
+            {{ navLabel(item.path) }}
           </RouterLink>
         </nav>
         <div class="mt-auto border-t border-zinc-800 p-3">
@@ -122,7 +130,7 @@ function onNavigate() {
             @click="openSettings"
           >
             <Settings :size="18" />
-            Global Settings
+            {{ t('shell.globalSettings') }}
           </button>
           <AppVersionLabel show-brand />
         </div>

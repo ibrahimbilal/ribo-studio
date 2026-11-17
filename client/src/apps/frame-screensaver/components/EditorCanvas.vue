@@ -25,9 +25,12 @@ import { createWebGL2ScreensaverRenderer } from '../lib/render/createWebGL2Scree
 import type { ScreensaverImageRenderer, ScreensaverRenderInput } from '../lib/render/types'
 import { useScreensaverStore } from '../stores/screensaver'
 import { BRAND } from '../../../lib/brand'
+import { useI18n } from '../../../i18n'
+import { S } from '../lib/screensaverI18n'
 import { drawSubscribeAnimationOnPreviewOverlay } from '../lib/subscribeAnimation/subscribeAnimationCanvasPreview'
 
 const store = useScreensaverStore()
+const { t } = useI18n()
 const { previewRenderer } = storeToRefs(store)
 const shell = ref<HTMLElement | null>(null)
 const shellHeight = ref(180)
@@ -130,15 +133,18 @@ let cropGesture: null | { kind: 'move' | 'resize'; handle: string; start: { x: n
 let pointers = new Map<number, { x: number; y: number }>()
 let pinch: { dist: number; zoom: number } | null = null
 
-const cropAspects = [
-  ['free', 'Free'],
-  ['16:9', '16:9'],
-  ['4:3', '4:3'],
-  ['3:2', '3:2'],
-  ['1:1', '1:1'],
-  ['original', 'Original'],
-  ['custom', 'Custom'],
-] as const
+const cropAspects = computed(
+  () =>
+    [
+      ['free', t(S('canvas.cropAspects.free'))],
+      ['16:9', t(S('canvas.cropAspects.r169'))],
+      ['4:3', t(S('canvas.cropAspects.r43'))],
+      ['3:2', t(S('canvas.cropAspects.r32'))],
+      ['1:1', t(S('canvas.cropAspects.r11'))],
+      ['original', t(S('canvas.cropAspects.original'))],
+      ['custom', t(S('canvas.cropAspects.custom'))],
+    ] as const,
+)
 
 const viewLabel = computed(() => `${Math.round(zoom.value * 100)}%`)
 const playing = ref(false)
@@ -792,46 +798,60 @@ onBeforeUnmount(() => {
   <div class="flex min-h-0 w-full flex-1 flex-col">
     <div class="mb-3 flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2">
       <span class="text-xs text-zinc-500">{{ viewLabel }}</span>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Zoom out" title="Zoom out" @click="zoom = clamp(zoom - 0.1, 0.25, 4); draw()">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.zoomOut'))" :title="t(S('canvas.zoomOut'))" @click="zoom = clamp(zoom - 0.1, 0.25, 4); draw()">
         <ZoomOut :size="16" />
       </button>
-      <input v-model.number="zoom" class="w-24 min-w-24 flex-1 cursor-pointer sm:w-28 sm:flex-none" type="range" min="0.25" max="4" step="0.05" aria-label="View zoom" @input="draw" />
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Zoom in" title="Zoom in" @click="zoom = clamp(zoom + 0.1, 0.25, 4); draw()">
+      <input v-model.number="zoom" class="w-24 min-w-24 flex-1 cursor-pointer sm:w-28 sm:flex-none" type="range" min="0.25" max="4" step="0.05" :aria-label="t(S('canvas.viewZoom'))" @input="draw" />
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.zoomIn'))" :title="t(S('canvas.zoomIn'))" @click="zoom = clamp(zoom + 0.1, 0.25, 4); draw()">
         <ZoomIn :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Fit view" title="Fit view" @click="resetView">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.fitView'))" :title="t(S('canvas.fitView'))" @click="resetView">
         <Scan :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Reset zoom" title="Reset zoom" @click="resetView">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.resetZoom'))" :title="t(S('canvas.resetZoom'))" @click="resetView">
         <RotateCcw :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Fit image" title="Fit image" @click="store.fitContain(); selected = true">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.fitImage'))" :title="t(S('canvas.fitImage'))" @click="store.fitContain(); selected = true">
         <Shrink :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Fill canvas" title="Fill canvas" @click="store.fitCover(); selected = true">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.fillCanvas'))" :title="t(S('canvas.fillCanvas'))" @click="store.fitCover(); selected = true">
         <Expand :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Center horizontal" title="Center horizontal" @click="store.centerHorizontal()">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.centerHorizontal'))" :title="t(S('canvas.centerHorizontal'))" @click="store.centerHorizontal()">
         <AlignHorizontalJustifyCenter :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Center vertical" title="Center vertical" @click="store.centerVertical()">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.centerVertical'))" :title="t(S('canvas.centerVertical'))" @click="store.centerVertical()">
         <AlignVerticalJustifyCenter :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Reset" title="Reset" @click="store.resetTransform()">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.reset'))" :title="t(S('canvas.reset'))" @click="store.resetTransform()">
         <RefreshCw :size="16" />
       </button>
-      <button class="btn cursor-pointer px-2 py-1" :class="store.cropEditing ? 'btn-primary' : 'btn-ghost'" type="button" :aria-label="store.cropEditing ? 'Done cropping' : 'Crop'" :title="store.cropEditing ? 'Done cropping' : 'Crop'" @click="store.cropEditing = !store.cropEditing">
+      <button
+        class="btn cursor-pointer px-2 py-1"
+        :class="store.cropEditing ? 'btn-primary' : 'btn-ghost'"
+        type="button"
+        :aria-label="store.cropEditing ? t(S('canvas.doneCropping')) : t(S('canvas.cropToggle'))"
+        :title="store.cropEditing ? t(S('canvas.doneCropping')) : t(S('canvas.cropToggle'))"
+        @click="store.cropEditing = !store.cropEditing"
+      >
         <Check v-if="store.cropEditing" :size="16" />
         <Crop v-else :size="16" />
       </button>
-      <button v-if="store.mediaKind === 'video'" class="btn btn-primary cursor-pointer px-2 py-1" type="button" :aria-label="playing ? 'Pause' : 'Play'" :title="playing ? 'Pause' : 'Play'" @click="togglePlay">
+      <button
+        v-if="store.mediaKind === 'video'"
+        class="btn btn-primary cursor-pointer px-2 py-1"
+        type="button"
+        :aria-label="playing ? t('common.pause') : t('common.play')"
+        :title="playing ? t('common.pause') : t('common.play')"
+        @click="togglePlay"
+      >
         <Pause v-if="playing" :size="16" />
         <Play v-else :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Undo" title="Undo" @click="store.undo()">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.undo'))" :title="t(S('canvas.undo'))" @click="store.undo()">
         <Undo2 :size="16" />
       </button>
-      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" aria-label="Redo" title="Redo" @click="store.redo()">
+      <button class="btn btn-ghost cursor-pointer px-2 py-1" type="button" :aria-label="t(S('canvas.redo'))" :title="t(S('canvas.redo'))" @click="store.redo()">
         <Redo2 :size="16" />
       </button>
     </div>
@@ -853,7 +873,7 @@ onBeforeUnmount(() => {
         <input v-model.number="store.composition.customAspectW" class="field w-16" type="number" min="1" max="100" @change="store.setCropAspect('custom', mediaWidth, mediaHeight)" />
         <input v-model.number="store.composition.customAspectH" class="field w-16" type="number" min="1" max="100" @change="store.setCropAspect('custom', mediaWidth, mediaHeight)" />
       </template>
-      <button class="btn btn-ghost cursor-pointer text-xs" type="button" @click="store.resetCrop()">Reset crop</button>
+      <button class="btn btn-ghost cursor-pointer text-xs" type="button" @click="store.resetCrop()">{{ t(S('canvas.cropAspects.reset')) }}</button>
     </div>
     <div
       ref="shell"
@@ -871,12 +891,12 @@ onBeforeUnmount(() => {
         class="absolute top-1/2 left-1/2 block max-h-full max-w-full -translate-x-1/2 -translate-y-1/2"
       />
       <canvas ref="overlayCanvas" class="absolute top-1/2 left-1/2 block max-h-full max-w-full -translate-x-1/2 -translate-y-1/2 touch-none" />
-      <p v-if="!store.objectUrl" class="pointer-events-none absolute inset-0 grid place-items-center text-sm text-zinc-500">Upload media to preview</p>
+      <p v-if="!store.objectUrl" class="pointer-events-none absolute inset-0 grid place-items-center text-sm text-zinc-500">{{ t(S('canvas.uploadMedia')) }}</p>
     </div>
     <p class="mt-2 text-xs text-zinc-500">
-      View zoom does not change the export. The dashed outline is the export frame. Drag the image to place it. Corner handles scale it. The round handle rotates it.
+      {{ t(S('canvas.help')) }}
       <span v-if="store.subscribeAnimation.enabled && store.subscribeAnimation.previewOnCanvas && store.mediaKind === 'image'">
-        Subscribe animation loops on this canvas when enabled — adjust position, size, and edge distance in Settings.
+        {{ t(S('canvas.subscribeHelp')) }}
       </span>
     </p>
   </div>

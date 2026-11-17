@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { Copy, ExternalLink, FolderOpen } from '@lucide/vue'
+import { useI18n } from '../../i18n'
 import { APP_VERSION } from '../../lib/appVersion'
 import * as api from '../../lib/api'
 import { formatBytes } from '../../lib/formatBytes'
@@ -9,24 +10,20 @@ import { useGlobalSettingsStore } from '../../stores/globalSettings'
 import SettingsRow from './SettingsRow.vue'
 
 const store = useGlobalSettingsStore()
+const { t } = useI18n()
 const platform = usePlatformStore()
 const info = ref<api.SystemInfo | null>(null)
 const loading = ref(false)
 const showChangelog = ref(false)
 
-const changelogText = computed(() => {
-  return [
-    'See CHANGELOG.md in the repository for the full Keep a Changelog history.',
-    'Open the GitHub repository or the local project CHANGELOG.md for release notes.',
-  ].join('\n')
-})
+const changelogText = computed(() => t('about.changelogBody'))
 
 async function refresh(): Promise<void> {
   loading.value = true
   try {
     info.value = await api.fetchSystemInfo()
   } catch (error) {
-    platform.toast(error instanceof Error ? error.message : 'Could not load system info.', 'error')
+    platform.toast(error instanceof Error ? error.message : t('about.loadFailed'), 'error')
   } finally {
     loading.value = false
   }
@@ -65,9 +62,9 @@ function systemText(): string {
 async function copyInfo(): Promise<void> {
   try {
     await navigator.clipboard.writeText(systemText())
-    platform.toast('System information copied.', 'success')
+    platform.toast(t('about.copied'), 'success')
   } catch {
-    platform.toast('Could not copy to clipboard.', 'error')
+    platform.toast(t('about.copyFailed'), 'error')
   }
 }
 
@@ -80,70 +77,70 @@ async function openLogs(): Promise<void> {
   try {
     await api.openSystemPath('logs')
   } catch (error) {
-    platform.toast(error instanceof Error ? error.message : 'Could not open logs folder.', 'error')
+    platform.toast(error instanceof Error ? error.message : t('about.openLogsFailed'), 'error')
   }
 }
 </script>
 
 <template>
   <div>
-    <h3 class="section-label">About</h3>
-    <SettingsRow label="Application">
+    <h3 class="section-label">{{ t('about.section') }}</h3>
+    <SettingsRow :label="t('about.application')">
       <span class="text-sm text-zinc-100">Ribo Studio</span>
     </SettingsRow>
-    <SettingsRow label="Version" hint="From the authoritative package.json SemVer.">
+    <SettingsRow :label="t('about.version')" :hint="t('about.versionHint')">
       <span class="text-sm text-zinc-100">v{{ info?.version || APP_VERSION }}</span>
     </SettingsRow>
 
-    <h3 class="section-label mt-6">System</h3>
-    <SettingsRow label="Operating system">
-      <span class="text-sm text-zinc-300">{{ info?.os || (loading ? 'Loading…' : '—') }}</span>
+    <h3 class="section-label mt-6">{{ t('about.system') }}</h3>
+    <SettingsRow :label="t('about.os')">
+      <span class="text-sm text-zinc-300">{{ info?.os || (loading ? t('about.loading') : '—') }}</span>
     </SettingsRow>
-    <SettingsRow label="CPU">
-      <span class="max-w-[18rem] text-right text-sm text-zinc-300">
+    <SettingsRow :label="t('about.cpu')">
+      <span class="max-w-[18rem] text-end text-sm text-zinc-300">
         {{ info?.cpuModel || '—' }}
-        <span v-if="info" class="block text-xs text-zinc-500">{{ info.cpuCount }} logical</span>
+        <span v-if="info" class="block text-xs text-zinc-500">{{ info.cpuCount }} {{ t('about.logical') }}</span>
       </span>
     </SettingsRow>
-    <SettingsRow label="Memory">
+    <SettingsRow :label="t('about.memory')">
       <span class="text-sm text-zinc-300">
         {{ formatBytes(info?.totalRamBytes) }}
-        <span class="text-xs text-zinc-500"> / {{ formatBytes(info?.availableRamBytes) }} free</span>
+        <span class="text-xs text-zinc-500"> / {{ formatBytes(info?.availableRamBytes) }} {{ t('about.free') }}</span>
       </span>
     </SettingsRow>
-    <SettingsRow label="GPU / hardware encoders" hint="Software renderers are never listed as dedicated GPUs.">
-      <span class="max-w-[18rem] text-right text-sm text-zinc-300">
-        {{ (info?.gpu || []).join(', ') || 'None detected' }}
+    <SettingsRow :label="t('about.gpu')" :hint="t('about.gpuHint')">
+      <span class="max-w-[18rem] text-end text-sm text-zinc-300">
+        {{ (info?.gpu || []).join(', ') || t('about.noneDetected') }}
       </span>
     </SettingsRow>
-    <SettingsRow label="FFmpeg">
-      <span class="max-w-[18rem] truncate text-right text-xs text-zinc-300">{{ info?.ffmpegVersion || '—' }}</span>
+    <SettingsRow :label="t('about.ffmpeg')">
+      <span class="max-w-[18rem] truncate text-end text-xs text-zinc-300">{{ info?.ffmpegVersion || '—' }}</span>
     </SettingsRow>
-    <SettingsRow label="FFprobe">
-      <span class="max-w-[18rem] truncate text-right text-xs text-zinc-300">{{ info?.ffprobeVersion || '—' }}</span>
+    <SettingsRow :label="t('about.ffprobe')">
+      <span class="max-w-[18rem] truncate text-end text-xs text-zinc-300">{{ info?.ffprobeVersion || '—' }}</span>
     </SettingsRow>
-    <SettingsRow label="AI upscaling engines">
-      <span class="max-w-[18rem] text-right text-sm text-zinc-300">
+    <SettingsRow :label="t('about.upscalers')">
+      <span class="max-w-[18rem] text-end text-sm text-zinc-300">
         {{
           (info?.upscalerEngines || [])
-            .map((engine) => `${engine.label}${engine.available ? '' : ' (off)'}`)
+            .map((engine) => `${engine.label}${engine.available ? '' : ` (${t('about.off')})`}`)
             .join(', ') || '—'
         }}
       </span>
     </SettingsRow>
 
-    <h3 class="section-label mt-6 mb-3">Actions</h3>
+    <h3 class="section-label mt-6 mb-3">{{ t('about.actions') }}</h3>
     <div class="flex flex-wrap gap-2">
       <button class="btn btn-ghost cursor-pointer" type="button" @click="copyInfo">
         <Copy :size="14" />
-        Copy System Information
+        {{ t('about.copyInfo') }}
       </button>
       <button class="btn btn-ghost cursor-pointer" type="button" @click="openGithub">
         <ExternalLink :size="14" />
-        Open GitHub
+        {{ t('about.openGithub') }}
       </button>
       <button class="btn btn-ghost cursor-pointer" type="button" @click="showChangelog = !showChangelog">
-        View Changelog
+        {{ t('about.viewChangelog') }}
       </button>
       <button
         v-if="info?.capabilities.canOpenPaths"
@@ -152,14 +149,14 @@ async function openLogs(): Promise<void> {
         @click="openLogs"
       >
         <FolderOpen :size="14" />
-        Open Logs Directory
+        {{ t('about.openLogs') }}
       </button>
     </div>
     <p v-if="showChangelog" class="mt-3 whitespace-pre-wrap rounded-lg bg-inset p-3 text-xs text-zinc-400">
       {{ changelogText }}
     </p>
     <p class="mt-4 text-xs text-zinc-500">
-      Check for Updates is not available in this local runtime. Use GitHub Releases when upgrading.
+      {{ t('about.updatesNote') }}
     </p>
   </div>
 </template>

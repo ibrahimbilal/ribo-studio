@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Undo2, X } from '@lucide/vue'
 import { computed } from 'vue'
+import { useI18n } from '../i18n'
 import { useProjectStore } from '../stores/project'
 import ColorSwatches from './ColorSwatches.vue'
 import FileDropZone from './FileDropZone.vue'
@@ -8,6 +9,7 @@ import SliderField from './SliderField.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 
 const store = useProjectStore()
+const { t } = useI18n()
 
 const keptLabel = computed(() => {
   const clip = store.selectedClip
@@ -50,10 +52,10 @@ function onTitleColor(event: Event) {
 </script>
 
 <template>
-  <aside v-if="store.selectedClip" class="flex min-h-0 flex-col border-zinc-800 bg-sidebar xl:border-r">
+  <aside v-if="store.selectedClip" class="flex min-h-0 flex-col border-zinc-800 bg-sidebar xl:border-e">
     <div class="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
-      <p class="section-label">Selected clip</p>
-      <button class="text-zinc-400 cursor-pointer" type="button" aria-label="Close selected clip" title="Close" @click="store.closeSelectedPanel">
+      <p class="section-label">{{ t('ranking.selectedClip.title') }}</p>
+      <button class="text-zinc-400 cursor-pointer" type="button" :aria-label="t('ranking.selectedClip.close')" :title="t('common.close')" @click="store.closeSelectedPanel">
         <X :size="16" />
       </button>
     </div>
@@ -61,18 +63,18 @@ function onTitleColor(event: Event) {
       <p class="truncate text-sm">{{ store.selectedClip.title }}</p>
       <label class="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-inset px-3 py-2 text-xs text-zinc-200">
         <span>
-          <span class="block font-semibold">Play at the end</span>
-          <span class="mt-1 block text-xs leading-relaxed text-zinc-500">This clip stays in the list, but the video and the ranking play it last. Only one clip can be last.</span>
+          <span class="block font-semibold">{{ t('ranking.selectedClip.playAtEnd') }}</span>
+          <span class="mt-1 block text-xs leading-relaxed text-zinc-500">{{ t('ranking.selectedClip.playAtEndHint') }}</span>
         </span>
         <ToggleSwitch
           :model-value="store.selectedClip.playAtEnd"
-          aria-label="Play at the end"
+          :aria-label="t('ranking.selectedClip.playAtEnd')"
           @update:model-value="store.setPlayAtEnd(store.selectedClip.id, $event)"
         />
       </label>
       <div v-if="store.selectedClip.duration > 0" class="space-y-2">
         <SliderField
-          label="Trim start"
+          :label="t('ranking.selectedClip.trimStart')"
           :model-value="store.selectedClip.trimStart"
           :min="0"
           :max="store.selectedClip.duration"
@@ -81,7 +83,7 @@ function onTitleColor(event: Event) {
           @update:model-value="store.setTrim(store.selectedClip.id, $event, store.selectedClip.trimEnd)"
         />
         <SliderField
-          label="Trim end"
+          :label="t('ranking.selectedClip.trimEnd')"
           :model-value="store.selectedClip.trimEnd"
           :min="0"
           :max="store.selectedClip.duration"
@@ -89,40 +91,40 @@ function onTitleColor(event: Event) {
           suffix="s"
           @update:model-value="store.setTrim(store.selectedClip.id, store.selectedClip.trimStart, $event)"
         />
-        <p class="text-xs text-zinc-500">Keeping {{ keptLabel }}s of {{ totalLabel }}s</p>
+        <p class="text-xs text-zinc-500">{{ t('ranking.selectedClip.keepingDuration', { kept: keptLabel, total: totalLabel }) }}</p>
       </div>
       <div class="space-y-2">
-        <p class="text-xs text-zinc-400">Number color</p>
+        <p class="text-xs text-zinc-400">{{ t('ranking.selectedClip.numberColor') }}</p>
         <ColorSwatches :model-value="store.selectedClip.rankColor" @pick="store.setRankColor(store.selectedClip.id, $event)" />
         <div class="flex flex-wrap items-center gap-2">
           <label class="btn cursor-pointer btn-ghost px-2 py-1">
-            Custom
+            {{ t('ranking.selectedClip.custom') }}
             <input
               type="color"
               :value="store.selectedClip.rankColor || store.style.ranking.color"
-              aria-label="Custom number color"
+              :aria-label="t('ranking.selectedClip.customNumberColor')"
               @input="onCustomColor"
             />
           </label>
-          <button class="btn cursor-pointer btn-ghost px-2 py-1" type="button" aria-label="Use default number color" title="Use default number color" @click="store.setRankColor(store.selectedClip.id, null)">
+          <button class="btn cursor-pointer btn-ghost px-2 py-1" type="button" :aria-label="t('ranking.selectedClip.useDefaultNumberColor')" :title="t('ranking.selectedClip.useDefaultNumberColor')" @click="store.setRankColor(store.selectedClip.id, null)">
             <Undo2 :size="16" />
           </button>
         </div>
       </div>
       <div class="space-y-2">
-        <p class="text-xs text-zinc-400">Title color</p>
+        <p class="text-xs text-zinc-400">{{ t('ranking.selectedClip.titleColor') }}</p>
         <ColorSwatches :model-value="store.selectedClip.titleColor" @pick="store.setTitleColor(store.selectedClip.id, $event)" />
         <div class="flex flex-wrap items-center gap-2">
           <label class="btn cursor-pointer btn-ghost px-2 py-1">
-            Custom
+            {{ t('ranking.selectedClip.custom') }}
             <input
               type="color"
               :value="store.selectedClip.titleColor || store.style.caption.color"
-              aria-label="Custom title color"
+              :aria-label="t('ranking.selectedClip.customTitleColor')"
               @input="onTitleColor"
             />
           </label>
-          <button class="btn cursor-pointer btn-ghost px-2 py-1" type="button" aria-label="Use default title color" title="Use default title color" @click="store.setTitleColor(store.selectedClip.id, null)">
+          <button class="btn cursor-pointer btn-ghost px-2 py-1" type="button" :aria-label="t('ranking.selectedClip.useDefaultTitleColor')" :title="t('ranking.selectedClip.useDefaultTitleColor')" @click="store.setTitleColor(store.selectedClip.id, null)">
             <Undo2 :size="16" />
           </button>
         </div>
@@ -130,8 +132,8 @@ function onTitleColor(event: Event) {
       <FileDropZone
         compact
         accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v"
-        label="Drop a video to replace"
-        drop-label="Drop to replace"
+        :label="t('ranking.selectedClip.dropReplace')"
+        :drop-label="t('ranking.selectedClip.dropToReplace')"
         formats="MP4, MOV, WebM"
         @files="onReplaceFiles"
       />

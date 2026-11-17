@@ -117,6 +117,29 @@ function channelThemeSlotKey(entry: StoredSubscribeAnimationCacheEntry): string 
   return `${entry.channelId}|${entry.templateId}|${entry.channelCardTheme}`
 }
 
+async function pruneDuplicateGroup(
+  groups: Map<string, StoredSubscribeAnimationCacheEntry[]>,
+  options: { keepCacheKey?: string; label: (entry: StoredSubscribeAnimationCacheEntry) => string },
+): Promise<number> {
+  let removed = 0
+  for (const group of groups.values()) {
+    if (group.length < 2 && !options.keepCacheKey) continue
+    const keep =
+      (options.keepCacheKey && group.find((item) => item.cacheKey === options.keepCacheKey)) ||
+      [...group].sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0))[0]
+    if (!keep) continue
+    for (const entry of group) {
+      if (entry.cacheKey === keep.cacheKey) continue
+      if (subscribeAnimationCacheIsBusy(entry.cacheKey)) continue
+      entries.delete(entry.cacheKey)
+      await rm(entry.dir, { recursive: true, force: true }).catch(() => undefined)
+      removed += 1
+      log(`Replaced stale ${options.label(entry)} cache ${entry.cacheKey.slice(0, 12)}…`)
+    }
+  }
+  return removed
+}
+
 /**
  * Keep a single channel-card entry per (channelId, theme). Prefer `keepCacheKey`, else newest lastUsedAt.
  * Skips busy keys. Returns how many entries were removed.
@@ -137,23 +160,33 @@ async function pruneChannelThemeDuplicates(options?: {
     groups.set(slot, list)
   }
 
-  let removed = 0
-  for (const group of groups.values()) {
-    if (group.length < 2 && !options?.keepCacheKey) continue
-    const keep =
-      (options?.keepCacheKey && group.find((item) => item.cacheKey === options.keepCacheKey)) ||
-      [...group].sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0))[0]
-    if (!keep) continue
-    for (const entry of group) {
-      if (entry.cacheKey === keep.cacheKey) continue
-      if (subscribeAnimationCacheIsBusy(entry.cacheKey)) continue
-      entries.delete(entry.cacheKey)
-      await rm(entry.dir, { recursive: true, force: true }).catch(() => undefined)
-      removed += 1
-      log(`Replaced stale channel-card cache (${entry.channelCardTheme}) ${entry.cacheKey.slice(0, 12)}…`)
-    }
+  return pruneDuplicateGroup(groups, {
+    keepCacheKey: options?.keepCacheKey,
+    label: (entry) => `channel-card (${entry.channelCardTheme})`,
+  })
+}
+
+/**
+ * Keep a single static entry per templateId. Prefer `keepCacheKey`, else newest lastUsedAt.
+ * Skips busy keys. Returns how many entries were removed.
+ */
+async function pruneStaticTemplateDuplicates(options?: {
+  keepCacheKey?: string
+  templateId?: SubscribeAnimationStyle
+}): Promise<number> {
+  const groups = new Map<string, StoredSubscribeAnimationCacheEntry[]>()
+  for (const entry of entries.values()) {
+    if (entry.kind !== 'static') continue
+    if (options?.templateId && entry.templateId !== options.templateId) continue
+    const list = groups.get(entry.templateId) ?? []
+    list.push(entry)
+    groups.set(entry.templateId, list)
   }
-  return removed
+
+  return pruneDuplicateGroup(groups, {
+    keepCacheKey: options?.keepCacheKey,
+    label: (entry) => `static (${entry.templateId})`,
+  })
 }
 
 async function loadRegistry(): Promise<void> {
@@ -192,8 +225,9 @@ async function loadRegistry(): Promise<void> {
     if (!channel?.channelId || !isYoutubeChannelId(channel.channelId)) continue
     channels.set(channel.channelId, channel)
   }
-  const pruned = await pruneChannelThemeDuplicates()
-  if (pruned > 0) await saveRegistry()
+  const prunedDynamic = await pruneChannelThemeDuplicates()
+  const prunedStatic = await pruneStaticTemplateDuplicates()
+  if (prunedDynamic + prunedStatic > 0) await saveRegistry()
 }
 
 async function saveRegistry(): Promise<void> {
@@ -476,6 +510,11 @@ export async function putCachedAnimation(options: {
           channelId: stored.channelId,
           channelCardTheme: stored.channelCardTheme,
         })
+      } else if (stored.kind === 'static') {
+        await pruneStaticTemplateDuplicates({
+          keepCacheKey: stored.cacheKey,
+          templateId: stored.templateId,
+        })
       }
       await saveRegistry()
       await sweepSubscribeAnimationCacheLru()
@@ -639,7 +678,11 @@ export function setSubscribeAnimationCacheMaxBytes(bytes: number): void {
 export function listMissingStaticCacheHints(
   candidates: Array<{ cacheKey: string; templateId: SubscribeAnimationStyle }>,
 ): Array<{ cacheKey: string; templateId: SubscribeAnimationStyle }> {
-  return candidates.filter((item) => !entries.has(item.cacheKey))
+  return candidates.filter((item) => {
+    if (entries.has(item.cacheKey)) return false
+    // One-slot policy: any existing static entry for this template counts as prepared.
+    return ![...entries.values()].some((entry) => entry.kind === 'static' && entry.templateId === item.templateId)
+  })
 }
 
 export type SubscribeAnimationCacheInventoryStatus =

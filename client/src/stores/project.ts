@@ -19,7 +19,9 @@ import * as idb from '../lib/idb'
 import { readVideoFile, validateAudioFile, validateVideoFile } from '../lib/media'
 import { defaultColorSets, loadColorSets, saveColorSets, type ColorSet } from '../lib/colorSets'
 import { playbackOrder } from '../lib/order'
-import { rankingExportFingerprint, DUPLICATE_EXPORT_MESSAGE } from '../lib/exportFingerprint'
+import { translate, type MessageKey, type MessageParams } from '../i18n'
+import { ranking as rankingMsg } from '../i18n/messages/ranking'
+import { rankingExportFingerprint } from '../lib/exportFingerprint'
 import { RANK_COLORS, createDefaultVideo, materializePreset } from '../lib/presets'
 import { retokenize } from '../lib/title'
 import type { Clip, PersistedClip, PresetId, ProjectStyle, Source, TitleSpan } from '../types'
@@ -34,7 +36,7 @@ const lastEnqueuedExportFingerprint = ref<string | null>(null)
 function blankClip(partial: Partial<Clip>): Clip {
   return {
     id: crypto.randomUUID(),
-    title: 'Untitled clip',
+    title: rankingMsg.untitledClip,
     fileName: '',
     source: 'local',
     sourceUrl: null,
@@ -63,7 +65,7 @@ export const useProjectStore = defineStore('project', () => {
   const globalSettings = useGlobalSettingsStore()
   const { serverOnline } = storeToRefs(platform)
   const exportQueue = useManagedExportJobs()
-  const name = ref('Untitled ranking')
+  const name = ref<string>(rankingMsg.untitledProject)
   const titleText = ref(initial.titleText)
   const spans = ref<TitleSpan[]>(initial.spans)
   const style = ref<ProjectStyle>(initial.style)
@@ -102,18 +104,40 @@ export const useProjectStore = defineStore('project', () => {
   const currentExportFingerprint = computed(() =>
     rankingExportFingerprint(clips.value, style.value, spans.value, musicFile),
   )
+  function msg(key: MessageKey, params?: MessageParams) {
+    return translate(globalSettings.general.language, key, params)
+  }
+
+  function videoValidationMessage(file: File): string | null {
+    const problem = validateVideoFile(file)
+    if (!problem) return null
+    if (problem.includes('not an MP4')) return msg('ranking.validation.notVideo', { name: file.name })
+    if (problem.includes('looks empty')) return msg('ranking.validation.empty', { name: file.name })
+    if (problem.includes('larger than 500')) return msg('ranking.validation.tooLarge', { name: file.name })
+    return problem
+  }
+
+  function audioValidationMessage(file: File): string | null {
+    const problem = validateAudioFile(file)
+    if (!problem) return null
+    if (problem.startsWith('Background music must be an')) return msg('ranking.validation.audioType')
+    const limit = problem.match(/must be (.+) or smaller\./)?.[1]
+    if (limit) return msg('ranking.validation.audioTooLarge', { limit })
+    return problem
+  }
+
   const exportBlocker = computed(() => {
-    if (!serverOnline.value) return 'The renderer is offline.'
-    if (clips.value.length < 1) return 'Add at least one clip.'
-    if (clips.value.some((clip) => clip.uploadState === 'uploading')) return 'Wait for uploads to finish.'
-    if (clips.value.some((clip) => clip.uploadState === 'empty')) return 'Upload a video file for each linked clip.'
-    if (clips.value.some((clip) => clip.uploadState === 'error')) return 'Retry or remove clips that failed.'
-    if (clips.value.some((clip) => clip.trimEnd - clip.trimStart < 0.3)) return 'Each clip must keep at least 0.3 seconds.'
+    if (!serverOnline.value) return msg('ranking.toast.rendererOffline')
+    if (clips.value.length < 1) return msg('ranking.toast.addClip')
+    if (clips.value.some((clip) => clip.uploadState === 'uploading')) return msg('ranking.toast.waitUploads')
+    if (clips.value.some((clip) => clip.uploadState === 'empty')) return msg('ranking.toast.uploadEachClip')
+    if (clips.value.some((clip) => clip.uploadState === 'error')) return msg('ranking.toast.retryFailedClips')
+    if (clips.value.some((clip) => clip.trimEnd - clip.trimStart < 0.3)) return msg('ranking.toast.minClipDuration')
     if (
       lastEnqueuedExportFingerprint.value !== null &&
       currentExportFingerprint.value === lastEnqueuedExportFingerprint.value
     ) {
-      return DUPLICATE_EXPORT_MESSAGE
+      return msg('ranking.export.duplicateBlocked')
     }
     return ''
   })
@@ -192,7 +216,7 @@ export const useProjectStore = defineStore('project', () => {
       const saved = await idb.loadRankingProject()
       await platform.refreshServer()
       if (saved?.version === 1 && saved.style && saved.spans) {
-        name.value = saved.name || 'Untitled ranking'
+        name.value = saved.name || String(rankingMsg.untitledProject)
         titleText.value = saved.titleText || ''
         spans.value = saved.spans
         style.value = {
@@ -234,7 +258,7 @@ export const useProjectStore = defineStore('project', () => {
             clips.value.push(clip)
           } else {
             clip.uploadState = 'error'
-            clip.error = 'The video file is no longer saved in this browser. Upload it again.'
+            clip.error = msg('ranking.clipError.fileLost')
             clips.value.push(clip)
           }
         }
@@ -246,7 +270,7 @@ export const useProjectStore = defineStore('project', () => {
         selectedClipId.value = clips.value[0]?.id ?? null
       }
     } catch {
-      toast('The saved project could not be restored.')
+      toast(msg('ranking.toast.restoreFailed'))
     } finally {
       applying = false
       hydrated.value = true
@@ -265,15 +289,15 @@ export const useProjectStore = defineStore('project', () => {
   async function addFiles(list: FileList | File[]) {
     for (const file of Array.from(list)) {
       if (clips.value.length >= 30) {
-        toast('You can add up to 30 clips.')
+        toast(msg('ranking.toast.maxClips'))
         break
       }
-      const problem = validateVideoFile(file)
+      const problem = videoValidationMessage(file)
       if (problem) {
         toast(problem)
         continue
       }
-      if (file.size > 250 * 1024 * 1024) toast('Large file. Export may take several minutes.', 'info')
+      if (file.size > 250 * 1024 * 1024) toast(msg('ranking.toast.largeFile'), 'info')
       const clip = blankClip({
         title: titleFromFileName(file.name),
         fileName: file.name,
@@ -285,13 +309,13 @@ export const useProjectStore = defineStore('project', () => {
       clips.value.push(clip)
       selectedClipId.value = clip.id
       void idb.saveClipFile(clip.id, file).catch(() => {
-        toast('This browser could not keep a local copy. The clip still works until you refresh.', 'info')
+        toast(msg('ranking.toast.localCopyFailed'), 'info')
       })
       await applyMetadata(clip.id)
       const saved = clips.value.find((item) => item.id === clip.id)
       if (saved && saved.duration > 20 * 60) {
         saved.uploadState = 'error'
-        saved.error = 'Clips must be 20 minutes or shorter.'
+        saved.error = msg('ranking.toast.clipTooLong')
         continue
       }
       void upload(clip.id)
@@ -301,7 +325,7 @@ export const useProjectStore = defineStore('project', () => {
   async function attachFile(id: string, file: File) {
     const clip = clips.value.find((item) => item.id === id)
     if (!clip) return
-    const problem = validateVideoFile(file)
+    const problem = videoValidationMessage(file)
     if (problem) {
       toast(problem)
       return
@@ -319,7 +343,7 @@ export const useProjectStore = defineStore('project', () => {
     const saved = clips.value.find((item) => item.id === clip.id)
     if (saved && saved.duration > 20 * 60) {
       saved.uploadState = 'error'
-      saved.error = 'Clips must be 20 minutes or shorter.'
+      saved.error = msg('ranking.toast.clipTooLong')
       return
     }
     await upload(clip.id)
@@ -333,13 +357,13 @@ export const useProjectStore = defineStore('project', () => {
       return
     }
     if (clips.value.length >= 30) {
-      toast('You can add up to 30 clips.')
+      toast(msg('ranking.toast.maxClips'))
       return
     }
     try {
       const info = await api.importUrl(parsed.normalizedUrl)
       const clip = blankClip({
-        title: info.title || `${sourceLabel(info.platform)} clip`,
+        title: info.title || msg('ranking.importClipTitle', { platform: sourceLabel(info.platform) }),
         source: info.platform,
         sourceUrl: info.url,
         thumbnail: info.thumbnail,
@@ -349,7 +373,7 @@ export const useProjectStore = defineStore('project', () => {
       selectedClipId.value = clip.id
       urlNotice.value = info.message
     } catch (error) {
-      toast(error instanceof Error ? error.message : 'The link could not be checked.')
+      toast(error instanceof Error ? error.message : msg('ranking.toast.linkCheckFailed'))
     }
   }
 
@@ -489,7 +513,7 @@ export const useProjectStore = defineStore('project', () => {
 
   function addColorSet() {
     const id = crypto.randomUUID()
-    colorSets.value = [...colorSets.value, { id, name: 'Custom', colors: ['#ffffff', '#ffe14a', '#ff3b3b', '#3ee0ff'] }]
+    colorSets.value = [...colorSets.value, { id, name: rankingMsg.customColorSetName, colors: ['#ffffff', '#ffe14a', '#ff3b3b', '#3ee0ff'] }]
     activeColorSetId.value = id
   }
 
@@ -507,7 +531,7 @@ export const useProjectStore = defineStore('project', () => {
     const normalized = color.toLowerCase()
     if (set.colors.some((item) => item.toLowerCase() === normalized)) return
     if (set.colors.length >= 12) {
-      toast('A color set can hold 12 colors.')
+      toast(msg('ranking.toast.maxColors'))
       return
     }
     set.colors = [...set.colors, normalized]
@@ -548,7 +572,7 @@ export const useProjectStore = defineStore('project', () => {
       await idb.clearMusicFile().catch(() => undefined)
       return
     }
-    const problem = validateAudioFile(file)
+    const problem = audioValidationMessage(file)
     if (problem) {
       toast(problem)
       return
@@ -558,12 +582,12 @@ export const useProjectStore = defineStore('project', () => {
     musicName.value = file.name
     musicFileSize.value = file.size
     void idb.saveMusicFile(file).catch(() => {
-      toast('The music will play until you refresh, but it could not be saved in this browser.', 'info')
+      toast(msg('ranking.toast.musicSaveFailed'), 'info')
     })
   }
 
   async function newProject() {
-    if (clips.value.length > 0 && !window.confirm('Start a new project? The current clips will be removed from the editor.')) return
+    if (clips.value.length > 0 && !window.confirm(msg('ranking.toast.newProjectConfirm'))) return
     for (const clip of clips.value) {
       if (clip.objectUrl) URL.revokeObjectURL(clip.objectUrl)
     }
@@ -575,7 +599,7 @@ export const useProjectStore = defineStore('project', () => {
     musicFileSize.value = null
     const fresh = materializePreset('classic', createDefaultVideo())
     applying = true
-    name.value = 'Untitled ranking'
+    name.value = rankingMsg.untitledProject
     titleText.value = fresh.titleText
     spans.value = fresh.spans
     style.value = {
@@ -594,7 +618,7 @@ export const useProjectStore = defineStore('project', () => {
 
   function retryUpload(id: string) {
     if (!fileMap.has(id)) {
-      toast('Choose the video file again.')
+      toast(msg('ranking.toast.retryChooseFile'))
       return
     }
     void upload(id)
@@ -612,12 +636,12 @@ export const useProjectStore = defineStore('project', () => {
       durations,
       resolveFade(durations, style.value.video.transition, style.value.video.fadeDuration),
     )
-    if (total > 5 * 60) toast('This compilation is long. Rendering may take several minutes.', 'info')
-    const filename = name.value.trim() && name.value !== 'Untitled ranking' ? name.value : titleText.value.replace(/\s+/g, ' ').trim()
+    if (total > 5 * 60) toast(msg('ranking.toast.longCompilation'), 'info')
+    const filename = name.value.trim() && name.value !== rankingMsg.untitledProject ? name.value : titleText.value.replace(/\s+/g, ' ').trim()
     const displayName =
-      name.value.trim() && name.value !== 'Untitled ranking'
+      name.value.trim() && name.value !== rankingMsg.untitledProject
         ? name.value
-        : titleText.value.replace(/\s+/g, ' ').trim() || 'Untitled ranking'
+        : titleText.value.replace(/\s+/g, ' ').trim() || rankingMsg.untitledProject
     const snapshotClips = clips.value.map((clip) => ({ ...clip }))
     const snapshotStyle = {
       ...style.value,
@@ -664,13 +688,13 @@ export const useProjectStore = defineStore('project', () => {
     const url = exportState.value.downloadUrl
     if (exportState.value.phase !== 'done' || !url) return
     triggerDownload(url, downloadName())
-    toast('Download started.', 'info')
+    toast(msg('ranking.toast.downloadStarted'), 'info')
   }
 
   function downloadName(): string {
     const fromJob = exportState.value.jobId ? '' : ''
     void fromJob
-    const base = name.value.trim() && name.value !== 'Untitled ranking' ? name.value : titleText.value.replace(/\s+/g, ' ').trim()
+    const base = name.value.trim() && name.value !== rankingMsg.untitledProject ? name.value : titleText.value.replace(/\s+/g, ' ').trim()
     return `${base || 'ranking'}.mp4`
   }
 
@@ -681,7 +705,7 @@ export const useProjectStore = defineStore('project', () => {
     if (!serverOnline.value) await platform.refreshServer()
     if (!serverOnline.value) {
       clip.uploadState = 'error'
-      clip.error = 'The renderer is offline, so this clip is not uploaded yet.'
+      clip.error = msg('ranking.clipError.rendererOfflinePending')
       return
     }
     const previousServerId = clip.serverId
@@ -711,14 +735,14 @@ export const useProjectStore = defineStore('project', () => {
       if (previousServerId && previousServerId !== result.id) void api.deleteClip(previousServerId).catch(() => undefined)
     } catch (error) {
       clip.uploadState = 'error'
-      clip.error = error instanceof Error ? error.message : 'Upload failed.'
+      clip.error = error instanceof Error ? error.message : msg('ranking.toast.uploadFailed')
     }
   }
 
   async function resumeUpload(clip: Clip) {
     if (!serverOnline.value) {
       clip.uploadState = 'error'
-      clip.error = 'Saved on this computer. The renderer is offline, so this clip is not uploaded yet.'
+      clip.error = msg('ranking.clipError.savedOfflinePending')
       return
     }
     if (clip.serverId && (await api.clipExists(clip.serverId).catch(() => false))) {

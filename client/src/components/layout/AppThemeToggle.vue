@@ -3,8 +3,10 @@ import { Moon, Sun } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { resolveTheme, type ResolvedTheme } from '../../lib/appearance'
 import { useGlobalSettingsStore } from '../../stores/globalSettings'
+import { useI18n } from '../../i18n'
 
 const store = useGlobalSettingsStore()
+const { t } = useI18n()
 const systemDark = ref(
   typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
 )
@@ -32,7 +34,7 @@ const resolved = computed((): ResolvedTheme =>
 const nextTheme = computed(() => (resolved.value === 'dark' ? 'light' : 'dark'))
 
 const label = computed(() =>
-  nextTheme.value === 'light' ? 'Switch to light theme' : 'Switch to dark theme',
+  nextTheme.value === 'light' ? t('layout.switchToLight') : t('layout.switchToDark'),
 )
 
 function toggleTheme(): void {

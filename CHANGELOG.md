@@ -10,6 +10,17 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-11-17
+
+### Added
+
+- **Language** preference in Global Settings → General with translations for widely used languages (English, Chinese, Hindi, Spanish, Arabic, French, Bengali, Portuguese, Russian, Urdu, Indonesian, German, Japanese) across settings, the app shell, and all editors (Shorts, Screensaver, Thumbnails, Image Upscaler, Audio Looper); RTL languages set document direction.
+
+### Fixed
+
+- RTL layout for Arabic and Urdu: shell, settings, toasts, drawer, and shared chrome use logical spacing/borders so UI mirrors correctly when `dir="rtl"`.
+- Subscribe Animation static cache keeps one entry per style (changing size/resolution replaces the previous cache instead of stacking duplicates).
+
 ## [1.6.1] — 2026-11-17
 
 ### Fixed

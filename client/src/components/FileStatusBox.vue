@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { AlertCircle, Check, Loader2, Trash2 } from '@lucide/vue'
 import { computed } from 'vue'
-import { FILE_STATUS_DEFAULT_LABELS, type FileStatusBoxStatus } from '../lib/fileStatusBox'
+import { useI18n } from '../i18n'
+import { FILE_STATUS_LABEL_KEYS, type FileStatusBoxStatus } from '../lib/fileStatusBox'
 
 export type { FileStatusBoxStatus }
 
@@ -17,7 +18,6 @@ const props = withDefaults(
   {
     status: 'ready',
     statusLabel: null,
-    removeLabel: 'Remove file',
     removable: true,
   },
 )
@@ -26,7 +26,7 @@ const emit = defineEmits<{
   remove: []
 }>()
 
-const DEFAULT_LABELS = FILE_STATUS_DEFAULT_LABELS
+const { t } = useI18n()
 
 const theme = computed(() => {
   switch (props.status) {
@@ -57,7 +57,9 @@ const theme = computed(() => {
   }
 })
 
-const labelText = computed(() => props.statusLabel ?? DEFAULT_LABELS[props.status])
+const removeActionLabel = computed(() => props.removeLabel ?? t('common.fileStatus.removeFile'))
+
+const labelText = computed(() => props.statusLabel ?? t(FILE_STATUS_LABEL_KEYS[props.status]))
 
 const spinIcon = computed(() => props.status === 'uploading' || props.status === 'processing')
 </script>
@@ -83,8 +85,8 @@ const spinIcon = computed(() => props.status === 'uploading' || props.status ===
       v-if="removable"
       class="btn btn-ghost shrink-0 cursor-pointer px-2 py-1"
       type="button"
-      :aria-label="removeLabel"
-      :title="removeLabel"
+      :aria-label="removeActionLabel"
+      :title="removeActionLabel"
       @click="emit('remove')"
     >
       <Trash2 :size="16" aria-hidden="true" />

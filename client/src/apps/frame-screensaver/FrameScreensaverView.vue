@@ -17,15 +17,18 @@ import ScreensaverSettingsPanel from './components/ScreensaverSettingsPanel.vue'
 import { installPreviewBenchHook } from './lib/benchPreview'
 import { screensaverDiagnosticsEnabled } from './lib/previewMetrics'
 import { useScreensaverStore } from './stores/screensaver'
+import { useI18n } from '../../i18n'
+import { S } from './lib/screensaverI18n'
 
 const store = useScreensaverStore()
+const { t } = useI18n()
 const customMinutes = ref(60)
 const tab = ref<'source' | 'preview' | 'settings'>('preview')
-const tabs = [
-  { id: 'source' as const, label: 'Source', icon: ImageIcon },
-  { id: 'preview' as const, label: 'Preview', icon: MonitorPlay },
-  { id: 'settings' as const, label: 'Settings', icon: SlidersHorizontal },
-]
+const tabs = computed(() => [
+  { id: 'source' as const, label: t(S('tabs.source')), icon: ImageIcon },
+  { id: 'preview' as const, label: t(S('tabs.preview')), icon: MonitorPlay },
+  { id: 'settings' as const, label: t(S('tabs.settings')), icon: SlidersHorizontal },
+])
 const canThumbnail = computed(() => (store.mediaKind === 'image' && Boolean(store.objectUrl)) || Boolean(store.thumbnail?.startsWith('data:')))
 const canSendToImageMotion = computed(() => store.mediaKind === 'image' && Boolean(store.objectUrl))
 
@@ -70,7 +73,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     >
       <div class="shrink-0 space-y-3 border-b border-zinc-800 p-4">
         <label class="block">
-          <span class="section-label mb-1 block">Project</span>
+          <span class="section-label mb-1 block">{{ t(S('project.label')) }}</span>
           <input v-model="store.name" class="field text-sm font-semibold" type="text" maxlength="80" />
         </label>
         <ScreensaverMediaPanel />
@@ -95,8 +98,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           <button
             class="btn btn-ghost cursor-pointer px-2"
             type="button"
-            aria-label="Send image to Image Motion Shorts"
-            title="Send image to Image Motion Shorts"
+            :aria-label="t(S('sendToImageMotion.aria'))"
+            :title="t(S('sendToImageMotion.title'))"
             :disabled="!canSendToImageMotion"
             @click="sendScreensaverImageToImageMotion()"
           >
@@ -122,7 +125,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </div>
 
     <div v-if="!store.hydrated" class="scrim">
-      Restoring saved project…
+      {{ t(S('restoring')) }}
     </div>
     <ScreensaverDiagnostics v-if="showDiagnostics" />
   </div>

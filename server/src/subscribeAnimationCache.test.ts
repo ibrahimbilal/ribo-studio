@@ -10,6 +10,7 @@ import {
   ensureSubscribeAnimationCache,
   getCachedAnimation,
   getSubscribeAnimationCacheStats,
+  listMissingStaticCacheHints,
   listSubscribeAnimationCacheInventory,
   materializeCachedAnimation,
   putCachedAnimation,
@@ -255,6 +256,68 @@ describe('subscribe animation persistent cache', () => {
     assert.equal(afterDark!.animations.length, 2)
     assert.ok(afterDark!.animations.some((item) => item.channelCardTheme === 'light' && item.cacheKey === second.key))
     assert.ok(afterDark!.animations.some((item) => item.channelCardTheme === 'dark' && item.cacheKey === dark.key))
+
+    await rm(staging, { recursive: true, force: true }).catch(() => undefined)
+  })
+
+  it('replaces older static cache for the same template when size/width changes', async () => {
+    const first = await resolveSubscribeAnimationCacheKey({
+      style: 'subscribe-only',
+      sizePercent: 12,
+      edgeDistance: 0,
+      outputWidth: 1920,
+    })
+    const staging = path.join(tmpDir, `anim-cache-static-replace-${Date.now()}`)
+    await mkdir(staging, { recursive: true })
+    const firstFrames = [path.join(staging, 'a1.png')]
+    await writeTinyPng(firstFrames[0]!)
+    await putCachedAnimation({
+      cacheKey: first.key,
+      kind: 'static',
+      templateId: 'subscribe-only',
+      channelId: null,
+      framePaths: firstFrames,
+      width: 20,
+      height: 20,
+      fps: 60,
+      durationSec: 7,
+      renderConfig: first.payload,
+    })
+
+    const second = await resolveSubscribeAnimationCacheKey({
+      style: 'subscribe-only',
+      sizePercent: 18,
+      edgeDistance: 4,
+      outputWidth: 3840,
+    })
+    assert.notEqual(first.key, second.key)
+    const secondFrames = [path.join(staging, 'a2.png')]
+    await writeTinyPng(secondFrames[0]!)
+    await putCachedAnimation({
+      cacheKey: second.key,
+      kind: 'static',
+      templateId: 'subscribe-only',
+      channelId: null,
+      framePaths: secondFrames,
+      width: 40,
+      height: 40,
+      fps: 60,
+      durationSec: 7,
+      renderConfig: second.payload,
+    })
+
+    const inventory = listSubscribeAnimationCacheInventory()
+    const staticOnly = inventory.staticAnimations.filter((item) => item.templateId === 'subscribe-only' && item.cacheKey)
+    assert.equal(staticOnly.length, 1)
+    assert.equal(staticOnly[0]!.cacheKey, second.key)
+    assert.equal(await getCachedAnimation(first.key), null)
+    assert.ok(await getCachedAnimation(second.key))
+
+    const missing = listMissingStaticCacheHints([
+      { cacheKey: first.key, templateId: 'subscribe-only' },
+      { cacheKey: second.key, templateId: 'subscribe-only' },
+    ])
+    assert.equal(missing.length, 0)
 
     await rm(staging, { recursive: true, force: true }).catch(() => undefined)
   })

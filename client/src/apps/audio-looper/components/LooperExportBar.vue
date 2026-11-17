@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppExportAction from '../../../components/ui/AppExportAction.vue'
+import { useI18n } from '../../../i18n'
 import { useAudioLooperStore } from '../stores/audioLooper'
 
 const store = useAudioLooperStore()
+const { t } = useI18n()
 
-const label = computed(() => (store.activeExportCount > 0 ? 'Queue export' : 'Export loop'))
+const label = computed(() => (store.activeExportCount > 0 ? t('looper.export.queueExport') : t('looper.export.exportLoop')))
 </script>
 
 <template>
@@ -13,7 +15,7 @@ const label = computed(() => (store.activeExportCount > 0 ? 'Queue export' : 'Ex
     :label="label"
     :disabled="Boolean(store.exportBlocker)"
     :blocker="store.exportBlocker"
-    hint="Progress, cancel, and download stay in the header notification panel."
+    :hint="t('looper.export.hint')"
     @export="store.startExport()"
   />
 </template>

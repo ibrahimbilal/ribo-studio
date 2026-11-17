@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Image as ImageIcon, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useI18n } from '../../i18n'
 import AppDialog from '../../components/ui/AppDialog.vue'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
 import ThumbnailCanvas from './components/ThumbnailCanvas.vue'
@@ -10,12 +11,13 @@ import ThumbnailProjectList from './components/ThumbnailProjectList.vue'
 import { useThumbnailStore } from './stores/thumbnail'
 
 const store = useThumbnailStore()
+const { t } = useI18n()
 const tab = ref<'source' | 'preview' | 'settings'>('preview')
-const tabs = [
-  { id: 'source' as const, label: 'Source', icon: ImageIcon },
-  { id: 'preview' as const, label: 'Preview', icon: MonitorPlay },
-  { id: 'settings' as const, label: 'Settings', icon: SlidersHorizontal },
-]
+const tabs = computed(() => [
+  { id: 'source' as const, label: t('thumbnail.tabSource'), icon: ImageIcon },
+  { id: 'preview' as const, label: t('thumbnail.tabPreview'), icon: MonitorPlay },
+  { id: 'settings' as const, label: t('thumbnail.tabSettings'), icon: SlidersHorizontal },
+])
 
 onMounted(() => {
   void store.init().then(() => store.consumeStoredTransfer())
@@ -32,7 +34,7 @@ onMounted(() => {
     >
       <div class="shrink-0 space-y-3 border-b border-zinc-800 p-4">
         <label class="block">
-          <span class="section-label mb-1 block">Project</span>
+          <span class="section-label mb-1 block">{{ t('common.project') }}</span>
           <input
             class="field text-sm font-semibold"
             maxlength="80"
@@ -54,13 +56,13 @@ onMounted(() => {
     </div>
     <ThumbnailControls :class="tab === 'settings' ? 'flex max-h-none flex-1' : 'hidden lg:flex'" />
     <div v-if="!store.hydrated" class="scrim">
-      Restoring saved thumbnail…
+      {{ t('thumbnail.restoring') }}
     </div>
-    <AppDialog :open="store.promptOpen" title="Replace the open thumbnail?" @cancel="store.acceptTransfer('keep')">
-      <p class="text-sm text-zinc-400">An image is already open. The transferred picture replaces it only if you choose Replace.</p>
+    <AppDialog :open="store.promptOpen" :title="t('thumbnail.replaceTitle')" @cancel="store.acceptTransfer('keep')">
+      <p class="text-sm text-zinc-400">{{ t('thumbnail.replaceBody') }}</p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="store.acceptTransfer('keep')">Keep current</button>
-        <button class="btn btn-primary cursor-pointer" type="button" @click="store.acceptTransfer('replace')">Replace</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="store.acceptTransfer('keep')">{{ t('common.keep') }}</button>
+        <button class="btn btn-primary cursor-pointer" type="button" @click="store.acceptTransfer('replace')">{{ t('common.replace') }}</button>
       </template>
     </AppDialog>
   </div>

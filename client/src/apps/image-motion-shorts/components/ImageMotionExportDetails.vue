@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from '../../../i18n'
 import AppExportStatusPanel from '../../../components/ui/AppExportStatusPanel.vue'
 import { formatClock } from '../../../lib/format'
 import { useImageMotionStore } from '../stores/imageMotion'
 
 const store = useImageMotionStore()
+const { t } = useI18n()
 const open = ref(false)
 
 const visible = computed(
@@ -35,29 +37,37 @@ function formatSeconds(value: number | null | undefined): string {
 }
 
 const rows = computed(() => [
-  { label: 'Stage', value: store.exportState.stage || store.exportState.message || '—' },
-  { label: 'Total frames', value: totalFrames.value.toLocaleString() },
-  { label: 'Rendered frames', value: renderedFramesLabel.value },
-  { label: 'Encoding', value: store.exportState.encoder || '—' },
+  { label: t('imageMotion.export.rows.stage'), value: store.exportState.stage || store.exportState.message || '—' },
+  { label: t('imageMotion.export.rows.totalFrames'), value: totalFrames.value.toLocaleString() },
+  { label: t('imageMotion.export.rows.renderedFrames'), value: renderedFramesLabel.value },
+  { label: t('imageMotion.export.rows.encoding'), value: store.exportState.encoder || '—' },
   {
-    label: 'Acceleration',
-    value: store.exportState.hardware == null ? '—' : store.exportState.hardware ? 'Active' : 'Off',
+    label: t('imageMotion.export.rows.acceleration'),
+    value:
+      store.exportState.hardware == null
+        ? '—'
+        : store.exportState.hardware
+          ? t('imageMotion.export.rows.accelerationActive')
+          : t('imageMotion.export.rows.accelerationOff'),
   },
   {
-    label: 'Speed',
-    value: store.exportState.encodeSpeed != null ? `${store.exportState.encodeSpeed.toFixed(2)}x realtime` : '—',
+    label: t('imageMotion.export.rows.speed'),
+    value:
+      store.exportState.encodeSpeed != null
+        ? t('imageMotion.export.rows.speedRealtime', { n: store.exportState.encodeSpeed.toFixed(2) })
+        : '—',
   },
   {
-    label: 'Encode fps',
+    label: t('imageMotion.export.rows.encodeFps'),
     value: store.exportState.encodeFps != null ? store.exportState.encodeFps.toFixed(1) : '—',
   },
-  { label: 'Elapsed', value: formatSeconds(store.exportState.elapsedSec) },
+  { label: t('imageMotion.export.rows.elapsed'), value: formatSeconds(store.exportState.elapsedSec) },
   {
-    label: 'Remaining',
-    value: store.exportState.etaSec == null ? 'Estimating…' : formatSeconds(store.exportState.etaSec),
+    label: t('imageMotion.export.rows.remaining'),
+    value: store.exportState.etaSec == null ? t('common.estimating') : formatSeconds(store.exportState.etaSec),
   },
   {
-    label: 'Output',
+    label: t('imageMotion.export.rows.output'),
     value: `${store.video.width}×${store.video.height} · ${store.video.fps} fps · ${formatClock(store.duration)}`,
   },
 ])

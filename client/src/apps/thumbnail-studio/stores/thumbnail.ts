@@ -27,7 +27,9 @@ import { usePlatformStore } from '../../../stores/platform'
 import { movePendingAssets, releasePendingAssets, storeImageBlob, syncProjectAssets } from '../lib/assetStore'
 import * as projectLibrary from '../lib/thumbnailProjectLibrary'
 import { exportThumbnailBlob, type ThumbnailRenderAssets } from '../lib/renderThumbnail'
-import { DUPLICATE_EXPORT_MESSAGE, thumbnailExportFingerprint } from '../../../lib/exportFingerprint'
+import { translate } from '../../../i18n'
+import { thumbnailExportFingerprint } from '../../../lib/exportFingerprint'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { type FileStatusBoxStatus } from '../../../lib/fileStatusBox'
 
 const bitmaps = new Map<string, ImageBitmap>()
@@ -95,12 +97,15 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
   let applyingProject = false
   const projectMetaById = ref<Record<string, projectLibrary.ThumbnailProjectMeta>>({})
 
+  const globalSettings = useGlobalSettingsStore()
   const currentExportFingerprint = computed(() => thumbnailExportFingerprint(doc.value))
   const activeMeta = computed(() => projectMetaById.value[doc.value.id] ?? { downloadedFingerprint: null, configFingerprint: '' })
   const exportDuplicateBlocker = computed(() => {
     if (!hasImage.value) return ''
     const downloaded = activeMeta.value.downloadedFingerprint
-    if (downloaded && currentExportFingerprint.value === downloaded) return DUPLICATE_EXPORT_MESSAGE
+    if (downloaded && currentExportFingerprint.value === downloaded) {
+      return translate(globalSettings.general.language, 'thumbnail.duplicateExportBlocker')
+    }
     return ''
   })
 

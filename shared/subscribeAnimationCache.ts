@@ -9,6 +9,9 @@ import { isYoutubeChannelId } from './youtubeChannelId'
 
 export const SUBSCRIBE_ANIMATION_CACHE_MAX_BYTES_DEFAULT = 2 * 1024 * 1024 * 1024
 
+/** Canonical output width for default static template pre-render (one cache slot per style). */
+export const SUBSCRIBE_ANIMATION_STATIC_CACHE_WIDTH = 3840
+
 export type SubscribeAnimationCachePrepStatus =
   | 'not_prepared'
   | 'queued'

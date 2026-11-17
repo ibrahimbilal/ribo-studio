@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from '../../../i18n'
 import AppExportAction from '../../../components/ui/AppExportAction.vue'
 import { useImageMotionStore } from '../stores/imageMotion'
 
 const store = useImageMotionStore()
-const label = computed(() => (store.activeExportCount > 0 ? 'Queue export' : 'Export MP4'))
+const { t } = useI18n()
+const label = computed(() =>
+  store.activeExportCount > 0 ? t('imageMotion.export.queueExport') : t('imageMotion.export.exportMp4'),
+)
 </script>
 
 <template>

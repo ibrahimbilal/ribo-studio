@@ -68,7 +68,7 @@ function onCloseNav() {
     </div>
     <MobileNavDrawer :open="platform.mobileNavOpen" :trigger="navTrigger" @close="onCloseNav" />
     <GlobalSettingsModal />
-    <div class="pointer-events-none fixed bottom-6 right-4 z-40 flex w-[min(20rem,calc(100vw-2rem))] flex-col gap-2">
+    <div class="pointer-events-none fixed end-4 bottom-6 z-40 flex w-[min(20rem,calc(100vw-2rem))] flex-col gap-2">
       <div
         v-for="item in platform.toasts"
         :key="item.id"

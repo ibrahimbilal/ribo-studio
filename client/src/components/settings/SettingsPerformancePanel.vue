@@ -2,25 +2,29 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { HardwareAccelerationMode } from '@shared/globalSettings'
 import ToggleSwitch from '../ToggleSwitch.vue'
+import { useI18n } from '../../i18n'
 import * as api from '../../lib/api'
 import { formatBytes } from '../../lib/formatBytes'
 import { useGlobalSettingsStore } from '../../stores/globalSettings'
 import SettingsRow from './SettingsRow.vue'
 
 const store = useGlobalSettingsStore()
+const { t } = useI18n()
 const overview = ref<api.StorageOverview | null>(null)
 const encoders = ref<api.EncoderCatalog | null>(null)
 
-const hardwareOptions: Array<{ id: HardwareAccelerationMode; label: string }> = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'enabled', label: 'Enabled' },
-  { id: 'disabled', label: 'Disabled' },
-]
+const hardwareOptions = computed(() => [
+  { id: 'auto' as const, label: t('performance.hwAuto') },
+  { id: 'enabled' as const, label: t('performance.hwEnabled') },
+  { id: 'disabled' as const, label: t('performance.hwDisabled') },
+])
 
 const detectedHardware = computed(() => {
   const list = encoders.value?.encoders.filter((item) => item.hardware && item.listed) ?? []
-  if (!list.length) return 'No hardware encoders detected'
-  return list.map((item) => `${item.label}${item.verified ? '' : ' (unverified)'}`).join(', ')
+  if (!list.length) return t('performance.noHardware')
+  return list
+    .map((item) => `${item.label}${item.verified ? '' : ` ${t('performance.unverified')}`}`)
+    .join(', ')
 })
 
 const minFreeGb = computed({
@@ -58,27 +62,30 @@ watch(
 
 <template>
   <div>
-    <h3 class="section-label">Export queue</h3>
+    <h3 class="section-label">{{ t('performance.exportQueue') }}</h3>
     <SettingsRow
-      label="Maximum concurrent export jobs"
-      hint="Server encodes one FFmpeg job at a time. Queued jobs start automatically when the active job finishes."
-      tooltip="Parallel FFmpeg encodes are not supported. This limit is fixed at 1."
+      :label="t('performance.maxConcurrent')"
+      :hint="t('performance.maxConcurrentHint')"
+      :tooltip="t('performance.maxConcurrentTooltip')"
     >
-      <input class="field w-20" type="number" :value="1" disabled aria-label="Maximum concurrent export jobs" />
+      <input
+        class="field w-20"
+        type="number"
+        :value="1"
+        disabled
+        :aria-label="t('performance.maxConcurrent')"
+      />
     </SettingsRow>
 
-    <h3 class="section-label mt-6">Rendering resources</h3>
-    <SettingsRow label="Automatic CPU thread management" hint="When on, Ribo picks safe thread counts from host CPU and memory.">
+    <h3 class="section-label mt-6">{{ t('performance.resources') }}</h3>
+    <SettingsRow :label="t('performance.autoCpu')" :hint="t('performance.autoCpuHint')">
       <ToggleSwitch
         :model-value="store.performance.autoCpuThreads"
-        aria-label="Automatic CPU thread management"
+        :aria-label="t('performance.autoCpu')"
         @update:model-value="store.patchPerformance({ autoCpuThreads: $event })"
       />
     </SettingsRow>
-    <SettingsRow
-      label="CPU thread limit"
-      hint="Applied to new encodes when automatic management is off (1–16)."
-    >
+    <SettingsRow :label="t('performance.cpuLimit')" :hint="t('performance.cpuLimitHint')">
       <input
         class="field w-24"
         type="number"
@@ -93,7 +100,7 @@ watch(
         "
       />
     </SettingsRow>
-    <SettingsRow label="Hardware acceleration" :hint="detectedHardware">
+    <SettingsRow :label="t('performance.hardware')" :hint="detectedHardware">
       <select
         class="field w-auto min-w-[9rem]"
         :value="store.performance.hardwareAcceleration"
@@ -107,11 +114,8 @@ watch(
       </select>
     </SettingsRow>
 
-    <h3 class="section-label mt-6">Disk management</h3>
-    <SettingsRow
-      label="Minimum free disk space (GiB)"
-      hint="Exports warn or refuse to start when free space falls below this floor."
-    >
+    <h3 class="section-label mt-6">{{ t('performance.disk') }}</h3>
+    <SettingsRow :label="t('performance.minFree')" :hint="t('performance.minFreeHint')">
       <input
         class="field w-24"
         type="number"
@@ -122,13 +126,13 @@ watch(
       />
     </SettingsRow>
     <SettingsRow
-      label="Temporary directory"
-      hint="Fixed to the server tmp folder in this runtime. Relocation is not supported."
-      tooltip="server/tmp is the authoritative temporary root for clips, jobs, and outputs."
+      :label="t('performance.tempDir')"
+      :hint="t('performance.tempDirHint')"
+      :tooltip="t('performance.tempDirTooltip')"
     >
       <code class="max-w-[16rem] truncate text-xs text-zinc-400">{{ overview?.temporaryDirectory || 'server/tmp' }}</code>
     </SettingsRow>
-    <SettingsRow label="Available disk space">
+    <SettingsRow :label="t('performance.availableDisk')">
       <span class="text-sm text-zinc-200">{{ formatBytes(overview?.availableDiskBytes) }}</span>
     </SettingsRow>
   </div>

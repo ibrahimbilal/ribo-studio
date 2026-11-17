@@ -8,7 +8,10 @@ import {
   setScreensaverDiagnosticsEnabled,
   webGlContextLossCount,
 } from '../lib/previewMetrics'
+import { useI18n } from '../../../i18n'
+import { S } from '../lib/screensaverI18n'
 
+const { t } = useI18n()
 const visible = ref(screensaverDiagnosticsEnabled())
 const tick = ref(0)
 let timer = 0
@@ -21,6 +24,14 @@ const exportPrep = computed(() => {
   void tick.value
   return exportPrepSnapshot()
 })
+
+const toggleLabel = computed(() => (visible.value ? t(S('diagnostics.hide')) : t(S('diagnostics.show'))))
+const yesNo = (value: boolean) => (value ? t(S('diagnostics.yes')) : t(S('diagnostics.no')))
+
+function fmtMs(value: number | null | undefined): string {
+  if (value == null) return t(S('diagnostics.notMeasured'))
+  return t(S('diagnostics.ms'), { value: value.toFixed(value < 100 ? 2 : 0) })
+}
 
 onMounted(() => {
   visible.value = screensaverDiagnosticsEnabled()
@@ -40,21 +51,39 @@ function toggle(): void {
 </script>
 
 <template>
-  <div class="pointer-events-auto fixed bottom-4 right-4 z-40 max-w-xs">
+  <div class="pointer-events-auto fixed end-4 bottom-4 z-40 max-w-xs">
     <button class="btn btn-ghost cursor-pointer text-xs" type="button" @click="toggle">
-      {{ visible ? 'Hide' : 'Show' }} preview diagnostics
+      {{ toggleLabel }}
     </button>
     <div v-if="visible" class="mt-2 rounded-lg border border-zinc-700 bg-app/95 p-3 text-xs text-zinc-300 shadow-lg">
-      <p><span class="text-zinc-500">Backend:</span> {{ metrics.lastBackend }}</p>
-      <p><span class="text-zinc-500">WebGL2 available:</span> {{ webGl2Available() ? 'yes' : 'no' }}</p>
-      <p><span class="text-zinc-500">Context losses:</span> {{ webGlContextLossCount() }}</p>
-      <p><span class="text-zinc-500">Preview FPS:</span> {{ metrics.fps != null ? metrics.fps.toFixed(1) : 'not measured' }}</p>
-      <p><span class="text-zinc-500">Avg draw:</span> {{ metrics.avgDrawMs != null ? `${metrics.avgDrawMs.toFixed(2)} ms` : 'not measured' }}</p>
-      <p><span class="text-zinc-500">Avg bake (CPU):</span> {{ metrics.avgBakeMs != null ? `${metrics.avgBakeMs.toFixed(2)} ms` : 'n/a' }}</p>
-      <p><span class="text-zinc-500">Avg composite:</span> {{ metrics.avgCompositeMs != null ? `${metrics.avgCompositeMs.toFixed(2)} ms` : 'not measured' }}</p>
-      <p><span class="text-zinc-500">Last export prep:</span> {{ exportPrep.ms != null ? `${exportPrep.ms.toFixed(0)} ms` : 'not measured' }}</p>
-      <p><span class="text-zinc-500">Export worker:</span> {{ exportPrep.ms != null ? (exportPrep.usedWorker ? 'yes' : 'no') : 'not measured' }}</p>
-      <p class="mt-2 text-zinc-500">Enable with ?screensaver_diag=1 or localStorage ribo-screensaver-diagnostics=1</p>
+      <p><span class="text-zinc-500">{{ t(S('diagnostics.backend')) }}</span> {{ metrics.lastBackend }}</p>
+      <p>
+        <span class="text-zinc-500">{{ t(S('diagnostics.webgl2')) }}</span> {{ yesNo(webGl2Available()) }}
+      </p>
+      <p><span class="text-zinc-500">{{ t(S('diagnostics.contextLosses')) }}</span> {{ webGlContextLossCount() }}</p>
+      <p>
+        <span class="text-zinc-500">{{ t(S('diagnostics.previewFps')) }}</span>
+        {{ metrics.fps != null ? metrics.fps.toFixed(1) : t(S('diagnostics.notMeasured')) }}
+      </p>
+      <p><span class="text-zinc-500">{{ t(S('diagnostics.avgDraw')) }}</span> {{ fmtMs(metrics.avgDrawMs) }}</p>
+      <p>
+        <span class="text-zinc-500">{{ t(S('diagnostics.avgBake')) }}</span>
+        {{ metrics.avgBakeMs != null ? fmtMs(metrics.avgBakeMs) : t(S('diagnostics.na')) }}
+      </p>
+      <p><span class="text-zinc-500">{{ t(S('diagnostics.avgComposite')) }}</span> {{ fmtMs(metrics.avgCompositeMs) }}</p>
+      <p>
+        <span class="text-zinc-500">{{ t(S('diagnostics.lastExportPrep')) }}</span>
+        {{ exportPrep.ms != null ? fmtMs(exportPrep.ms) : t(S('diagnostics.notMeasured')) }}
+      </p>
+      <p>
+        <span class="text-zinc-500">{{ t(S('diagnostics.exportWorker')) }}</span>
+        {{
+          exportPrep.ms != null
+            ? yesNo(Boolean(exportPrep.usedWorker))
+            : t(S('diagnostics.notMeasured'))
+        }}
+      </p>
+      <p class="mt-2 text-zinc-500">{{ t(S('diagnostics.enableHint')) }}</p>
     </div>
   </div>
 </template>

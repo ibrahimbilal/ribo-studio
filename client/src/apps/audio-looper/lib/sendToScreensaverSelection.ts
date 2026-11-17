@@ -1,5 +1,7 @@
 /** Multi-select helpers for Looper → Screensaver project targets. */
 
+import { translate, type MessageKey } from '../../../i18n'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import type { AssignAudioAssetResult } from '../../frame-screensaver/lib/screensaverAudioRefs'
 
 export type { AssignAudioAssetResult as SendTransferResult } from '../../frame-screensaver/lib/screensaverAudioRefs'
@@ -73,11 +75,15 @@ export function isIdentityTrackOrder(order: number[]): boolean {
   return order.every((value, index) => value === index)
 }
 
+function locT(key: MessageKey, params?: Record<string, string | number>): string {
+  return translate(useGlobalSettingsStore().general.language, key, params)
+}
+
 export function sendButtonLabel(selectedCount: number, sending: boolean): string {
-  if (sending) return 'Sending…'
-  if (selectedCount <= 0) return 'Send'
-  if (selectedCount === 1) return 'Send to 1 project'
-  return `Send to ${selectedCount} projects`
+  if (sending) return locT('looper.sendScreensaver.sending')
+  if (selectedCount <= 0) return locT('looper.sendScreensaver.send')
+  if (selectedCount === 1) return locT('looper.sendScreensaver.sendOne')
+  return locT('looper.sendScreensaver.sendMany', { count: selectedCount })
 }
 
 export function transferNotificationMessage(result: AssignAudioAssetResult): {
@@ -88,34 +94,49 @@ export function transferNotificationMessage(result: AssignAudioAssetResult): {
   const failed = result.failed.length
   const skipped = result.skipped.length
   if (ok === 0 && failed === 0 && skipped === 0) {
-    return { text: 'No Screensaver projects were updated.', tone: 'info' }
+    return { text: locT('looper.sendScreensaver.toastNone'), tone: 'info' }
   }
   if (ok > 0 && failed === 0 && skipped === 0) {
     return {
-      text: `Audio successfully sent to ${ok} Screensaver project${ok === 1 ? '' : 's'}.`,
+      text:
+        ok === 1
+          ? locT('looper.sendScreensaver.toastSuccess', { count: ok })
+          : locT('looper.sendScreensaver.toastSuccessPlural', { count: ok }),
       tone: 'success',
     }
   }
   if (ok > 0 && failed > 0) {
     return {
-      text: `Audio sent to ${ok} project${ok === 1 ? '' : 's'}. ${failed} project${failed === 1 ? '' : 's'} could not be updated.`,
+      text:
+        ok === 1 && failed === 1
+          ? locT('looper.sendScreensaver.toastPartial', { ok, failed })
+          : locT('looper.sendScreensaver.toastPartialPlural', { ok, failed }),
       tone: 'info',
     }
   }
   if (ok > 0 && skipped > 0 && failed === 0) {
     return {
-      text: `Audio sent to ${ok} project${ok === 1 ? '' : 's'}. ${skipped} skipped.`,
+      text:
+        ok === 1
+          ? locT('looper.sendScreensaver.toastSkipped', { ok, skipped })
+          : locT('looper.sendScreensaver.toastSkippedPlural', { ok, skipped }),
       tone: 'info',
     }
   }
   if (failed > 0) {
     return {
-      text: `Could not update ${failed} project${failed === 1 ? '' : 's'}.`,
+      text:
+        failed === 1
+          ? locT('looper.sendScreensaver.toastFailed', { count: failed })
+          : locT('looper.sendScreensaver.toastFailedPlural', { count: failed }),
       tone: 'error',
     }
   }
   return {
-    text: `${skipped} project${skipped === 1 ? '' : 's'} skipped.`,
+    text:
+      skipped === 1
+        ? locT('looper.sendScreensaver.toastSkippedOnly', { count: skipped })
+        : locT('looper.sendScreensaver.toastSkippedOnlyPlural', { count: skipped }),
     tone: 'info',
   }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from '../../i18n'
 import SliderField from '../SliderField.vue'
 import ToggleSwitch from '../ToggleSwitch.vue'
 
@@ -10,20 +11,27 @@ const props = withDefaults(
     showLoop?: boolean
     showFades?: boolean
     loopLabel?: string
+    fadeInLabel?: string
+    fadeOutLabel?: string
   }>(),
   {
-    volumeLabel: 'Volume',
     volumeAsPercent: true,
     showLoop: true,
     showFades: true,
-    loopLabel: 'Loop audio',
   },
 )
+
+const { t } = useI18n()
 
 const volume = defineModel<number>('volume', { required: true })
 const fadeIn = defineModel<number>('fadeIn')
 const fadeOut = defineModel<number>('fadeOut')
 const loop = defineModel<boolean>('loop')
+
+const resolvedVolumeLabel = computed(() => props.volumeLabel ?? t('common.audio.volume'))
+const resolvedLoopLabel = computed(() => props.loopLabel ?? t('common.audio.loopAudio'))
+const resolvedFadeInLabel = computed(() => props.fadeInLabel ?? t('common.audio.fadeIn'))
+const resolvedFadeOutLabel = computed(() => props.fadeOutLabel ?? t('common.audio.fadeOut'))
 
 const volumeUi = computed({
   get: () => (props.volumeAsPercent ? Math.round(volume.value * 100) : volume.value),
@@ -37,7 +45,7 @@ const volumeUi = computed({
   <div class="space-y-3">
     <SliderField
       :model-value="volumeUi"
-      :label="volumeLabel"
+      :label="resolvedVolumeLabel"
       :min="0"
       :max="volumeAsPercent ? 100 : 1"
       :step="volumeAsPercent ? 1 : 0.05"
@@ -45,13 +53,13 @@ const volumeUi = computed({
       @update:model-value="(v) => (volumeUi = v)"
     />
     <div v-if="showLoop && loop !== undefined" class="flex items-center justify-between gap-3 text-sm">
-      <span>{{ loopLabel }}</span>
-      <ToggleSwitch v-model="loop" :aria-label="loopLabel" />
+      <span>{{ resolvedLoopLabel }}</span>
+      <ToggleSwitch v-model="loop" :aria-label="resolvedLoopLabel" />
     </div>
     <SliderField
       v-if="showFades && fadeIn !== undefined"
       :model-value="fadeIn"
-      label="Fade in (s)"
+      :label="resolvedFadeInLabel"
       :min="0"
       :max="30"
       :step="0.5"
@@ -60,7 +68,7 @@ const volumeUi = computed({
     <SliderField
       v-if="showFades && fadeOut !== undefined"
       :model-value="fadeOut"
-      label="Fade out (s)"
+      :label="resolvedFadeOutLabel"
       :min="0"
       :max="30"
       :step="0.5"

@@ -8,9 +8,11 @@ import { requestOpenScreensaverProject } from '../../apps/frame-screensaver/lib/
 import { BRAND } from '../../lib/brand'
 import { triggerDownload } from '../../lib/triggerDownload'
 import { usePlatformStore, type ActiveRenderJob, type RenderReadyNotification } from '../../stores/platform'
+import { useI18n } from '../../i18n'
 
 const platform = usePlatformStore()
 const router = useRouter()
+const { t } = useI18n()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 const cancellingIds = ref<string[]>([])
@@ -76,21 +78,26 @@ function onDocumentPointerDown(event: PointerEvent): void {
 
 function formatWhen(createdAt: number): string {
   const diffSec = Math.max(0, Math.round((Date.now() - createdAt) / 1000))
-  if (diffSec < 60) return 'Just now'
+  if (diffSec < 60) return t('common.justNow')
   const minutes = Math.floor(diffSec / 60)
-  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 60) return t('common.minutesAgo', { n: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return t('common.hoursAgo', { n: hours })
   return new Date(createdAt).toLocaleDateString()
 }
 
 function formatPercent(progress: number): string {
-  return `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`
+  const n = Math.round(Math.min(1, Math.max(0, progress)) * 100)
+  return t('common.percent', { n })
 }
 
 function formatRemaining(etaSec: number | null): string {
-  if (etaSec == null || !Number.isFinite(etaSec)) return 'Estimating…'
-  return `${formatClock(etaSec)} left`
+  if (etaSec == null || !Number.isFinite(etaSec)) return t('common.estimating')
+  return t('common.timeLeft', { time: formatClock(etaSec) })
+}
+
+function openAppLabel(app: RenderAppId): string {
+  return t('layout.openApp', { app: renderAppLabel(app) })
 }
 
 function openApp(app: RenderAppId, route: string, projectId?: string | null): void {
@@ -100,9 +107,9 @@ function openApp(app: RenderAppId, route: string, projectId?: string | null): vo
 }
 
 function readyDetail(item: RenderReadyNotification): string {
-  if (item.outcome === 'failed') return item.error || 'Rendering failed'
-  if (item.outcome === 'cancelled') return 'Rendering cancelled'
-  return `Ready to download · ${formatWhen(item.createdAt)}`
+  if (item.outcome === 'failed') return item.error || t('layout.renderingFailed')
+  if (item.outcome === 'cancelled') return t('layout.renderingCancelled')
+  return t('layout.readyToDownload', { when: formatWhen(item.createdAt) })
 }
 
 function download(item: RenderReadyNotification): void {
@@ -131,7 +138,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
     <button
       class="focus-ring relative grid h-9 w-9 cursor-pointer place-items-center rounded-sm"
       type="button"
-      aria-label="Notifications"
+      :aria-label="t('layout.notifications')"
       :aria-expanded="open"
       @click="togglePanel"
     >
@@ -158,27 +165,27 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 
     <div
       v-if="open"
-      class="notif-panel-enter absolute right-0 top-[calc(100%+0.35rem)] z-50 flex w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-zinc-800 bg-elevated shadow-xl"
+      class="notif-panel-enter absolute end-0 top-[calc(100%+0.35rem)] z-50 flex w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-zinc-800 bg-elevated shadow-xl"
       role="dialog"
-      aria-label="Notifications"
+      :aria-label="t('layout.notifications')"
     >
       <div class="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2.5">
-        <h2 class="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">Notifications</h2>
+        <h2 class="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">{{ t('layout.notifications') }}</h2>
         <div class="flex items-center gap-1">
           <button
             v-if="platform.renderNotifications.length > 0"
             class="cursor-pointer rounded-sm px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
             type="button"
-            title="Clear all finished notifications"
+            :title="t('layout.clearAllFinished')"
             @click="platform.clearAllNotifications()"
           >
-            Clear all
+            {{ t('common.clearAll') }}
           </button>
           <button
             class="cursor-pointer text-zinc-500 hover:text-zinc-300"
             type="button"
-            title="Close"
-            aria-label="Close"
+            :title="t('common.close')"
+            :aria-label="t('common.close')"
             @click="open = false"
           >
             <X :size="16" />
@@ -188,7 +195,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 
       <div class="relative max-h-80 overflow-y-auto">
         <div v-if="!showList" class="px-3 py-8 text-center text-sm text-zinc-500">
-          No notifications yet. Renders in progress and finished exports appear here.
+          {{ t('layout.noNotifications') }}
         </div>
 
         <template v-else>
@@ -196,13 +203,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
             v-if="platform.activeRenderJobs.length > 0"
             class="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
           >
-            Rendering
+            {{ t('layout.rendering') }}
           </p>
           <p
             v-if="showReadyHeadingAboveList"
             class="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
           >
-            Ready
+            {{ t('layout.ready') }}
           </p>
           <TransitionGroup
             name="notif-item"
@@ -228,7 +235,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
                 v-if="row.kind === 'divider'"
                 class="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
               >
-                Ready
+                {{ t('layout.ready') }}
               </p>
               <Transition v-else name="notif-status" mode="out-in">
                 <div v-if="row.kind === 'rendering'" key="rendering" class="notif-item-body">
@@ -246,8 +253,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
                     <button
                       class="focus-ring grid h-8 w-8 shrink-0 cursor-pointer place-items-center self-start rounded-sm text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
                       type="button"
-                      :title="`Open ${renderAppLabel(row.job.app)}`"
-                      :aria-label="`Open ${renderAppLabel(row.job.app)}`"
+                      :title="openAppLabel(row.job.app)"
+                      :aria-label="openAppLabel(row.job.app)"
                       @click="openApp(row.job.app, row.job.route, row.job.projectId)"
                     >
                       <ExternalLink :size="15" aria-hidden="true" />
@@ -264,8 +271,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
                       class="focus-ring grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-sm text-red-300/90 hover:bg-white/5 hover:text-red-200 disabled:cursor-default disabled:opacity-80"
                       type="button"
                       :disabled="cancellingIds.includes(row.job.id)"
-                      :title="cancellingIds.includes(row.job.id) ? 'Cancelling export' : 'Cancel export'"
-                      :aria-label="cancellingIds.includes(row.job.id) ? 'Cancelling export' : 'Cancel export'"
+                      :title="cancellingIds.includes(row.job.id) ? t('layout.cancellingExport') : t('layout.cancelExport')"
+                      :aria-label="cancellingIds.includes(row.job.id) ? t('layout.cancellingExport') : t('layout.cancelExport')"
                       @click="cancelRender(row.job.id)"
                     >
                       <Loader2
@@ -301,13 +308,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
                           @click="download(row.item)"
                         >
                           <Download :size="14" />
-                          Download
+                          {{ t('common.download') }}
                         </button>
                         <button
                           class="focus-ring grid h-8 w-8 cursor-pointer place-items-center rounded-sm text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
                           type="button"
-                          :title="`Open ${renderAppLabel(row.item.app)}`"
-                          :aria-label="`Open ${renderAppLabel(row.item.app)}`"
+                          :title="openAppLabel(row.item.app)"
+                          :aria-label="openAppLabel(row.item.app)"
                           @click="openApp(row.item.app, row.item.route, row.item.projectId)"
                         >
                           <ExternalLink :size="15" aria-hidden="true" />
@@ -315,8 +322,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
                         <button
                           class="focus-ring grid h-8 w-8 cursor-pointer place-items-center rounded-sm text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
                           type="button"
-                          title="Dismiss notification"
-                          aria-label="Dismiss notification"
+                          :title="t('layout.dismissNotification')"
+                          :aria-label="t('layout.dismissNotification')"
                           @click="platform.dismissNotification(row.item.id)"
                         >
                           <Trash2 :size="15" aria-hidden="true" />

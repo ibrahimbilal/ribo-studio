@@ -10,30 +10,35 @@ import ImageMotionPreview from './components/ImageMotionPreview.vue'
 import ImageMotionSettings from './components/ImageMotionSettings.vue'
 import ImageMotionTimeline from './components/ImageMotionTimeline.vue'
 import { useImageMotionPlayback } from './composables/useImageMotionPlayback'
+import { useI18n } from '../../i18n'
 import { formatClock } from '../../lib/format'
 import { useImageMotionStore } from './stores/imageMotion'
 
 const store = useImageMotionStore()
+const { t } = useI18n()
 const playback = useImageMotionPlayback()
 const tab = ref<'source' | 'preview' | 'settings'>('preview')
-const tabs = [
-  { id: 'source' as const, label: 'Images', icon: ImageIcon },
-  { id: 'preview' as const, label: 'Preview', icon: MonitorPlay },
-  { id: 'settings' as const, label: 'Settings', icon: SlidersHorizontal },
-]
+const tabs = computed(() => [
+  { id: 'source' as const, label: t('imageMotion.tabs.images'), icon: ImageIcon },
+  { id: 'preview' as const, label: t('imageMotion.tabs.preview'), icon: MonitorPlay },
+  { id: 'settings' as const, label: t('imageMotion.tabs.settings'), icon: SlidersHorizontal },
+])
 
 const exportStatus = computed(() => {
   if (store.exporting) {
-    const queue = store.activeExportCount > 1 ? ` · ${store.activeExportCount} in queue` : ''
+    const queue =
+      store.activeExportCount > 1
+        ? t('imageMotion.export.queueSuffix', { n: store.activeExportCount })
+        : ''
     return `${store.exportState.message}${queue}`
   }
-  if (store.exportState.phase === 'error') return store.exportState.error ?? 'Export failed.'
+  if (store.exportState.phase === 'error') return store.exportState.error ?? t('imageMotion.export.failed')
   if (store.exportState.phase === 'done') {
     const warning = store.exportState.warning ? `. ${store.exportState.warning}` : '.'
-    return `Export ready${warning} Tap download when you are ready.`
+    return t('imageMotion.export.readyTapDownload', { warning })
   }
   if (store.exportBlocker) return store.exportBlocker
-  return `${store.segments.length} images · ${formatClock(store.duration)}`
+  return t('imageMotion.export.statusImages', { n: store.segments.length, duration: formatClock(store.duration) })
 })
 
 function onKeyDown(event: KeyboardEvent) {
@@ -84,7 +89,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="!store.hydrated" class="scrim">
-      Restoring saved project…
+      {{ t('imageMotion.restoringProject') }}
     </div>
   </div>
 </template>

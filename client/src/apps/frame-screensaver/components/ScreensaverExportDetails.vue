@@ -2,8 +2,11 @@
 import { computed, ref } from 'vue'
 import AppExportStatusPanel from '../../../components/ui/AppExportStatusPanel.vue'
 import { useScreensaverStore } from '../stores/screensaver'
+import { useI18n } from '../../../i18n'
+import { S } from '../lib/screensaverI18n'
 
 const store = useScreensaverStore()
+const { t } = useI18n()
 const open = ref(false)
 
 const visible = computed(() => {
@@ -29,15 +32,17 @@ const tone = computed(() => {
 
 const totalFrames = computed(() => Math.max(1, Math.round(store.durationSeconds * store.fps)))
 
+const dash = computed(() => t(S('exportDetails.dash')))
+
 const renderedFramesLabel = computed(() => {
   const enc = store.exportState.encodeProgress
-  if (enc == null) return '—'
+  if (enc == null) return dash.value
   const rendered = Math.min(totalFrames.value, Math.max(0, Math.round(totalFrames.value * enc)))
   return `${rendered.toLocaleString()} / ${totalFrames.value.toLocaleString()}`
 })
 
 function formatSeconds(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '—'
+  if (value == null || !Number.isFinite(value)) return dash.value
   const total = Math.max(0, Math.round(value))
   const minutes = Math.floor(total / 60)
   const seconds = total % 60
@@ -45,30 +50,43 @@ function formatSeconds(value: number | null | undefined): string {
 }
 
 const rows = computed(() => [
-  { label: 'Stage', value: store.exportState.stage || store.exportState.message || '—' },
-  { label: 'Total frames', value: totalFrames.value.toLocaleString() },
-  { label: 'Rendered frames', value: renderedFramesLabel.value },
-  { label: 'Encoding', value: store.exportState.encoder || '—' },
+  { label: t(S('exportDetails.stage')), value: store.exportState.stage || store.exportState.message || dash.value },
+  { label: t(S('exportDetails.totalFrames')), value: totalFrames.value.toLocaleString() },
+  { label: t(S('exportDetails.renderedFrames')), value: renderedFramesLabel.value },
+  { label: t(S('exportDetails.encoding')), value: store.exportState.encoder || dash.value },
   {
-    label: 'Acceleration',
-    value: store.exportState.hardware == null ? '—' : store.exportState.hardware ? 'Active' : 'Off',
+    label: t(S('exportDetails.acceleration')),
+    value:
+      store.exportState.hardware == null
+        ? dash.value
+        : store.exportState.hardware
+          ? t(S('exportDetails.accelerationActive'))
+          : t(S('exportDetails.accelerationOff')),
   },
   {
-    label: 'Speed',
-    value: store.exportState.encodeSpeed != null ? `${store.exportState.encodeSpeed.toFixed(2)}x realtime` : '—',
+    label: t(S('exportDetails.speed')),
+    value:
+      store.exportState.encodeSpeed != null
+        ? t(S('exportDetails.speedValue'), { speed: store.exportState.encodeSpeed.toFixed(2) })
+        : dash.value,
   },
   {
-    label: 'Encode fps',
-    value: store.exportState.encodeFps != null ? store.exportState.encodeFps.toFixed(1) : '—',
+    label: t(S('exportDetails.encodeFps')),
+    value: store.exportState.encodeFps != null ? store.exportState.encodeFps.toFixed(1) : dash.value,
   },
-  { label: 'Elapsed', value: formatSeconds(store.exportState.elapsedSec) },
+  { label: t(S('exportDetails.elapsed')), value: formatSeconds(store.exportState.elapsedSec) },
   {
-    label: 'Remaining',
-    value: store.exportState.etaSec == null ? 'Estimating…' : formatSeconds(store.exportState.etaSec),
+    label: t(S('exportDetails.remaining')),
+    value: store.exportState.etaSec == null ? t('common.estimating') : formatSeconds(store.exportState.etaSec),
   },
   {
-    label: 'Output',
-    value: `${store.outputWidth}×${store.outputHeight} · ${store.fps} fps · ${store.durationLabel}`,
+    label: t(S('exportDetails.output')),
+    value: t(S('exportDetails.outputValue'), {
+      width: store.outputWidth,
+      height: store.outputHeight,
+      fps: store.fps,
+      duration: store.durationLabel,
+    }),
   },
 ])
 </script>

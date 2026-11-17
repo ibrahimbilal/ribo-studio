@@ -9,12 +9,15 @@ import { useScreensaverStore } from '../../apps/frame-screensaver/stores/screens
 import { useAudioLooperStore } from '../../apps/audio-looper/stores/audioLooper'
 import { useImageUpscalerStore } from '../../apps/image-upscaler/stores/imageUpscaler'
 import { useThumbnailStore } from '../../apps/thumbnail-studio/stores/thumbnail'
+import { useI18n } from '../../i18n'
 import { usePlatformStore } from '../../stores/platform'
 import { useProjectStore } from '../../stores/project'
 import { useImageMotionStore } from '../../apps/image-motion-shorts/stores/imageMotion'
 import { loadShortsMode } from '../../apps/image-motion-shorts/lib/shortsMode'
+import { NAV_LABEL_KEYS } from '../../lib/navLabels'
 
 const route = useRoute()
+const { t } = useI18n()
 const platform = usePlatformStore()
 const project = useProjectStore()
 const imageMotion = useImageMotionStore()
@@ -23,7 +26,12 @@ const thumbnail = useThumbnailStore()
 const upscaler = useImageUpscalerStore()
 const audioLooper = useAudioLooperStore()
 
-const title = computed(() => (route.meta.title as string) || 'Ribo Studio')
+const title = computed(() => {
+  const key = NAV_LABEL_KEYS[route.path]
+  if (key) return t(key)
+  if (route.path.startsWith('/shorts')) return t('nav.shorts')
+  return (route.meta.title as string) || 'Ribo Studio'
+})
 const showNewProject = computed(() =>
   route.name === 'shorts' ||
   route.name === 'screensaver' ||
@@ -51,7 +59,7 @@ const emit = defineEmits<{ openNav: [trigger: HTMLElement] }>()
     <button
       class="btn btn-ghost cursor-pointer xl:hidden"
       type="button"
-      aria-label="Open navigation menu"
+      :aria-label="t('layout.openNav')"
       @click="emit('openNav', $event.currentTarget as HTMLElement)"
     >
       <Menu :size="20" />
@@ -66,22 +74,22 @@ const emit = defineEmits<{ openNav: [trigger: HTMLElement] }>()
       @click="startNewProject()"
     >
       <FilePlus :size="16" />
-      <span class="hidden sm:inline">New project</span>
+      <span class="hidden sm:inline">{{ t('common.newProject') }}</span>
     </button>
-    <div class="ml-auto flex items-center gap-1 sm:gap-2">
+    <div class="ms-auto flex items-center gap-1 sm:gap-2">
       <AppThemeToggle />
       <AppTempStorageButton />
       <AppNotifications />
       <button
         class="focus-ring inline-flex cursor-pointer items-center gap-2 rounded-sm text-xs font-semibold"
         type="button"
-        aria-label="Refresh renderer status"
+        :aria-label="t('layout.refreshRenderer')"
         @click="platform.refreshServer()"
       >
         <CircleCheck v-if="platform.serverOnline" class="text-emerald-400" :size="16" />
         <CircleAlert v-else class="text-red-300" :size="16" />
         <span class="hidden sm:inline" :class="platform.serverOnline ? 'text-emerald-400' : 'text-red-300'">
-          {{ platform.serverOnline ? 'Online' : 'Offline' }}
+          {{ platform.serverOnline ? t('layout.online') : t('layout.offline') }}
         </span>
       </button>
     </div>

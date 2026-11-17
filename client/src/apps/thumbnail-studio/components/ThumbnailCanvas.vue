@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { BadgeId } from '@shared/thumbnailProject'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from '../../../i18n'
 import { ensureThumbnailFonts, renderThumbnail } from '../lib/renderThumbnail'
 import { useThumbnailStore } from '../stores/thumbnail'
 import ThumbnailBadge from './ThumbnailBadge.vue'
 
 const store = useThumbnailStore()
+const { t } = useI18n()
 const stage = ref<HTMLElement | null>(null)
 const frame = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -118,7 +120,7 @@ onBeforeUnmount(() => observer?.disconnect())
       />
     </div>
     <p v-if="store.hydrated && !store.hasImage" class="pointer-events-none absolute bottom-4 left-1/2 z-20 -translate-x-1/2 text-xs text-faint">
-      Upload a PNG, JPEG, or WebP image.
+      {{ t('thumbnail.uploadHint') }}
     </p>
   </div>
 </template>

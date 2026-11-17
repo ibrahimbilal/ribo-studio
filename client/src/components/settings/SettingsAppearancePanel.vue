@@ -1,22 +1,25 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ACCENT_PALETTES } from '@shared/appearanceTokens'
 import type { AccentColorId, InterfaceDensity, ThemePreference } from '@shared/globalSettings'
 import ToggleSwitch from '../ToggleSwitch.vue'
+import { useI18n } from '../../i18n'
 import { useGlobalSettingsStore } from '../../stores/globalSettings'
 import SettingsRow from './SettingsRow.vue'
 
 const store = useGlobalSettingsStore()
+const { t } = useI18n()
 
-const themes: Array<{ id: ThemePreference; label: string; hint: string }> = [
-  { id: 'light', label: 'Light', hint: 'Bright surfaces' },
-  { id: 'dark', label: 'Dark', hint: 'Studio default' },
-  { id: 'system', label: 'System', hint: 'Match OS' },
-]
+const themes = computed(() => [
+  { id: 'light' as const, label: t('appearance.themeLight'), hint: t('appearance.themeLightHint') },
+  { id: 'dark' as const, label: t('appearance.themeDark'), hint: t('appearance.themeDarkHint') },
+  { id: 'system' as const, label: t('appearance.themeSystem'), hint: t('appearance.themeSystemHint') },
+])
 
-const densities: Array<{ id: InterfaceDensity; label: string }> = [
-  { id: 'comfortable', label: 'Comfortable' },
-  { id: 'compact', label: 'Compact' },
-]
+const densities = computed(() => [
+  { id: 'comfortable' as const, label: t('appearance.densityComfortable') },
+  { id: 'compact' as const, label: t('appearance.densityCompact') },
+])
 
 function setTheme(theme: ThemePreference): void {
   store.patchAppearance({ theme })
@@ -33,13 +36,13 @@ function setDensity(density: InterfaceDensity): void {
 
 <template>
   <div>
-    <h3 class="section-label">Appearance</h3>
+    <h3 class="section-label">{{ t('appearance.section') }}</h3>
     <p class="mb-3 text-xs text-zinc-500">
-      Controls application chrome only. Exported videos, Subscribe Animations, and canvas timelines are never affected.
+      {{ t('appearance.intro') }}
     </p>
 
-    <SettingsRow label="Theme" hint="Applied immediately and persisted across restarts.">
-      <div class="appearance-theme-grid" role="radiogroup" aria-label="Theme">
+    <SettingsRow :label="t('appearance.theme')" :hint="t('appearance.themeHint')">
+      <div class="appearance-theme-grid" role="radiogroup" :aria-label="t('appearance.theme')">
         <button
           v-for="item in themes"
           :key="item.id"
@@ -57,7 +60,7 @@ function setDensity(density: InterfaceDensity): void {
       </div>
     </SettingsRow>
 
-    <SettingsRow label="Accent color" hint="Semantic brand accent for buttons, focus, and selection.">
+    <SettingsRow :label="t('appearance.accent')" :hint="t('appearance.accentHint')">
       <div class="appearance-accent-grid" role="list">
         <button
           v-for="swatch in ACCENT_PALETTES"
@@ -74,7 +77,7 @@ function setDensity(density: InterfaceDensity): void {
       </div>
     </SettingsRow>
 
-    <SettingsRow label="Interface density" hint="Spacing for navigation, lists, forms, and settings rows.">
+    <SettingsRow :label="t('appearance.density')" :hint="t('appearance.densityHint')">
       <div class="flex flex-wrap gap-2">
         <button
           v-for="item in densities"
@@ -90,20 +93,20 @@ function setDensity(density: InterfaceDensity): void {
     </SettingsRow>
 
     <SettingsRow
-      label="Enable interface animations"
-      hint="Decorative UI transitions only. Always respects the OS reduced-motion preference."
-      tooltip="Does not affect exported media, Subscribe Animations, Screensaver, Image Motion, or Ranking timelines."
+      :label="t('appearance.animations')"
+      :hint="t('appearance.animationsHint')"
+      :tooltip="t('appearance.animationsTooltip')"
     >
       <ToggleSwitch
         :model-value="store.appearance.interfaceAnimations"
-        aria-label="Enable interface animations"
+        :aria-label="t('appearance.animations')"
         @update:model-value="store.patchAppearance({ interfaceAnimations: $event })"
       />
     </SettingsRow>
 
     <div class="mt-4">
       <button class="btn btn-ghost cursor-pointer" type="button" @click="store.resetAppearance()">
-        Reset Appearance
+        {{ t('appearance.reset') }}
       </button>
     </div>
   </div>

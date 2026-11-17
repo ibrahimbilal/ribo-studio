@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Download, Image as ImageIcon, MonitorPlay, SlidersHorizontal, Sparkles } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
+import { useI18n } from '../../i18n'
 import AppDialog from '../../components/ui/AppDialog.vue'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
 import ImageBatchList from './components/ImageBatchList.vue'
@@ -12,15 +13,16 @@ import UpscaleSettings from './components/UpscaleSettings.vue'
 import { useImageUpscaler } from './composables/useImageUpscaler'
 
 const store = useImageUpscaler()
+const { t } = useI18n()
 const showComparison = computed(() => store.selected?.status === 'completed' && Boolean(store.selected.serverItemId))
 const canSend = computed(() => showComparison.value)
 const hasImages = computed(() => store.items.length > 0)
 const tab = ref<'source' | 'preview' | 'settings'>(hasImages.value ? 'preview' : 'source')
-const tabs = [
-  { id: 'source' as const, label: 'Source', icon: ImageIcon },
-  { id: 'preview' as const, label: 'Preview', icon: MonitorPlay },
-  { id: 'settings' as const, label: 'Settings', icon: SlidersHorizontal },
-]
+const tabs = computed(() => [
+  { id: 'source' as const, label: t('upscaler.tabSource'), icon: ImageIcon },
+  { id: 'preview' as const, label: t('upscaler.tabPreview'), icon: MonitorPlay },
+  { id: 'settings' as const, label: t('upscaler.tabSettings'), icon: SlidersHorizontal },
+])
 
 watch(hasImages, (has) => {
   if (!has) tab.value = 'source'
@@ -38,7 +40,7 @@ watch(hasImages, (has) => {
     >
       <div class="shrink-0 space-y-3 border-b border-zinc-800 p-4">
         <label class="block">
-          <span class="section-label mb-1 block">Project</span>
+          <span class="section-label mb-1 block">{{ t('common.project') }}</span>
           <input v-model="store.name" class="field text-sm font-semibold" type="text" maxlength="80" />
         </label>
         <ImageUploader />
@@ -52,7 +54,7 @@ watch(hasImages, (has) => {
     >
       <div class="flex items-center justify-between gap-3">
         <p class="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-          {{ showComparison ? 'Before / after' : 'Preview' }}
+          {{ showComparison ? t('upscaler.beforeAfter') : t('common.preview') }}
         </p>
       </div>
       <ImageComparison v-if="showComparison" />
@@ -61,7 +63,7 @@ watch(hasImages, (has) => {
       <div v-if="store.selected?.status === 'completed'" class="flex flex-wrap gap-2">
         <button class="btn btn-primary cursor-pointer" type="button" @click="store.downloadItem(store.selected.localId)">
           <Download :size="15" />
-          Download
+          {{ t('common.download') }}
         </button>
         <button
           v-if="store.completedCount > 1"
@@ -71,14 +73,14 @@ watch(hasImages, (has) => {
           @click="store.downloadZip()"
         >
           <Download :size="15" />
-          Download all ZIP
+          {{ t('upscaler.downloadAllZip') }}
         </button>
         <button
           class="btn btn-ghost cursor-pointer px-2"
           type="button"
           :disabled="!canSend"
-          aria-label="Send to Screensaver"
-          title="Send to Screensaver"
+          :aria-label="t('upscaler.sendToScreensaverAria')"
+          :title="t('upscaler.sendToScreensaver')"
           @click="store.requestSend(store.selected.localId)"
         >
           <MonitorPlay :size="18" aria-hidden="true" />
@@ -91,7 +93,7 @@ watch(hasImages, (has) => {
       :class="tab === 'settings' ? 'max-h-none flex-1' : 'hidden lg:flex'"
     >
       <div class="shrink-0 border-b border-zinc-800">
-        <h2 class="px-4 py-4 text-sm font-bold text-zinc-100">Settings</h2>
+        <h2 class="px-4 py-4 text-sm font-bold text-zinc-100">{{ t('upscaler.settingsTitle') }}</h2>
       </div>
       <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <UpscaleSettings />
@@ -99,23 +101,23 @@ watch(hasImages, (has) => {
       <div class="mt-auto flex shrink-0 flex-col gap-2 border-t border-zinc-800 p-4">
         <button class="btn btn-primary cursor-pointer py-3" type="button" :disabled="store.items.length === 0 || store.processing" @click="store.upscale()">
           <Sparkles :size="16" />
-          Upscale Images
+          {{ t('upscaler.upscaleImages') }}
         </button>
-        <button v-if="store.processing" class="btn btn-danger cursor-pointer" type="button" @click="store.cancel()">Cancel</button>
+        <button v-if="store.processing" class="btn btn-danger cursor-pointer" type="button" @click="store.cancel()">{{ t('common.cancel') }}</button>
       </div>
     </aside>
 
     <AppDialog
       :open="Boolean(store.confirmSendId)"
-      title="Replace the Screensaver source?"
+      :title="t('upscaler.replaceScreensaverTitle')"
       @cancel="store.resolveSend('cancel')"
     >
       <p class="text-sm text-zinc-400">
-        Screensaver already has an image or video. Sending this file replaces that source. Duration, output size, audio, and encoder stay as they are. The picture is framed again, the same way as choosing a new image.
+        {{ t('upscaler.replaceScreensaverBody') }}
       </p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="store.resolveSend('cancel')">Keep current</button>
-        <button class="btn btn-primary cursor-pointer" type="button" @click="store.resolveSend('replace')">Replace</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="store.resolveSend('cancel')">{{ t('common.keep') }}</button>
+        <button class="btn btn-primary cursor-pointer" type="button" @click="store.resolveSend('replace')">{{ t('common.replace') }}</button>
       </template>
     </AppDialog>
   </div>

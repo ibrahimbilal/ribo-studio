@@ -24,8 +24,8 @@ dynamic/<youtube-channel-id>/
 ```
 
 - **Format:** cropped transparent **PNG sequence** (`png-seq`). Selected after probing WebM VP9 alpha (`npm run probe:subscribe-animation-format`); hybrid/CFR still expect `%04d.png`.
-- **Static templates:** `subscribe-only`, `subscribe-alerts`, `like-subscribe-alerts` (shared across channels/projects).
-- **Dynamic template:** `channel-card` (keyed by canonical YouTube `channelId` + visual channel fields + avatar **content** hash).
+- **Static templates:** `subscribe-only`, `subscribe-alerts`, `like-subscribe-alerts` (shared across channels/projects; **one disk entry per style** — a new size/width render replaces the previous entry).
+- **Dynamic template:** `channel-card` (keyed by canonical YouTube `channelId` + visual channel fields + avatar **content** hash; **one entry per channel + theme**).
 - Cache key: SHA-256 of stable JSON (template, renderer/schema versions, size %, edge distance, output width, fps/duration, and dynamic channel deps only). Excludes position, startSec, background, audio, video duration.
 - APIs under `/api/screensaver/subscribe-animation-cache/*`. Background client prep (concurrency 1) on Screensaver init / channel fetch; export awaits or reuses in-flight jobs.
 - Management UI: Subscribe Animation section in Screensaver Settings (status, stats, prepare/rebuild/clear).

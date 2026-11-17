@@ -23,7 +23,7 @@ function toggle(): void {
 <template>
   <div class="settings-accordion border-b border-zinc-800 last:border-b-0">
     <button
-      class="settings-accordion__summary focus-ring flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left hover:bg-white/[0.03]"
+      class="settings-accordion__summary focus-ring flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-start hover:bg-white/[0.03]"
       type="button"
       :aria-expanded="isOpen"
       @click="toggle"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { AudioLines, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
+import { useI18n } from '../../i18n'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
 import AppStudioExportBar from '../../components/ui/AppStudioExportBar.vue'
 import LooperExportBar from './components/LooperExportBar.vue'
@@ -11,13 +12,14 @@ import LooperSourcePanel from './components/LooperSourcePanel.vue'
 import { useAudioLooperStore } from './stores/audioLooper'
 
 const store = useAudioLooperStore()
+const { t } = useI18n()
 const hasSource = computed(() => store.hasSource)
 const tab = ref<'source' | 'preview' | 'settings'>(store.hasSource ? 'preview' : 'source')
-const tabs = [
-  { id: 'source' as const, label: 'Source', icon: AudioLines },
-  { id: 'preview' as const, label: 'Preview', icon: MonitorPlay },
-  { id: 'settings' as const, label: 'Settings', icon: SlidersHorizontal },
-]
+const tabs = computed(() => [
+  { id: 'source' as const, label: t('looper.tabSource'), icon: AudioLines },
+  { id: 'preview' as const, label: t('looper.tabPreview'), icon: MonitorPlay },
+  { id: 'settings' as const, label: t('looper.tabSettings'), icon: SlidersHorizontal },
+])
 
 watch(hasSource, (has) => {
   if (!has) tab.value = 'source'
@@ -43,7 +45,7 @@ watch(hasSource, (has) => {
       <div class="studio-stage flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden p-3">
         <LooperPreview v-if="hasSource" class="min-h-0 flex-1 overflow-y-auto" />
         <div v-else class="grid min-h-0 flex-1 place-items-center px-6 text-center text-sm text-zinc-500">
-          Add audio in the source panel.
+          {{ t('looper.emptyPreview') }}
         </div>
       </div>
       <AppStudioExportBar :status="store.exportStatusLabel">

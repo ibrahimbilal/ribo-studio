@@ -9,20 +9,26 @@ import {
 } from '@shared/settingsBackup'
 import AppCheckbox from '../ui/AppCheckbox.vue'
 import AppDialog from '../ui/AppDialog.vue'
+import { useI18n, type MessageKey } from '../../i18n'
 import { useGlobalSettingsStore } from '../../stores/globalSettings'
 import { usePlatformStore } from '../../stores/platform'
 import SettingsRow from './SettingsRow.vue'
 
 const store = useGlobalSettingsStore()
+const { t } = useI18n()
 const platform = usePlatformStore()
 
-const CATEGORY_LABELS: Record<SettingsBackupCategory, string> = {
-  general: 'General',
-  appearance: 'Appearance',
-  performance: 'Performance',
-  export: 'Export Preferences',
-  storage: 'Storage & Cache Preferences',
-  youtubeChannels: 'YouTube Channel Registry',
+const CATEGORY_KEYS: Record<SettingsBackupCategory, MessageKey> = {
+  general: 'backup.catGeneral',
+  appearance: 'backup.catAppearance',
+  performance: 'backup.catPerformance',
+  export: 'backup.catExport',
+  storage: 'backup.catStorage',
+  youtubeChannels: 'backup.catYoutube',
+}
+
+function categoryLabel(cat: SettingsBackupCategory): string {
+  return t(CATEGORY_KEYS[cat])
 }
 
 const exportCats = ref<SettingsBackupCategory[]>([...ALL_SETTINGS_BACKUP_CATEGORIES])
@@ -69,7 +75,7 @@ function downloadBackup(): void {
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
-  platform.toast('Settings backup downloaded.', 'success')
+  platform.toast(t('backup.downloaded'), 'success')
 }
 
 async function readFile(file: File): Promise<void> {
@@ -78,7 +84,7 @@ async function readFile(file: File): Promise<void> {
   pendingPreview.value = null
   pendingRaw.value = null
   if (!file.name.toLowerCase().endsWith('.json') && file.type && file.type !== 'application/json') {
-    importError.value = 'Choose a .json settings backup.'
+    importError.value = t('backup.chooseJson')
     return
   }
   const text = await file.text()
@@ -137,7 +143,7 @@ function confirmImport(): void {
     platform.toast(result.error, 'error')
     return
   }
-  platform.toast('Settings imported.', 'success')
+  platform.toast(t('backup.importApplied'), 'success')
   pendingEnvelope.value = null
   pendingPreview.value = null
   pendingRaw.value = null
@@ -152,20 +158,20 @@ function confirmReset(): void {
   resetOpen.value = false
   if (resetScope.value === 'all') {
     store.resetAllPreferences()
-    platform.toast('Application preferences reset. Projects, caches, channels, and media were kept.', 'success')
+    platform.toast(t('settingsExtra.backupResetAllToast'), 'success')
     return
   }
   const cats = resetCats.value.filter((c) => c !== 'youtubeChannels')
   store.resetSelectedCategories(cats)
-  platform.toast('Selected preferences reset.', 'success')
+  platform.toast(t('backup.resetDone'), 'success')
 }
 </script>
 
 <template>
   <div>
-    <h3 class="section-label">Export Settings</h3>
+    <h3 class="section-label">{{ t('backup.exportSection') }}</h3>
     <p class="mb-3 text-xs text-zinc-500">
-      Downloads a versioned JSON backup of preferences. API keys, projects, media, and caches are never included.
+      {{ t('settingsExtra.backupExportIntro') }}
     </p>
     <div class="space-y-2">
       <label
@@ -175,19 +181,19 @@ function confirmReset(): void {
       >
         <AppCheckbox
           :checked="exportCats.includes(cat)"
-          :aria-label="CATEGORY_LABELS[cat]"
+          :aria-label="categoryLabel(cat)"
           @change="toggleExportCat(cat, $event)"
         />
-        {{ CATEGORY_LABELS[cat] }}
+        {{ categoryLabel(cat) }}
       </label>
     </div>
     <div class="mt-3">
       <button class="btn btn-primary cursor-pointer" type="button" :disabled="!canExport" @click="downloadBackup">
-        Export Settings JSON
+        {{ t('settingsExtra.backupExportJson') }}
       </button>
     </div>
 
-    <h3 class="section-label mt-8 mb-1">Import Settings</h3>
+    <h3 class="section-label mt-8 mb-1">{{ t('backup.importSection') }}</h3>
     <div
       class="rounded-lg border border-dashed px-4 py-6 text-center transition-colors"
       :class="dragOver ? 'border-brand bg-brand/10' : 'border-white/15 bg-inset/40'"
@@ -196,27 +202,27 @@ function confirmReset(): void {
       @dragleave.prevent="dragOver = false"
       @drop="onDrop"
     >
-      <p class="text-sm text-zinc-300">Drop a settings JSON file here</p>
+      <p class="text-sm text-zinc-300">{{ t('settingsExtra.backupDropFile') }}</p>
       <button class="btn btn-ghost mt-3 cursor-pointer" type="button" @click="fileInput?.click()">
-        Choose File
+        {{ t('settingsExtra.backupChooseFile') }}
       </button>
       <input ref="fileInput" class="hidden" type="file" accept="application/json,.json" @change="onFilePicked" />
     </div>
     <p v-if="importError" class="mt-2 text-xs text-amber-300">{{ importError }}</p>
 
     <div v-if="pendingPreview && pendingEnvelope" class="mt-4 space-y-3 rounded-lg border border-white/5 bg-inset/50 p-3">
-      <h4 class="text-sm font-semibold text-zinc-100">Import preview</h4>
-      <SettingsRow label="Created">
+      <h4 class="text-sm font-semibold text-zinc-100">{{ t('settingsExtra.backupImportPreview') }}</h4>
+      <SettingsRow :label="t('settingsExtra.backupCreated')">
         <span class="text-xs text-zinc-300">{{ pendingPreview.exportedAt }}</span>
       </SettingsRow>
-      <SettingsRow label="Source version">
+      <SettingsRow :label="t('settingsExtra.backupSourceVersion')">
         <span class="text-xs text-zinc-300">{{ pendingPreview.appVersion }}</span>
       </SettingsRow>
-      <SettingsRow label="Settings that will change">
+      <SettingsRow :label="t('settingsExtra.backupWillChange')">
         <span class="text-xs text-zinc-300">{{ pendingPreview.changeCount }}</span>
       </SettingsRow>
       <div class="space-y-2">
-        <p class="text-xs text-zinc-500">Categories to restore</p>
+        <p class="text-xs text-zinc-500">{{ t('settingsExtra.backupCategoriesRestore') }}</p>
         <label
           v-for="cat in pendingPreview.availableCategories"
           :key="`import-${cat}`"
@@ -224,35 +230,35 @@ function confirmReset(): void {
         >
           <AppCheckbox
             :checked="importCats.includes(cat)"
-            :aria-label="CATEGORY_LABELS[cat]"
+            :aria-label="categoryLabel(cat)"
             @change="
               toggleImportCat(cat, $event);
               refreshPreview()
             "
           />
-          {{ CATEGORY_LABELS[cat] }}
+          {{ categoryLabel(cat) }}
         </label>
       </div>
-      <SettingsRow label="Import mode" hint="Merge keeps unrelated prefs. Replace resets selected categories first.">
+      <SettingsRow :label="t('backup.importMode')" :hint="t('backup.importModeHint')">
         <select v-model="importMode" class="field w-auto" @change="refreshPreview">
-          <option value="merge">Merge</option>
-          <option value="replace-categories">Replace Selected Categories</option>
+          <option value="merge">{{ t('backup.merge') }}</option>
+          <option value="replace-categories">{{ t('backup.replaceSelected') }}</option>
         </select>
       </SettingsRow>
-      <ul v-if="pendingPreview.invalidNotes.length" class="list-disc pl-4 text-xs text-amber-200">
+      <ul v-if="pendingPreview.invalidNotes.length" class="list-disc ps-4 text-xs text-amber-200">
         <li v-for="(note, i) in pendingPreview.invalidNotes" :key="i">{{ note }}</li>
       </ul>
-      <ul v-if="pendingPreview.machineSpecificNotes.length" class="list-disc pl-4 text-xs text-zinc-400">
+      <ul v-if="pendingPreview.machineSpecificNotes.length" class="list-disc ps-4 text-xs text-zinc-400">
         <li v-for="(note, i) in pendingPreview.machineSpecificNotes" :key="i">{{ note }}</li>
       </ul>
       <button class="btn btn-primary cursor-pointer" type="button" :disabled="importCats.length === 0" @click="askImport">
-        Review &amp; Import
+        {{ t('settingsExtra.backupReviewImport') }}
       </button>
     </div>
 
-    <h3 class="section-label mt-8">Reset Preferences</h3>
+    <h3 class="section-label mt-8">{{ t('backup.resetSection') }}</h3>
     <p class="mb-3 text-xs text-zinc-500">
-      Resets never delete projects, media, animation caches, registered channels, or credentials.
+      {{ t('settingsExtra.backupResetIntro') }}
     </p>
     <div class="space-y-2">
       <label
@@ -262,7 +268,7 @@ function confirmReset(): void {
       >
         <AppCheckbox
           :checked="resetCats.includes(cat)"
-          :aria-label="CATEGORY_LABELS[cat]"
+          :aria-label="categoryLabel(cat)"
           @change="
             (on) => {
               if (on) resetCats = [...resetCats, cat]
@@ -270,7 +276,7 @@ function confirmReset(): void {
             }
           "
         />
-        {{ CATEGORY_LABELS[cat] }}
+        {{ categoryLabel(cat) }}
       </label>
     </div>
     <div class="mt-3 flex flex-wrap gap-2">
@@ -280,46 +286,48 @@ function confirmReset(): void {
         :disabled="resetCats.length === 0"
         @click="askReset('selected')"
       >
-        Reset Selected
+        {{ t('backup.resetSelected') }}
       </button>
       <button class="btn btn-ghost cursor-pointer" type="button" @click="askReset('all')">
-        Reset All Preferences
+        {{ t('backup.resetAll') }}
       </button>
     </div>
 
-    <AppDialog :open="confirmOpen" title="Apply imported settings?" @cancel="confirmOpen = false">
+    <AppDialog :open="confirmOpen" :title="t('backup.confirmImportTitle')" @cancel="confirmOpen = false">
       <p class="text-sm text-zinc-300">
-        Apply
-        <strong class="text-zinc-100">{{ importCats.length }}</strong>
-        categor{{ importCats.length === 1 ? 'y' : 'ies' }} using
-        <strong class="text-zinc-100">{{ importMode === 'merge' ? 'Merge' : 'Replace Selected' }}</strong>
-        mode?
+        {{
+          t('settingsExtra.backupImportConfirm', {
+            n: importCats.length,
+            unit: importCats.length === 1 ? t('settingsExtra.backupImportCategory') : t('settingsExtra.backupImportCategories'),
+            mode: importMode === 'merge' ? t('backup.merge') : t('backup.replaceSelected'),
+          })
+        }}
       </p>
-      <p class="mt-2 text-xs text-zinc-500">A snapshot of current preferences is kept for rollback if persistence fails.</p>
+      <p class="mt-2 text-xs text-zinc-500">{{ t('settingsExtra.backupImportRollback') }}</p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="confirmOpen = false">Cancel</button>
-        <button class="btn btn-primary cursor-pointer" type="button" @click="confirmImport">Import</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="confirmOpen = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary cursor-pointer" type="button" @click="confirmImport">{{ t('backup.applyImport') }}</button>
       </template>
     </AppDialog>
 
     <AppDialog
       :open="resetOpen"
-      :title="resetScope === 'all' ? 'Reset all preferences?' : 'Reset selected preferences?'"
+      :title="resetScope === 'all' ? t('backup.confirmResetAllTitle') : t('backup.confirmResetSelectedTitle')"
       @cancel="resetOpen = false"
     >
       <p class="text-sm text-zinc-300">
         {{
           resetScope === 'all'
-            ? 'Restore General, Appearance, Performance, Export, Storage, and Screensaver output defaults.'
-            : `Reset ${resetCats.map((c) => CATEGORY_LABELS[c]).join(', ')} to defaults.`
+            ? t('settingsExtra.backupResetAllBody')
+            : t('settingsExtra.backupResetSelectedBody', { categories: resetCats.map((c) => categoryLabel(c)).join(', ') })
         }}
       </p>
       <p class="mt-2 text-xs text-zinc-500">
-        Projects, uploaded media, exports, animation caches, YouTube channels, and credentials are not deleted.
+        {{ t('settingsExtra.backupResetPreserve') }}
       </p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="resetOpen = false">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmReset">Reset</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="resetOpen = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmReset">{{ t('common.reset') }}</button>
       </template>
     </AppDialog>
   </div>

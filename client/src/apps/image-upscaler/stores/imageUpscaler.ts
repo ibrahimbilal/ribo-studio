@@ -16,7 +16,9 @@ import {
 } from '@shared/imageUpscaler'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { translate, type MessageKey, type MessageParams } from '../../../i18n'
 import { sniffImageMime } from '../../../lib/media'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { usePlatformStore } from '../../../stores/platform'
 import { useScreensaverStore } from '../../frame-screensaver/stores/screensaver'
 import { readLocalImage } from '../lib/localPreview'
@@ -40,10 +42,14 @@ function appUpscaleOptions(): UpscaleOptions {
 
 export const useImageUpscalerStore = defineStore('image-upscaler', () => {
   const platform = usePlatformStore()
+  const globalSettings = useGlobalSettingsStore()
+  function t(key: MessageKey, params?: MessageParams): string {
+    return translate(globalSettings.general.language, key, params)
+  }
   const items = ref<LocalUpscaleItem[]>([])
   const selectedId = ref<string | null>(null)
   const settings = ref<UpscaleOptions>(appUpscaleOptions())
-  const name = ref('Untitled upscale')
+  const name = ref(t('upscaler.defaultName'))
   const capabilities = ref<UpscalerCapabilities | null>(null)
   const jobEngine = ref<UpscaleEngineId>('lanczos3')
   const jobId = ref<string | null>(null)
@@ -103,24 +109,27 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
   async function addFiles(files: File[]): Promise<void> {
     const room = DEFAULT_UPSCALE_LIMITS.maxBatch - items.value.length
     if (room <= 0) {
-      platform.toast(`You can add up to ${DEFAULT_UPSCALE_LIMITS.maxBatch} images at a time.`, 'info')
+      platform.toast(t('upscaler.toast.batchLimit', { max: DEFAULT_UPSCALE_LIMITS.maxBatch }), 'info')
       return
     }
     const batch = files.slice(0, room)
     if (files.length > batch.length) {
-      platform.toast(`Only ${room} more image${room === 1 ? '' : 's'} can be added.`, 'info')
+      platform.toast(
+        room === 1 ? t('upscaler.toast.roomLeft', { count: room }) : t('upscaler.toast.roomLeftPlural', { count: room }),
+        'info',
+      )
     }
     const wasEmpty = items.value.length === 0
     let firstMime: string | null = null
     for (const file of batch) {
       const sniffed = await sniffImageMime(file)
       if (!sniffed) {
-        platform.toast(`${file.name} is not a PNG, JPEG, or WebP image.`)
+        platform.toast(t('upscaler.toast.notSupportedFormat', { name: file.name }))
         continue
       }
       if (!firstMime) firstMime = sniffed
       if (file.size > DEFAULT_UPSCALE_LIMITS.maxFileBytes) {
-        platform.toast(`${file.name} is larger than ${formatBytes(DEFAULT_UPSCALE_LIMITS.maxFileBytes)}.`)
+        platform.toast(t('upscaler.toast.tooLarge', { name: file.name, size: formatBytes(DEFAULT_UPSCALE_LIMITS.maxFileBytes) }))
         continue
       }
       try {
@@ -151,7 +160,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
         })
         if (!selectedId.value) selectedId.value = localId
       } catch {
-        platform.toast(`${file.name} could not be read.`)
+        platform.toast(t('upscaler.toast.readFailed', { name: file.name }))
       }
     }
     if (formatFromSource.value && wasEmpty && firstMime) {
@@ -213,7 +222,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
           model: null,
           scale: null,
           matchesUpscaylLite: false,
-          reason: 'AI Lite is not available from this server.',
+          reason: t('upscaler.settings.aiLiteUnavailable'),
         },
       },
     }
@@ -259,7 +268,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
       schedulePoll()
     } catch (error) {
       busy.value = false
-      toast(error, 'The images could not be re-exported.')
+      toast(error, t('upscaler.toast.reexportFailed'))
       void poll()
     }
   }
@@ -271,7 +280,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
     try {
       normalized = normalizeOptions(settings.value)
     } catch (error) {
-      toast(error, 'Check the output settings.')
+      toast(error, t('upscaler.toast.outputSettings'))
       return
     }
     settings.value = normalized.options
@@ -309,7 +318,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
       for (const item of items.value) {
         if (item.status === 'pending') item.status = 'ready'
       }
-      toast(error, 'The images could not be sent.')
+      toast(error, t('upscaler.toast.sendFailed'))
     }
   }
 
@@ -333,7 +342,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
       else busy.value = false
     } catch (error) {
       busy.value = false
-      toast(error, 'The upscale status could not be read.')
+      toast(error, t('upscaler.toast.statusFailed'))
     }
   }
 
@@ -368,7 +377,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
       await cancelUpscaleJob(id)
       await poll()
     } catch (error) {
-      toast(error, 'The upscale could not be cancelled.')
+      toast(error, t('upscaler.toast.cancelFailed'))
     }
   }
 
@@ -423,9 +432,9 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
       const blob = await fetchUpscaledBlob(jobId.value, item.serverItemId)
       const file = new File([blob], item.outputName, { type: blob.type || 'image/png' })
       await sendFileToScreensaver(file)
-      platform.toast('Screensaver is using the upscaled image.', 'info')
+      platform.toast(t('upscaler.toast.sentToScreensaver'), 'info')
     } catch (error) {
-      toast(error, 'The image could not be sent to Screensaver.')
+      toast(error, t('upscaler.toast.sendScreensaverFailed'))
     }
   }
 
@@ -440,15 +449,15 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
   async function newProject(): Promise<void> {
     if (items.value.length === 0 && !jobId.value) {
       settings.value = appUpscaleOptions()
-      name.value = 'Untitled upscale'
+      name.value = t('upscaler.defaultName')
       return
     }
-    if (!window.confirm('Clear the Image Upscaler queue? Images in this list will be removed.')) return
+    if (!window.confirm(t('upscaler.confirmClearQueue'))) return
     const id = jobId.value
     clearItems()
     busy.value = false
     settings.value = appUpscaleOptions()
-    name.value = 'Untitled upscale'
+    name.value = t('upscaler.defaultName')
     jobEngine.value = 'lanczos3'
     if (id) await cancelUpscaleJob(id, true).catch(() => undefined)
   }

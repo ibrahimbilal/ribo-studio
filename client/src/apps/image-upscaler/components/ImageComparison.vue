@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { RotateCcw } from '@lucide/vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from '../../../i18n'
 import { itemPreviewUrl, upscaleOutputCacheStamp } from '../lib/upscalerApi'
 import { useImageUpscalerStore } from '../stores/imageUpscaler'
 
 const store = useImageUpscalerStore()
+const { t } = useI18n()
 const viewport = ref<HTMLElement | null>(null)
 const split = ref(50)
 const zoom = ref(1)
@@ -156,7 +158,7 @@ onUnmounted(() => {
       :class="zoom > 1 ? 'cursor-grab' : ''"
       tabindex="0"
       role="application"
-      aria-label="Before and after comparison. Arrow keys move the divider. Plus and minus change zoom. Scroll to zoom toward the pointer."
+      :aria-label="t('upscaler.comparison.ariaViewport')"
       @keydown="onKeydown"
       @wheel.prevent="onWheel"
       @pointerdown="onPointerDown"
@@ -165,11 +167,11 @@ onUnmounted(() => {
       @pointercancel="onPointerUp"
     >
       <div class="preview-well absolute inset-0 select-none" :style="layerStyle">
-        <img :src="store.selected?.previewUrl" alt="Before" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
+        <img :src="store.selected?.previewUrl" :alt="t('upscaler.comparison.before')" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
         <img
           :key="afterKey"
           :src="afterUrl"
-          alt="After"
+          :alt="t('upscaler.comparison.after')"
           class="pointer-events-none absolute inset-0 h-full w-full object-contain"
           :style="{ clipPath: `inset(0 ${100 - split}% 0 0)` }"
         />
@@ -180,7 +182,7 @@ onUnmounted(() => {
         data-divider
         role="slider"
         tabindex="0"
-        aria-label="Comparison divider"
+        :aria-label="t('upscaler.comparison.ariaDivider')"
         aria-valuemin="0"
         aria-valuemax="100"
         :aria-valuenow="Math.round(split)"
@@ -191,20 +193,20 @@ onUnmounted(() => {
           ||
         </div>
       </div>
-      <span v-show="dividerLeft > 72" class="pointer-events-none absolute top-3 left-3 rounded bg-black/70 px-2 py-1 text-[11px] font-semibold">Before</span>
-      <span v-show="viewWidth - dividerLeft > 72" class="pointer-events-none absolute top-3 right-3 rounded bg-black/70 px-2 py-1 text-[11px] font-semibold">After</span>
+      <span v-show="dividerLeft > 72" class="pointer-events-none absolute top-3 left-3 rounded bg-black/70 px-2 py-1 text-[11px] font-semibold">{{ t('upscaler.comparison.before') }}</span>
+      <span v-show="viewWidth - dividerLeft > 72" class="pointer-events-none absolute top-3 right-3 rounded bg-black/70 px-2 py-1 text-[11px] font-semibold">{{ t('upscaler.comparison.after') }}</span>
     </div>
     <div class="flex flex-wrap items-center gap-3">
       <label class="flex min-w-[10rem] flex-1 items-center gap-2 text-xs text-zinc-400 whitespace-nowrap">
-        Zoom {{ zoom.toFixed(2) }}×
-        <input :value="zoom" class="w-full" type="range" min="1" max="4" step="0.05" aria-label="Zoom" @input="setZoom(Number(($event.target as HTMLInputElement).value))" />
+        {{ t('upscaler.comparison.zoomTemplate', { value: zoom.toFixed(2) }) }}
+        <input :value="zoom" class="w-full" type="range" min="1" max="4" step="0.05" :aria-label="t('upscaler.comparison.ariaZoom')" @input="setZoom(Number(($event.target as HTMLInputElement).value))" />
       </label>
-      <button class="cursor-pointer" type="button" aria-label="Reset view" title="Reset view" @click="resetView">
+      <button class="cursor-pointer" type="button" :aria-label="t('upscaler.comparison.ariaResetView')" :title="t('upscaler.comparison.resetView')" @click="resetView">
         <RotateCcw :size="16" />
       </button>
     </div>
     <p class="text-[11px] leading-relaxed text-zinc-500">
-      Both sides use the same preview size. Scroll or use the slider to zoom, then drag the picture to pan. The original is not blurred. This preview is not the downloaded file.
+      {{ t('upscaler.comparison.help') }}
     </p>
   </div>
 </template>

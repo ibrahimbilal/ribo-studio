@@ -5,10 +5,12 @@ import { BRAND } from '../../../lib/brand'
 import { formatClock } from '../../../lib/format'
 import { themeInkColor, themePreviewWellColor } from '../../../lib/themePaint'
 import { combineSequencePeaks, playbackProgress, resamplePeaks, WAVEFORM_PLAYED_OPACITY, WAVEFORM_UNPLAYED_OPACITY } from '../lib/waveform'
+import { useI18n } from '../../../i18n'
 import { useAudioLooperStore, type LooperTrack } from '../stores/audioLooper'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 
 const store = useAudioLooperStore()
+const { t } = useI18n()
 const globalSettings = useGlobalSettingsStore()
 const primary = ref<HTMLAudioElement | null>(null)
 const secondary = ref<HTMLAudioElement | null>(null)
@@ -199,7 +201,7 @@ async function beginCrossfade(): Promise<void> {
   try {
     await idle.play()
   } catch {
-    error.value = 'This browser could not play the next track.'
+    error.value = t('looper.preview.nextTrackError')
   }
 }
 
@@ -226,7 +228,7 @@ async function advance(fromFade: boolean): Promise<void> {
       try {
         await audio.play()
       } catch {
-        error.value = 'This browser could not play the next track.'
+        error.value = t('looper.preview.nextTrackError')
         playing.value = false
         return
       }
@@ -251,7 +253,7 @@ async function toggle(): Promise<void> {
         playing.value = true
         startLoop()
       } catch {
-        error.value = 'This browser could not play the mix preview.'
+        error.value = t('looper.preview.mixPreviewError')
       }
     } else {
       audio.pause()
@@ -285,7 +287,7 @@ async function toggle(): Promise<void> {
     playing.value = true
     startLoop()
   } catch {
-    error.value = 'This browser could not play the audio file.'
+    error.value = t('looper.preview.playError')
   }
 }
 
@@ -376,7 +378,7 @@ watch(
       playing.value = true
       startLoop()
     }).catch(() => {
-      error.value = 'This browser could not play the mix preview.'
+      error.value = t('looper.preview.mixPreviewError')
     })
   },
 )
@@ -428,7 +430,7 @@ onBeforeUnmount(() => {
         class="h-24 w-full cursor-pointer touch-none rounded-md sm:h-28"
         role="slider"
         tabindex="0"
-        aria-label="Seek sequence"
+        :aria-label="t('looper.preview.seekSequence')"
         :aria-valuemin="0"
         :aria-valuemax="clockTotal"
         :aria-valuenow="clockNow"
@@ -438,16 +440,16 @@ onBeforeUnmount(() => {
     </div>
     <div class="w-full px-3 pb-3 pt-2">
       <div class="flex items-center gap-3 text-ink">
-        <button class="cursor-pointer" type="button" :aria-label="playing ? 'Pause' : 'Play'" @click="toggle">
+        <button class="cursor-pointer" type="button" :aria-label="playing ? t('common.pause') : t('common.play')" @click="toggle">
           <Pause v-if="playing" :size="18" />
           <Play v-else :size="18" />
         </button>
-        <button class="cursor-pointer" type="button" :aria-label="muted ? 'Unmute' : 'Mute'" @click="toggleMute">
+        <button class="cursor-pointer" type="button" :aria-label="muted ? t('common.unmute') : t('common.mute')" @click="toggleMute">
           <VolumeX v-if="muted" :size="18" />
           <Volume2 v-else :size="18" />
         </button>
         <span class="text-sm tabular-nums">{{ formatClock(clockNow) }} / {{ formatClock(clockTotal) }}</span>
-        <span class="truncate text-xs text-faint">{{ mixMode ? 'Server mix' : audible ? store.displayName(audible) : '' }}</span>
+        <span class="truncate text-xs text-faint">{{ mixMode ? t('looper.preview.serverMix') : audible ? store.displayName(audible) : '' }}</span>
       </div>
       <p v-if="error" class="mt-2 text-xs text-red-300">{{ error }}</p>
     </div>

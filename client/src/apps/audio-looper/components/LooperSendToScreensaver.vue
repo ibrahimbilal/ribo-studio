@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import AppCheckbox from '../../../components/ui/AppCheckbox.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
 import AppRadio from '../../../components/ui/AppRadio.vue'
+import { useI18n } from '../../../i18n'
 import { usePlatformStore } from '../../../stores/platform'
 import { projectHasBackgroundAudio } from '../../frame-screensaver/lib/screensaverAudioRefs'
 import { useScreensaverStore } from '../../frame-screensaver/stores/screensaver'
@@ -24,6 +25,7 @@ import { useAudioLooperStore } from '../stores/audioLooper'
 const store = useAudioLooperStore()
 const platform = usePlatformStore()
 const screensaver = useScreensaverStore()
+const { t } = useI18n()
 
 const sendOpen = ref(false)
 const sending = ref(false)
@@ -59,6 +61,15 @@ const liveSelected = computed(() =>
 
 const primaryLabel = computed(() => sendButtonLabel(selectedCount.value, sending.value))
 
+const replaceAudioMessage = computed(() => {
+  const count = projectsWithExistingAudio.value.length
+  if (count === 0) return ''
+  if (count === 1) {
+    return t('looper.sendScreensaver.replaceOneAudio', { name: projectsWithExistingAudio.value[0]?.name ?? '' })
+  }
+  return t('looper.sendScreensaver.replaceManyAudio', { count })
+})
+
 async function openSendDialog() {
   if (!canOpen.value) return
   if (!screensaver.hydrated) await screensaver.init()
@@ -82,9 +93,11 @@ function onSelectAllChange(checked: boolean) {
 }
 
 function statusLabel(project: (typeof editableProjects.value)[number]): string {
-  if (project.live) return project.render.status === 'queued' ? 'Queued' : 'Rendering'
-  if (project.audio.present) return 'Has audio'
-  return 'No audio'
+  if (project.live) {
+    return project.render.status === 'queued' ? t('looper.sendScreensaver.statusQueued') : t('looper.sendScreensaver.statusRendering')
+  }
+  if (project.audio.present) return t('looper.sendScreensaver.statusHasAudio')
+  return t('looper.sendScreensaver.statusNoAudio')
 }
 
 async function confirmSend() {
@@ -98,7 +111,7 @@ async function confirmSend() {
     platform.toast(notice.text, notice.tone)
     if (result.ok.length > 0) sendOpen.value = false
   } catch (error) {
-    platform.toast(error instanceof Error ? error.message : 'Could not send audio to Screensaver.', 'error')
+    platform.toast(error instanceof Error ? error.message : t('looper.sendScreensaver.sendFailed'), 'error')
   } finally {
     sending.value = false
   }
@@ -111,17 +124,16 @@ async function confirmSend() {
     class="btn btn-ghost cursor-pointer px-2"
     type="button"
     :disabled="!canOpen"
-    :aria-label="sending ? 'Sending to Screensaver' : 'Send to Screensaver'"
-    :title="sending ? 'Sending…' : 'Send to Screensaver'"
+    :aria-label="sending ? t('looper.sendScreensaver.ariaSending') : t('looper.sendScreensaver.ariaSend')"
+    :title="sending ? t('looper.sendScreensaver.sending') : t('looper.sendScreensaver.title')"
     @click="openSendDialog"
   >
     <FolderOutput :size="18" aria-hidden="true" />
   </button>
 
-  <AppDialog :open="sendOpen" title="Send to Screensaver" @cancel="closeSendDialog">
+  <AppDialog :open="sendOpen" :title="t('looper.sendScreensaver.title')" @cancel="closeSendDialog">
     <p class="text-sm text-zinc-300">
-      Send the original tracks and loop settings so Screensaver can preserve quality — no intermediate lossy export.
-      One shared audio asset is attached to every selected project.
+      {{ t('looper.sendScreensaver.intro') }}
     </p>
 
     <div
@@ -133,19 +145,19 @@ async function confirmSend() {
           :checked="selectAllState === 'checked'"
           :indeterminate="selectAllState === 'indeterminate'"
           :disabled="sending"
-          aria-label="Select all projects"
+          :aria-label="t('looper.sendScreensaver.selectAllAria')"
           @change="onSelectAllChange"
         />
-        Select all
+        {{ t('looper.sendScreensaver.selectAll') }}
       </label>
       <p class="text-xs text-zinc-400">
-        {{ selectedIds.length }} of {{ editableIds.length }} selected
+        {{ t('looper.sendScreensaver.selectedTemplate', { selected: selectedIds.length, total: editableIds.length }) }}
       </p>
     </div>
 
     <div class="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-md border border-zinc-800 bg-inset p-1">
       <p v-if="editableProjects.length === 0" class="px-2 py-6 text-center text-sm text-zinc-500">
-        No saved Screensaver projects yet. Create one in Screensaver first.
+        {{ t('looper.sendScreensaver.noProjects') }}
       </p>
       <label
         v-for="project in editableProjects"
@@ -161,34 +173,34 @@ async function confirmSend() {
           class="shrink-0"
           :checked="selectedIds.includes(project.id)"
           :disabled="sending"
-          :aria-label="`Select ${project.name}`"
+          :aria-label="t('looper.sendScreensaver.selectProjectAria', { name: project.name })"
           @change="() => toggleProject(project.id)"
         />
         <div class="h-10 w-16 shrink-0 overflow-hidden rounded bg-zinc-900">
           <img v-if="project.thumbnail" :src="project.thumbnail" alt="" class="h-full w-full object-cover" />
-          <span v-else class="flex h-full items-center justify-center text-[10px] text-zinc-600">No image</span>
+          <span v-else class="flex h-full items-center justify-center text-[10px] text-zinc-600">{{ t('looper.sendScreensaver.noImage') }}</span>
         </div>
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium text-zinc-100" :title="project.name">{{ project.name }}</p>
           <p class="mt-0.5 text-xs text-zinc-500">
             {{ project.mediaLabel }} · {{ statusLabel(project) }}
-            <span v-if="project.live" class="text-amber-200"> · skipping while export is active</span>
+            <span v-if="project.live" class="text-amber-200">{{ t('looper.sendScreensaver.skipLiveSuffix') }}</span>
           </p>
         </div>
       </label>
     </div>
 
-    <div v-if="showPlaylistOrder" class="mt-4 space-y-2" role="radiogroup" aria-label="Playlist order">
-      <p class="section-label">Playlist order</p>
+    <div v-if="showPlaylistOrder" class="mt-4 space-y-2" role="radiogroup" :aria-label="t('looper.sendScreensaver.playlistOrder')">
+      <p class="section-label">{{ t('looper.sendScreensaver.playlistOrder') }}</p>
       <label class="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-200">
         <AppRadio
           v-model="playlistOrderMode"
           name="looper-playlist-order"
           value="shared"
           :disabled="sending"
-          aria-label="Same order for all projects"
+          :aria-label="t('looper.sendScreensaver.sameOrderAria')"
         />
-        Same order for all projects
+        {{ t('looper.sendScreensaver.sameOrder') }}
       </label>
       <label class="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-200">
         <AppRadio
@@ -196,27 +208,25 @@ async function confirmSend() {
           name="looper-playlist-order"
           value="unique"
           :disabled="sending"
-          aria-label="Unique order for each project"
+          :aria-label="t('looper.sendScreensaver.uniqueOrderAria')"
         />
-        Unique order for each project
+        {{ t('looper.sendScreensaver.uniqueOrder') }}
       </label>
       <p v-if="playlistOrderMode === 'unique'" class="text-xs text-zinc-500">
-        The first selected project keeps your current playlist order; the others get a different shuffle.
+        {{ t('looper.sendScreensaver.uniqueOrderHint') }}
       </p>
     </div>
 
     <p v-if="projectsWithExistingAudio.length > 0" class="mt-3 text-sm text-amber-200">
-      {{ projectsWithExistingAudio.length === 1
-        ? `“${projectsWithExistingAudio[0]?.name}” already has background audio. It will be replaced.`
-        : `${projectsWithExistingAudio.length} selected projects already have background audio. Existing audio will be replaced.` }}
+      {{ replaceAudioMessage }}
     </p>
     <p v-if="liveSelected.length > 0" class="mt-2 text-sm text-zinc-400">
-      Projects that are rendering or queued will be skipped so active export jobs keep their snapshots.
+      {{ t('looper.sendScreensaver.skipLiveNote') }}
     </p>
 
     <template #actions>
       <button class="btn btn-ghost cursor-pointer" type="button" :disabled="sending" @click="closeSendDialog">
-        Cancel
+        {{ t('common.cancel') }}
       </button>
       <button
         class="btn btn-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"

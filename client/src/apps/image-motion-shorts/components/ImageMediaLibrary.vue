@@ -4,10 +4,12 @@ import { ref } from 'vue'
 import { useCardReorder } from '../../../composables/useCardReorder'
 import FileDropZone from '../../../components/FileDropZone.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
+import { useI18n } from '../../../i18n'
 import { formatClock } from '../../../lib/format'
 import { useImageMotionStore } from '../stores/imageMotion'
 
 const store = useImageMotionStore()
+const { t } = useI18n()
 const listEl = ref<HTMLElement | null>(null)
 const deleteAllOpen = ref(false)
 const { instant, itemStyle, isPlaceholder, onGripPointerDown } = useCardReorder({
@@ -38,21 +40,21 @@ async function confirmDeleteAll() {
   <aside class="flex h-full min-h-0 flex-col bg-sidebar">
     <div class="space-y-3 border-b border-zinc-800 p-4">
       <label class="block">
-        <span class="section-label mb-1 block">Project</span>
+        <span class="section-label mb-1 block">{{ t('imageMotion.library.project') }}</span>
         <input v-model="store.name" class="field text-sm font-semibold" type="text" maxlength="80" />
       </label>
       <FileDropZone
         compact
         accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
         multiple
-        label="Drop images here"
+        :label="t('imageMotion.library.dropImages')"
         formats="JPG, PNG, WebP"
         @files="onFiles"
       />
     </div>
 
     <div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-      <h3 class="section-label">Images</h3>
+      <h3 class="section-label">{{ t('imageMotion.library.images') }}</h3>
       <button
         class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
@@ -60,7 +62,7 @@ async function confirmDeleteAll() {
         @click="deleteAllOpen = true"
       >
         <Trash2 :size="14" />
-        Delete all
+        {{ t('common.deleteAll') }}
       </button>
     </div>
 
@@ -70,7 +72,7 @@ async function confirmDeleteAll() {
       :class="{ 'card-reorder-instant': instant }"
     >
       <p v-if="store.segments.length === 0" class="px-2 py-8 text-center text-sm text-zinc-500">
-        Drop JPG, PNG, or WebP files here. Export stays off until there is at least one image.
+        {{ t('imageMotion.library.emptyImages') }}
       </p>
       <article
         v-for="(segment, index) in store.segments"
@@ -88,7 +90,7 @@ async function confirmDeleteAll() {
           <button
             class="mt-1 w-5 shrink-0 cursor-grab touch-none select-none text-zinc-500"
             type="button"
-            aria-label="Drag to reorder"
+            :aria-label="t('common.dragReorder')"
             @pointerdown.stop="onGripPointerDown($event, index)"
           >
             <GripVertical :size="16" />
@@ -100,8 +102,8 @@ async function confirmDeleteAll() {
           <div class="min-w-0 flex-1">
             <div class="mb-1 flex items-center gap-2 text-xs text-zinc-500">
               <span class="font-semibold text-brand">{{ index + 1 }}</span>
-              <span>{{ segment.serverId ? 'Ready' : 'Uploading' }}</span>
-              <span class="ml-auto tabular-nums">{{ formatClock(segment.motion.duration) }}</span>
+              <span>{{ segment.serverId ? t('imageMotion.library.ready') : t('imageMotion.library.uploading') }}</span>
+              <span class="ms-auto tabular-nums">{{ formatClock(segment.motion.duration) }}</span>
             </div>
             <p class="truncate text-sm font-semibold text-zinc-100" :title="segment.fileName">{{ segment.fileName }}</p>
             <p class="mt-0.5 text-xs text-zinc-500">
@@ -111,7 +113,7 @@ async function confirmDeleteAll() {
           </div>
         </div>
         <label class="mt-2 flex items-center gap-2 text-xs text-zinc-400" @click.stop>
-          Duration
+          {{ t('imageMotion.library.duration') }}
           <input
             class="field w-20 py-1 tabular-nums"
             type="number"
@@ -120,27 +122,27 @@ async function confirmDeleteAll() {
             :value="segment.motion.duration"
             @change="store.setSegmentDuration(segment.id, Number(($event.target as HTMLInputElement).value))"
           />
-          <span>seconds</span>
+          <span>{{ t('imageMotion.library.seconds') }}</span>
         </label>
         <div class="mt-2 flex">
-          <button class="icon-action" type="button" aria-label="Move up" title="Move up" :disabled="index === 0" @click.stop="store.reorder(index, index - 1)">
+          <button class="icon-action" type="button" :aria-label="t('common.moveUp')" :title="t('common.moveUp')" :disabled="index === 0" @click.stop="store.reorder(index, index - 1)">
             <ChevronUp :size="16" />
           </button>
-          <button class="icon-action" type="button" aria-label="Move down" title="Move down" :disabled="index === store.segments.length - 1" @click.stop="store.reorder(index, index + 1)">
+          <button class="icon-action" type="button" :aria-label="t('common.moveDown')" :title="t('common.moveDown')" :disabled="index === store.segments.length - 1" @click.stop="store.reorder(index, index + 1)">
             <ChevronDown :size="16" />
           </button>
-          <button class="icon-action icon-action--danger ml-auto" type="button" aria-label="Remove image" title="Remove image" @click.stop="store.removeSegment(segment.id)">
+          <button class="icon-action icon-action--danger ms-auto" type="button" :aria-label="t('common.remove')" :title="t('common.remove')" @click.stop="store.removeSegment(segment.id)">
             <Trash2 :size="16" />
           </button>
         </div>
       </article>
     </div>
 
-    <AppDialog :open="deleteAllOpen" title="Delete all images" @cancel="closeDeleteAll">
-      <p class="text-sm text-zinc-300">Remove every image from this Image Motion project?</p>
+    <AppDialog :open="deleteAllOpen" :title="t('imageMotion.library.deleteAllTitle')" @cancel="closeDeleteAll">
+      <p class="text-sm text-zinc-300">{{ t('imageMotion.library.deleteAllBody') }}</p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">Delete all</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">{{ t('common.deleteAll') }}</button>
       </template>
     </AppDialog>
   </aside>

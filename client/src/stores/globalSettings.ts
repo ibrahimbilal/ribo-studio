@@ -36,6 +36,7 @@ import {
   type YoutubeChannelBackupRecord,
 } from '@shared/settingsBackup'
 import { applyAppearance } from '../lib/appearance'
+import { applyLanguage } from '../lib/locale'
 import { APP_VERSION } from '../lib/appVersion'
 import * as api from '../lib/api'
 import {
@@ -153,6 +154,10 @@ export const useGlobalSettingsStore = defineStore('globalSettings', () => {
     applyAppearance(settings.value.appearance)
   }
 
+  function paintLanguage(): void {
+    applyLanguage(settings.value.general.language)
+  }
+
   async function hydrate(): Promise<void> {
     let hadScreensaverSection = false
     try {
@@ -184,6 +189,7 @@ export const useGlobalSettingsStore = defineStore('globalSettings', () => {
     }
     writeLocal(settings.value)
     paintAppearance()
+    paintLanguage()
     hydrated.value = true
   }
 
@@ -205,6 +211,7 @@ export const useGlobalSettingsStore = defineStore('globalSettings', () => {
       ...settings.value,
       general: { ...settings.value.general, ...patch },
     }
+    if (patch.language != null) paintLanguage()
     schedulePersist()
   }
 
@@ -255,6 +262,7 @@ export const useGlobalSettingsStore = defineStore('globalSettings', () => {
       ...settings.value,
       general: { ...generalDefaults(), lastAppPath },
     }
+    paintLanguage()
     schedulePersist()
   }
 
@@ -315,6 +323,7 @@ export const useGlobalSettingsStore = defineStore('globalSettings', () => {
     }
     settings.value = migrateGlobalSettings(next)
     paintAppearance()
+    paintLanguage()
     schedulePersist()
   }
 
@@ -326,6 +335,7 @@ export const useGlobalSettingsStore = defineStore('globalSettings', () => {
       screensaver: { ...screensaverDefaults(), encoder: settings.value.screensaver.encoder },
     }
     paintAppearance()
+    paintLanguage()
     schedulePersist()
   }
 
@@ -347,6 +357,7 @@ export const useGlobalSettingsStore = defineStore('globalSettings', () => {
   function replaceSettings(next: GlobalSettings): void {
     settings.value = migrateGlobalSettings(next)
     paintAppearance()
+    paintLanguage()
     writeLocal(settings.value)
     scheduleServerSync()
     markSaved()

@@ -2,8 +2,11 @@
 import { Pause, Play } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { useScreensaverStore } from '../stores/screensaver'
+import { useI18n } from '../../../i18n'
+import { S } from '../lib/screensaverI18n'
 
 const store = useScreensaverStore()
+const { t } = useI18n()
 const videoRef = ref<HTMLVideoElement | null>(null)
 const videoBackRef = ref<HTMLVideoElement | null>(null)
 const playing = ref(false)
@@ -114,7 +117,7 @@ watch(
             @pause="playing = false"
           />
         </template>
-        <p v-else class="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">Upload media to preview</p>
+        <p v-else class="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">{{ t(S('preview.uploadMedia')) }}</p>
 
         <button
           v-if="store.mediaKind === 'video'"
@@ -124,23 +127,25 @@ watch(
         >
           <Play v-if="!playing" :size="16" />
           <Pause v-else :size="16" />
-          {{ playing ? 'Pause' : 'Play' }}
+          {{ playing ? t('common.pause') : t('common.play') }}
         </button>
       </div>
     </div>
     <audio ref="audioRef" class="hidden" />
     <dl class="mt-3 grid grid-cols-3 gap-2 text-xs text-zinc-500">
       <div>
-        <dt class="text-zinc-600">Fit</dt>
+        <dt class="text-zinc-600">{{ t(S('preview.fit')) }}</dt>
         <dd class="text-zinc-300 capitalize">{{ store.fit }}</dd>
       </div>
       <div>
-        <dt class="text-zinc-600">Duration</dt>
+        <dt class="text-zinc-600">{{ t(S('preview.duration')) }}</dt>
         <dd class="text-zinc-300">{{ store.durationLabel }}</dd>
       </div>
       <div>
-        <dt class="text-zinc-600">Output</dt>
-        <dd class="text-zinc-300">{{ store.outputWidth }}×{{ store.outputHeight }} @ {{ store.fps }} fps</dd>
+        <dt class="text-zinc-600">{{ t(S('preview.output')) }}</dt>
+        <dd class="text-zinc-300">
+          {{ t(S('preview.outputValue'), { width: store.outputWidth, height: store.outputHeight, fps: store.fps }) }}
+        </dd>
       </div>
     </dl>
   </div>

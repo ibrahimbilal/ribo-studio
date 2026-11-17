@@ -96,8 +96,9 @@ import { frameImageUrl } from '../lib/frameImageUrl'
 import type { PreviewRendererMode } from '../lib/previewRendererPreference'
 import type { ScreensaverRendererBackend } from '../lib/render/types'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
+import { screensaverTranslate } from '../lib/screensaverI18n'
 import { ensureServerUploadCleanupOnClose } from '../../../lib/serverUploadCleanup'
-import { DUPLICATE_EXPORT_MESSAGE, screensaverExportFingerprint } from '../../../lib/exportFingerprint'
+import { screensaverExportFingerprint } from '../../../lib/exportFingerprint'
 import { submitScreensaverExport } from '../lib/screensaverExport'
 import { screensaverPrepareUiProgress } from '../lib/screensaverPrepareProgress'
 import { canDeleteAudioAsset, type AssignAudioAssetResult } from '../lib/screensaverAudioRefs'
@@ -112,6 +113,7 @@ import {
 } from '../lib/exportAllPlan'
 import { subscribeAnimationOverlayOnOutput } from '../lib/subscribeAnimation/subscribeAnimationLayout'
 import { preloadSubscribeChannelAvatar } from '../lib/subscribeAnimation/subscribeAnimationChannelAvatar'
+import { SUBSCRIBE_ANIMATION_STATIC_CACHE_WIDTH } from '@shared/subscribeAnimationCache'
 import {
   getOrRenderSubscribeAnimation,
   onSubscribeCacheStatusChange,
@@ -485,41 +487,47 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   })
 
   const exportBlocker = computed(() => {
-    if (!serverOnline.value) return 'The renderer is offline.'
-    if (uploadState.value !== 'ready' || !serverId.value) return 'Upload an image or video first.'
-    if (mode.value === 'loop' && mediaKind.value !== 'video') return 'Looping mode needs a video source.'
-    if (mode.value === 'static' && mediaKind.value !== 'image') return 'Static art mode needs an image source.'
+    const lang = globalSettings.general.language
+    const tt = (path: string, params?: Record<string, string | number>) =>
+      screensaverTranslate(lang, path, params)
+    if (!serverOnline.value) return tt('exportBlocker.rendererOffline')
+    if (uploadState.value !== 'ready' || !serverId.value) return tt('exportBlocker.uploadFirst')
+    if (mode.value === 'loop' && mediaKind.value !== 'video') return tt('exportBlocker.loopNeedsVideo')
+    if (mode.value === 'static' && mediaKind.value !== 'image') return tt('exportBlocker.staticNeedsImage')
     // Video/loop exports automatically use Fast VFR via effectiveRenderingMode.
     if (durationSeconds.value < MIN_DURATION_SECONDS || durationSeconds.value > MAX_DURATION_SECONDS) {
-      return `Duration must be between ${formatDurationLabel(MIN_DURATION_SECONDS)} and ${formatDurationLabel(MAX_DURATION_SECONDS)}.`
+      return tt('exportBlocker.durationRange', {
+        min: formatDurationLabel(MIN_DURATION_SECONDS),
+        max: formatDurationLabel(MAX_DURATION_SECONDS),
+      })
     }
     if (audioMode.value === 'upload') {
       if (audioAvailability.value === 'uploading' || audioAvailability.value === 'validating') {
-        return 'Wait for background audio to finish uploading.'
+        return tt('exportBlocker.audioUploading')
       }
       if (audioAvailability.value === 'missing' || audioAvailability.value === 'error') {
-        return 'The background audio file is no longer available. Choose the audio again before exporting.'
+        return tt('exportBlocker.audioUnavailable')
       }
       if (audioAvailability.value !== 'available' || (!audioAssetId.value && !audioFile)) {
-        return 'Upload background audio or choose another audio option.'
+        return tt('exportBlocker.audioChoose')
       }
     }
-    if (audioMode.value === 'source' && !hasAudio.value) return 'This video has no audio. Choose another audio option.'
+    if (audioMode.value === 'source' && !hasAudio.value) return tt('exportBlocker.videoNoAudio')
     if (
       composition.value.frameId !== 'none' &&
       framesLoaded.value &&
       !isBuiltinFrameId(composition.value.frameId) &&
       !frames.value.some((frame) => frame.id === composition.value.frameId)
     ) {
-      return 'That frame is no longer on the server. Choose another frame.'
+      return tt('exportBlocker.frameMissing')
     }
     const animCheck = validateSubscribeAnimation(subscribeAnimation.value, durationSeconds.value, {
       staticImage: mode.value === 'static' && mediaKind.value === 'image',
     })
-    if (subscribeAnimation.value.enabled && !animCheck.ok) return animCheck.message ?? 'Invalid subscribe animation settings.'
+    if (subscribeAnimation.value.enabled && !animCheck.ok) return animCheck.message ?? tt('exportBlocker.subscribeInvalid')
     const lastFingerprint = exportFingerprints.get(projectId.value)
     if (lastFingerprint && currentExportFingerprint.value !== '' && currentExportFingerprint.value === lastFingerprint) {
-      return DUPLICATE_EXPORT_MESSAGE
+      return tt('exportBlocker.duplicate')
     }
     return ''
   })
@@ -1009,7 +1017,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     projectRender.value = render
     await restoreProjectMedia(saved.id)
     if (frameIsMissing(composition.value.frameId)) {
-      frameNotice.value = 'The selected frame is no longer on the server.'
+      frameNotice.value = screensaverTranslate(globalSettings.general.language, 'media.frameMissing')
       replaceComposition({ ...composition.value, frameId: 'none' })
     }
     seedEditStamp()
@@ -1074,7 +1082,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       void loadFrames()
       for (const event of peekScreensaverRenderEvents()) applyRenderEvent(event)
       if (pending && pending !== projectId.value) await openProject(pending)
-      void prepareDefaultStaticAnimations(outputWidth.value).catch(() => undefined)
+      void prepareDefaultStaticAnimations(SUBSCRIBE_ANIMATION_STATIC_CACHE_WIDTH).catch(() => undefined)
       void refreshSubscribeCacheStats()
       void hydrateSubscribeChannel()
     }
@@ -1090,7 +1098,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
         !isBuiltinFrameId(composition.value.frameId) &&
         !saved.some((frame) => frame.id === composition.value.frameId)
       ) {
-        frameNotice.value = 'The selected frame is no longer on the server.'
+        frameNotice.value = screensaverTranslate(globalSettings.general.language, 'media.frameMissing')
         replaceComposition({ ...composition.value, frameId: 'none' })
         commitComposition()
         toast(frameNotice.value, 'info')
@@ -2096,7 +2104,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   async function prepareStaticSubscribeAnimations(): Promise<void> {
     subscribeCacheBusy.value = true
     try {
-      await prepareDefaultStaticAnimations(outputWidth.value)
+      await prepareDefaultStaticAnimations(SUBSCRIBE_ANIMATION_STATIC_CACHE_WIDTH)
       await refreshSubscribeCacheStats()
       toast('Static subscribe animations are preparing in the background.', 'info')
     } catch (error) {

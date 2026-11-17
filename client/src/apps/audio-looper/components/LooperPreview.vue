@@ -4,12 +4,14 @@ import { RotateCcw } from '@lucide/vue'
 import { formatHms } from '@shared/audioLooper'
 import { formatBytes, formatClock } from '../../../lib/format'
 import AppPanel from '../../../components/ui/AppPanel.vue'
+import { useI18n } from '../../../i18n'
 import { WAVEFORM_MAX_BYTES } from '../lib/waveform'
 import { useAudioLooperStore } from '../stores/audioLooper'
 import LooperPlayer from './LooperPlayer.vue'
 import LooperSequencePlayer from './LooperSequencePlayer.vue'
 
 const store = useAudioLooperStore()
+const { t } = useI18n()
 const selected = computed(() => store.selectedTrack)
 const skippedWaveform = computed(() => (selected.value?.fileSize ?? 0) > WAVEFORM_MAX_BYTES)
 const repeatsLabel = computed(() => {
@@ -18,6 +20,12 @@ const repeatsLabel = computed(() => {
   if (!Number.isFinite(value) || value <= 0) return '—'
   return value.toFixed(value % 1 ? 2 : 0)
 })
+const sourcePanelTitle = computed(() =>
+  store.trackCount >= 2 ? t('looper.preview.selectedTrack') : t('looper.preview.sourcePreview'),
+)
+const durationRowLabel = computed(() =>
+  store.trackCount >= 2 ? t('looper.preview.sequenceDuration') : t('looper.preview.sourceDuration'),
+)
 
 function onTrimStart(event: Event): void {
   const track = selected.value
@@ -36,13 +44,13 @@ function onTrimEnd(event: Event): void {
 
 <template>
   <div class="space-y-3">
-    <AppPanel v-if="store.trackCount >= 2" title="Sequence">
+    <AppPanel v-if="store.trackCount >= 2" :title="t('looper.preview.sequence')">
       <LooperSequencePlayer />
       <p v-if="store.playlistCrossfade && !store.settingsError" class="mt-3 text-xs text-zinc-500">
-        Preview overlaps tracks by the same crossfade length, including the return to the first track. The exported file starts on that join.
+        {{ t('looper.preview.crossfadePreviewNote') }}
       </p>
       <p v-if="store.normalizeLoudness" class="mt-2 text-xs text-zinc-500">
-        Loudness matching is applied during export, not in this browser preview. It aims for -16 LUFS with a -1.5 dBTP true-peak limit. It does not make every track sound identical.
+        {{ t('looper.preview.loudnessNote') }}
       </p>
       <div v-if="store.normalizeLoudness" class="mt-3 flex flex-wrap items-center gap-2">
         <button
@@ -51,7 +59,7 @@ function onTrimEnd(event: Event): void {
           :disabled="store.mixPreviewState === 'running' || Boolean(store.settingsError)"
           @click="store.previewMix()"
         >
-          {{ store.mixPreviewState === 'running' ? 'Preparing mix…' : 'Preview mix' }}
+          {{ store.mixPreviewState === 'running' ? t('looper.preview.preparingMix') : t('looper.preview.previewMix') }}
         </button>
         <button
           v-if="store.mixPreviewUrl"
@@ -59,16 +67,16 @@ function onTrimEnd(event: Event): void {
           type="button"
           @click="store.clearMixPreview()"
         >
-          Close mix
+          {{ t('looper.preview.closeMix') }}
         </button>
       </div>
       <p v-if="store.mixPreviewError" class="mt-2 text-xs text-red-300">{{ store.mixPreviewError }}</p>
     </AppPanel>
 
-    <AppPanel :title="store.trackCount >= 2 ? 'Selected track' : 'Source preview'">
+    <AppPanel :title="sourcePanelTitle">
       <p class="truncate text-sm text-zinc-300">{{ selected ? store.displayName(selected) : store.fileName }}</p>
       <p class="mt-1 text-xs text-zinc-500">
-        Trimmed length:
+        {{ t('looper.preview.trimmedLength') }}
         {{ selected && store.trimmedLength(selected) > 0 ? formatClock(store.trimmedLength(selected)) : '—' }}
       </p>
       <LooperPlayer class="mt-3" />
@@ -76,8 +84,8 @@ function onTrimEnd(event: Event): void {
         v-if="selected?.duration"
         class="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-x-2 gap-y-1"
       >
-        <label class="text-xs text-zinc-500" for="looper-trim-start">Start</label>
-        <label class="text-xs text-zinc-500" for="looper-trim-end">End</label>
+        <label class="text-xs text-zinc-500" for="looper-trim-start">{{ t('looper.preview.start') }}</label>
+        <label class="text-xs text-zinc-500" for="looper-trim-end">{{ t('looper.preview.end') }}</label>
         <div />
         <input
           id="looper-trim-start"
@@ -102,8 +110,8 @@ function onTrimEnd(event: Event): void {
         <button
           class="btn btn-ghost h-full min-h-0 self-stretch px-2"
           type="button"
-          aria-label="Reset trim"
-          title="Reset trim"
+          :aria-label="t('looper.preview.resetTrim')"
+          :title="t('looper.preview.resetTrim')"
           :disabled="selected.trimStart <= 0.01 && (selected.trimEnd ?? selected.duration) >= selected.duration - 0.01"
           @click="store.resetTrim(selected.id)"
         >
@@ -111,30 +119,30 @@ function onTrimEnd(event: Event): void {
         </button>
       </div>
       <p v-if="skippedWaveform" class="mt-3 text-xs text-zinc-500">
-        Waveform preview is skipped for large files so the browser does not decode them into memory.
+        {{ t('looper.preview.waveformSkipped') }}
       </p>
     </AppPanel>
 
-    <AppPanel title="Loop plan" class="text-sm text-zinc-300">
+    <AppPanel :title="t('looper.preview.loopPlan')" class="text-sm text-zinc-300">
       <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-zinc-400">
-        <div>{{ store.trackCount >= 2 ? 'Sequence duration' : 'Source duration' }}</div>
+        <div>{{ durationRowLabel }}</div>
         <div class="text-zinc-200 tabular-nums">{{ store.sequencePeriod > 0 ? formatHms(Math.round(store.sequencePeriod)) : '—' }}</div>
-        <div>Target duration</div>
+        <div>{{ t('looper.preview.targetDuration') }}</div>
         <div class="text-zinc-200 tabular-nums">{{ formatHms(store.targetDurationSeconds) }}</div>
-        <div>Estimated repeats</div>
+        <div>{{ t('looper.preview.estimatedRepeats') }}</div>
         <div class="text-zinc-200 tabular-nums">{{ repeatsLabel }}</div>
-        <div>Approximate size</div>
-        <div class="text-zinc-200">{{ formatBytes(store.estimatedBytes) }} (estimate)</div>
+        <div>{{ t('looper.preview.approximateSize') }}</div>
+        <div class="text-zinc-200">{{ t('looper.preview.sizeEstimate', { size: formatBytes(store.estimatedBytes) }) }}</div>
       </dl>
       <p v-if="store.settingsError" class="mt-3 text-xs text-amber-300">{{ store.settingsError }}</p>
       <p v-else-if="store.willTrim" class="mt-3 text-xs text-amber-300">
-        The sequence is longer than the target, so the export stops at the target instead of looping.
+        {{ t('looper.preview.trimTargetNote') }}
       </p>
       <p v-else-if="store.trackCount < 2 && store.loopMode === 'seamless'" class="mt-3 text-xs text-zinc-500">
-        Seamless mode equal-power crossfades adjacent repeats and starts at that wrap-around join. Ambient beds usually join smoothly; music and speech can still click.
+        {{ t('looper.preview.seamlessNote') }}
       </p>
       <p v-else-if="store.trackCount >= 2 && store.playlistCrossfade" class="mt-3 text-xs text-zinc-500">
-        Each join overlaps, including the pass from the last track back to the first. Repeats fill the target and stop on time.
+        {{ t('looper.preview.playlistJoinNote') }}
       </p>
     </AppPanel>
   </div>

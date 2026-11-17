@@ -1,15 +1,17 @@
 import { AudioLines, ImagePlay, ListVideo, MonitorPlay } from '@lucide/vue'
 import type { Component } from 'vue'
+import type { AppLanguage } from '@shared/globalSettings'
+import { translate, type MessageKey } from '../i18n'
 import { useGlobalSettingsStore } from '../stores/globalSettings'
 import { usePlatformStore } from '../stores/platform'
 
 export type RenderAppId = 'ranking' | 'screensaver' | 'audio-looper' | 'image-motion'
 
-const APP_LABELS: Record<RenderAppId, string> = {
-  ranking: 'Shorts',
-  screensaver: 'Screensaver',
-  'audio-looper': 'Audio Looper',
-  'image-motion': 'Image Motion Shorts',
+const RENDER_APP_LABEL_KEYS: Record<RenderAppId, MessageKey> = {
+  ranking: 'nav.shorts',
+  screensaver: 'nav.screensaver',
+  'audio-looper': 'nav.looper',
+  'image-motion': 'settingsExtra.renderAppImageMotion',
 }
 
 export const RENDER_APP_ROUTES: Record<RenderAppId, string> = {
@@ -26,8 +28,16 @@ const APP_ICONS: Record<RenderAppId, Component> = {
   'image-motion': ImagePlay,
 }
 
-export function renderAppLabel(app: RenderAppId): string {
-  return APP_LABELS[app]
+function renderLanguage(): AppLanguage {
+  try {
+    return useGlobalSettingsStore().general.language
+  } catch {
+    return 'en'
+  }
+}
+
+export function renderAppLabel(app: RenderAppId, language: AppLanguage = renderLanguage()): string {
+  return translate(language, RENDER_APP_LABEL_KEYS[app])
 }
 
 export function renderAppIcon(app: RenderAppId): Component {
@@ -67,11 +77,15 @@ export function notifyRenderReady(
   projectId?: string | null,
 ): void {
   const platform = usePlatformStore()
-  const name = projectName.trim() || 'Untitled project'
+  const language = renderLanguage()
+  const name = projectName.trim() || translate(language, 'common.untitledProject')
   const route = RENDER_APP_ROUTES[app]
   const prefs = notificationPrefs()
 
-  maybeDesktopNotify(`${APP_LABELS[app]} export ready`, name)
+  maybeDesktopNotify(
+    translate(language, 'settingsExtra.exportReadyTitle', { app: renderAppLabel(app, language) }),
+    name,
+  )
 
   if (!prefs.inApp) {
     if (trackId) platform.removeActiveRenderJob(trackId)
@@ -103,10 +117,14 @@ export function notifyRenderOutcome(
 ): void {
   if (app !== 'screensaver' || !projectId) return
   const platform = usePlatformStore()
+  const language = renderLanguage()
   const prefs = notificationPrefs()
+  const untitled = translate(language, 'common.untitledProject')
   maybeDesktopNotify(
-    outcome === 'failed' ? 'Screensaver export failed' : 'Screensaver export cancelled',
-    projectName.trim() || 'Untitled project',
+    outcome === 'failed'
+      ? translate(language, 'settingsExtra.screensaverExportFailed')
+      : translate(language, 'settingsExtra.screensaverExportCancelled'),
+    projectName.trim() || untitled,
   )
   if (!prefs.inApp) {
     platform.removeActiveRenderJob(trackId)

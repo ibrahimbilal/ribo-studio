@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from '../i18n'
 import AppExportAction from './ui/AppExportAction.vue'
 import { useProjectStore } from '../stores/project'
 
 const store = useProjectStore()
+const { t } = useI18n()
 
 const label = computed(() =>
-  store.activeExportCount > 0 ? 'Queue export' : 'Export MP4',
+  store.activeExportCount > 0 ? t('ranking.export.queueExport') : t('ranking.export.exportMp4'),
 )
 </script>
 

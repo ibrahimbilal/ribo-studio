@@ -1,0 +1,103 @@
+/** Image Upscaler UI strings. */
+export const upscaler = {
+  defaultName: 'Untitled upscale',
+  tabSource: 'Source',
+  tabPreview: 'Preview',
+  tabSettings: 'Settings',
+  beforeAfter: 'Before / after',
+  downloadAllZip: 'Download all ZIP',
+  sendToScreensaver: 'Send to Screensaver',
+  sendToScreensaverAria: 'Send to Screensaver',
+  upscaleImages: 'Upscale Images',
+  replaceScreensaverTitle: 'Replace the Screensaver source?',
+  replaceScreensaverBody:
+    'Screensaver already has an image or video. Sending this file replaces that source. Duration, output size, audio, and encoder stay as they are. The picture is framed again, the same way as choosing a new image.',
+  settingsTitle: 'Settings',
+  confirmClearQueue: 'Clear the Image Upscaler queue? Images in this list will be removed.',
+  uploader: {
+    addImages: 'Add images',
+    dropImages: 'Drop images here',
+    dropToAdd: 'Drop to add',
+    dropToUpload: 'Drop to upload',
+    formats: 'PNG, JPEG, WebP',
+  },
+  batch: {
+    section: 'Images',
+    empty:
+      'Drop PNG, JPEG, or WebP files above. Upscale stays off until there is at least one image.',
+    deleteAllTitle: 'Delete all images',
+    deleteAllBody: 'Remove every image from this list?',
+    statusReady: 'Ready',
+    statusPending: 'Pending',
+    statusProcessing: 'Processing',
+    statusCompleted: 'Completed',
+    statusFailed: 'Failed',
+    statusCancelled: 'Cancelled',
+    ariaDownload: 'Download image',
+    ariaRemove: 'Remove image',
+    downloadAll: 'Download all',
+  },
+  preview: {
+    emptyTitle: 'No image yet',
+    emptyText: 'Add an image to preview it. Nothing is resized until you upscale.',
+    altTemplate: 'Preview of {name}',
+  },
+  comparison: {
+    ariaViewport:
+      'Before and after comparison. Arrow keys move the divider. Plus and minus change zoom. Scroll to zoom toward the pointer.',
+    before: 'Before',
+    after: 'After',
+    ariaDivider: 'Comparison divider',
+    zoomTemplate: 'Zoom {value}×',
+    ariaZoom: 'Zoom',
+    ariaResetView: 'Reset view',
+    resetView: 'Reset view',
+    help:
+      'Both sides use the same preview size. Scroll or use the slider to zoom, then drag the picture to pan. The original is not blurred. This preview is not the downloaded file.',
+  },
+  progress: {
+    finishedTemplate: '{finished} of {total} finished',
+    processingTemplate: 'Processing {name}',
+    waiting: 'Waiting',
+    aiLiteNote:
+      'AI Lite is reconstructing this image. Cancel stops that process. It does not report a percentage.',
+    genericNote:
+      'Progress is shown per image. The active resize does not report a percentage.',
+  },
+  settings: {
+    upscaling: 'Upscaling',
+    engine: 'Engine',
+    engineStandard: 'Standard',
+    engineAiLite: 'AI Lite',
+    standardHint: 'Standard: Fast traditional resizing.',
+    aiLiteHint:
+      'AI Lite: AI-assisted reconstruction for cleaner edges and textures. May alter fine artistic details.',
+    checkingAiLite: 'Checking whether AI Lite is available.',
+    aiLiteUnavailable: 'AI Lite is not available on this server.',
+    aiLiteUpscaylMatch:
+      'Model {model}. This is the Upscayl Lite model at {scale}×. The final exact size is still fitted here, so pixels can differ slightly from the Upscayl app.',
+    aiLiteUpscaylMismatch:
+      'Model {model}. This is not the Upscayl Lite model, so the look can differ from an Upscayl Lite export.',
+    factor: 'Factor',
+    factorHint:
+      'The finished file uses this size, in the same format as the upload. JPEG is written at quality 100.',
+    factorAutoHint:
+      'Auto picks a uniform factor up to 4×. AI Lite always infers at native 4×, then resizes to the effective factor.',
+    scaleAuto: 'Auto',
+  },
+  toast: {
+    batchLimit: 'You can add up to {max} images at a time.',
+    roomLeft: 'Only {count} more image can be added.',
+    roomLeftPlural: 'Only {count} more images can be added.',
+    notSupportedFormat: '{name} is not a PNG, JPEG, or WebP image.',
+    tooLarge: '{name} is larger than {size}.',
+    readFailed: '{name} could not be read.',
+    reexportFailed: 'The images could not be re-exported.',
+    outputSettings: 'Check the output settings.',
+    sendFailed: 'The images could not be sent.',
+    statusFailed: 'The upscale status could not be read.',
+    cancelFailed: 'The upscale could not be cancelled.',
+    sentToScreensaver: 'Screensaver is using the upscaled image.',
+    sendScreensaverFailed: 'The image could not be sent to Screensaver.',
+  },
+} as const

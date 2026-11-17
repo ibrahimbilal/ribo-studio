@@ -3,18 +3,23 @@ import { formatBytes } from '@shared/imageUpscaler'
 import { Download, Trash2 } from '@lucide/vue'
 import { ref } from 'vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
+import { useI18n } from '../../../i18n'
 import { useImageUpscalerStore } from '../stores/imageUpscaler'
 
 const store = useImageUpscalerStore()
+const { t } = useI18n()
 const deleteAllOpen = ref(false)
 
-const statusLabel: Record<string, string> = {
-  ready: 'Ready',
-  pending: 'Pending',
-  processing: 'Processing',
-  completed: 'Completed',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    ready: t('upscaler.batch.statusReady'),
+    pending: t('upscaler.batch.statusPending'),
+    processing: t('upscaler.batch.statusProcessing'),
+    completed: t('upscaler.batch.statusCompleted'),
+    failed: t('upscaler.batch.statusFailed'),
+    cancelled: t('upscaler.batch.statusCancelled'),
+  }
+  return map[status] ?? status
 }
 
 function statusClass(status: string): string {
@@ -51,7 +56,7 @@ async function confirmDeleteAll() {
 <template>
   <section class="flex min-h-0 flex-1 flex-col">
     <div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-      <h3 class="section-label">Images</h3>
+      <h3 class="section-label">{{ t('upscaler.batch.section') }}</h3>
       <button
         class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
@@ -59,13 +64,13 @@ async function confirmDeleteAll() {
         @click="deleteAllOpen = true"
       >
         <Trash2 :size="14" />
-        Delete all
+        {{ t('common.deleteAll') }}
       </button>
     </div>
 
     <div class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">
       <p v-if="store.items.length === 0" class="px-2 py-8 text-center text-sm text-zinc-500">
-        Drop PNG, JPEG, or WebP files above. Upscale stays off until there is at least one image.
+        {{ t('upscaler.batch.empty') }}
       </p>
 
       <article
@@ -87,7 +92,7 @@ async function confirmDeleteAll() {
             <div class="flex items-start gap-2">
               <p class="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100" :title="item.name">{{ item.name }}</p>
               <span class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" :class="statusClass(item.status)">
-                {{ statusLabel[item.status] }}
+                {{ statusLabel(item.status) }}
               </span>
             </div>
             <p class="mt-0.5 truncate text-xs text-zinc-500">
@@ -104,17 +109,17 @@ async function confirmDeleteAll() {
             v-if="item.status === 'completed'"
             class="icon-action"
             type="button"
-            aria-label="Download image"
-            title="Download"
+            :aria-label="t('upscaler.batch.ariaDownload')"
+            :title="t('common.download')"
             @click="store.downloadItem(item.localId)"
           >
             <Download :size="16" />
           </button>
           <button
-            class="icon-action icon-action--danger ml-auto"
+            class="icon-action icon-action--danger ms-auto"
             type="button"
-            aria-label="Remove image"
-            title="Remove"
+            :aria-label="t('upscaler.batch.ariaRemove')"
+            :title="t('common.remove')"
             :disabled="store.processing"
             @click="store.removeItem(item.localId)"
           >
@@ -132,15 +137,15 @@ async function confirmDeleteAll() {
         @click="store.downloadZip()"
       >
         <Download :size="16" />
-        Download all
+        {{ t('upscaler.batch.downloadAll') }}
       </button>
     </div>
 
-    <AppDialog :open="deleteAllOpen" title="Delete all images" @cancel="closeDeleteAll">
-      <p class="text-sm text-zinc-300">Remove every image from this list?</p>
+    <AppDialog :open="deleteAllOpen" :title="t('upscaler.batch.deleteAllTitle')" @cancel="closeDeleteAll">
+      <p class="text-sm text-zinc-300">{{ t('upscaler.batch.deleteAllBody') }}</p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">Delete all</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">{{ t('common.deleteAll') }}</button>
       </template>
     </AppDialog>
   </section>

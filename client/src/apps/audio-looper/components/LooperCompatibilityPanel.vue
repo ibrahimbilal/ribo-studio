@@ -3,9 +3,11 @@ import { CircleCheck, CircleX, Info, LoaderCircle, TriangleAlert, Zap } from '@l
 import { computed, ref } from 'vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
 import { formatClock } from '../../../lib/format'
+import { useI18n } from '../../../i18n'
 import { useAudioLooperStore } from '../stores/audioLooper'
 
 const store = useAudioLooperStore()
+const { t } = useI18n()
 const confirmKeep = ref(false)
 const confirmRemove = ref(false)
 const showDestinations = ref(false)
@@ -41,6 +43,12 @@ const statusIcon = computed(() => {
   return 'warn'
 })
 
+function channelLabel(channels: number): string {
+  if (channels === 1) return t('looper.compatibility.mono')
+  if (channels === 2) return t('looper.compatibility.stereo')
+  return t('looper.compatibility.channels', { count: channels })
+}
+
 function onKeepConfirm(): void {
   store.keepLargestCompatibleGroup()
   confirmKeep.value = false
@@ -56,7 +64,7 @@ function onRemoveConfirm(): void {
   <section
     v-if="store.hasSource"
     class="rounded-lg border border-zinc-800 bg-elevated/60 p-3"
-    aria-label="Audio compatibility"
+    :aria-label="t('looper.compatibility.aria')"
   >
     <div class="flex items-start gap-2">
       <LoaderCircle
@@ -97,13 +105,13 @@ function onRemoveConfirm(): void {
       />
       <div class="min-w-0 flex-1">
         <div class="flex items-center justify-between gap-2">
-          <h3 class="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">Audio Compatibility</h3>
+          <h3 class="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">{{ t('looper.compatibility.title') }}</h3>
           <button
             class="cursor-pointer px-1.5 py-0.5 text-zinc-400 hover:text-zinc-300"
             type="button"
             :aria-expanded="store.compatibilityDetailsOpen"
-            aria-label="Compatibility details"
-            title="Details"
+            :aria-label="t('looper.compatibility.detailsAria')"
+            :title="t('looper.compatibility.details')"
             @click="store.compatibilityDetailsOpen = !store.compatibilityDetailsOpen"
           >
             <Info :size="14" />
@@ -111,7 +119,7 @@ function onRemoveConfirm(): void {
         </div>
         <p class="mt-1 text-sm text-zinc-200">{{ report.summaryLine }}</p>
         <p v-if="selectedGroup" class="mt-0.5 text-xs text-zinc-500">
-          Reference: {{ selectedGroup.signature.label }}
+          {{ t('looper.compatibility.reference', { label: selectedGroup.signature.label }) }}
         </p>
       </div>
     </div>
@@ -120,7 +128,7 @@ function onRemoveConfirm(): void {
       v-if="!report.singleGroup && report.groups.length > 1"
       class="mt-3 space-y-1.5"
     >
-      <p class="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-zinc-500">Groups</p>
+      <p class="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-zinc-500">{{ t('looper.compatibility.groups') }}</p>
       <div class="flex flex-wrap gap-1.5">
         <button
           v-for="(group, index) in report.groups"
@@ -140,59 +148,59 @@ function onRemoveConfirm(): void {
           <span
             v-if="group.id === report.recommendedGroupId"
             class="ml-1 text-[0.65rem] uppercase tracking-wide text-brand"
-          >Rec</span>
+          >{{ t('looper.compatibility.recommended') }}</span>
         </button>
       </div>
     </div>
 
     <div v-if="store.compatibilityDetailsOpen" class="mt-3 space-y-3 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
       <div class="grid grid-cols-2 gap-x-3 gap-y-1">
-        <span>Tracks</span><span class="text-zinc-200">{{ report.trackCount }}</span>
-        <span>Matching</span><span class="text-zinc-200">{{ report.matchingTrackIds.length }}</span>
-        <span>Need processing</span><span class="text-zinc-200">{{ report.mismatchingTrackIds.length }}</span>
-        <span>Unknown</span><span class="text-zinc-200">{{ report.unknownCount }}</span>
-        <span>Invalid</span><span class="text-zinc-200">{{ report.invalidCount }}</span>
+        <span>{{ t('looper.compatibility.tracks') }}</span><span class="text-zinc-200">{{ report.trackCount }}</span>
+        <span>{{ t('looper.compatibility.matching') }}</span><span class="text-zinc-200">{{ report.matchingTrackIds.length }}</span>
+        <span>{{ t('looper.compatibility.needProcessing') }}</span><span class="text-zinc-200">{{ report.mismatchingTrackIds.length }}</span>
+        <span>{{ t('looper.compatibility.unknown') }}</span><span class="text-zinc-200">{{ report.unknownCount }}</span>
+        <span>{{ t('looper.compatibility.invalid') }}</span><span class="text-zinc-200">{{ report.invalidCount }}</span>
       </div>
 
       <div v-if="report.qualityPlan" class="space-y-1">
-        <p class="font-semibold text-zinc-300">Expected processing</p>
+        <p class="font-semibold text-zinc-300">{{ t('looper.compatibility.expectedProcessing') }}</p>
         <p class="text-zinc-200">{{ report.qualityPlan.userLabel }}</p>
         <p>{{ report.qualityPlan.reason }}</p>
         <p>
-          Output:
+          {{ t('looper.compatibility.output') }}
           <span class="text-zinc-200">
             {{ report.qualityPlan.expectedCodec.toUpperCase() }}
             <template v-if="report.qualityPlan.targetBitrateKbps != null">
               · {{ report.qualityPlan.targetBitrateKbps }} kbps
             </template>
             <template v-else-if="report.qualityPlan.strategy === 'STREAM_COPY'">
-              · original bitrate preserved
+              {{ t('looper.compatibility.originalBitrate') }}
             </template>
             · {{ Math.round(report.qualityPlan.expectedSampleRate / 100) / 10 }} kHz
-            · {{ report.qualityPlan.expectedChannels === 1 ? 'Mono' : report.qualityPlan.expectedChannels === 2 ? 'Stereo' : `${report.qualityPlan.expectedChannels}ch` }}
+            · {{ channelLabel(report.qualityPlan.expectedChannels) }}
           </span>
         </p>
       </div>
 
       <div v-if="report.executionPlan" class="space-y-1">
-        <p class="font-semibold text-zinc-300">Expected execution</p>
+        <p class="font-semibold text-zinc-300">{{ t('looper.compatibility.expectedExecution') }}</p>
         <p class="text-zinc-200">{{ report.executionPlan.strategy.split('_').join(' ') }}</p>
         <p>{{ report.executionPlan.reason }}</p>
       </div>
 
       <div v-if="report.impact && report.impact.lossyEncodeRequired" class="space-y-1">
-        <p class="font-semibold text-zinc-300">Processing impact (estimate)</p>
-        <p>Target {{ formatClock(report.impact.targetDurationSeconds) }} · period {{ formatClock(report.impact.periodDurationSeconds) }}</p>
+        <p class="font-semibold text-zinc-300">{{ t('looper.compatibility.processingImpact') }}</p>
+        <p>{{ t('looper.compatibility.targetPeriod', { target: formatClock(report.impact.targetDurationSeconds), period: formatClock(report.impact.periodDurationSeconds) }) }}</p>
         <p>
-          Standard encoding input ≈ {{ formatClock(report.impact.standardEncodeInputSeconds) }}
+          {{ t('looper.compatibility.standardEncode', { duration: formatClock(report.impact.standardEncodeInputSeconds) }) }}
         </p>
         <p v-if="report.impact.encodeOnceEncodeInputSeconds != null">
-          Encode-Once input ≈ {{ formatClock(report.impact.encodeOnceEncodeInputSeconds) }}
+          {{ t('looper.compatibility.encodeOnce', { duration: formatClock(report.impact.encodeOnceEncodeInputSeconds) }) }}
           <template v-if="report.impact.workloadReductionPercent != null">
-            (≈ {{ report.impact.workloadReductionPercent.toFixed(1) }}% less encode input)
+            {{ t('looper.compatibility.encodeReduction', { percent: report.impact.workloadReductionPercent.toFixed(1) }) }}
           </template>
         </p>
-        <p class="text-zinc-500">Encode-input reduction is not the same as total export time savings.</p>
+        <p class="text-zinc-500">{{ t('looper.compatibility.encodeNote') }}</p>
       </div>
 
       <div>
@@ -201,7 +209,7 @@ function onRemoveConfirm(): void {
           type="button"
           @click="showDestinations = !showDestinations"
         >
-          {{ showDestinations ? 'Hide' : 'Show' }} destination summary
+          {{ showDestinations ? t('looper.compatibility.hideDestinations') : t('looper.compatibility.showDestinations') }}
         </button>
         <ul v-if="showDestinations" class="mt-1 space-y-1">
           <li v-for="dest in report.destinations" :key="dest.destination">
@@ -225,7 +233,7 @@ function onRemoveConfirm(): void {
         :disabled="report.mismatchingTrackIds.length === 0 && !store.filterIncompatibleOnly"
         @click="store.filterIncompatibleOnly = !store.filterIncompatibleOnly"
       >
-        {{ store.filterIncompatibleOnly ? 'Show all tracks' : 'Show incompatible' }}
+        {{ store.filterIncompatibleOnly ? t('looper.compatibility.showAllTracks') : t('looper.compatibility.showIncompatible') }}
       </button>
       <button
         class="btn btn-ghost cursor-pointer px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40"
@@ -233,7 +241,7 @@ function onRemoveConfirm(): void {
         :disabled="report.groups.length < 2 || keepPreview.remove === 0"
         @click="confirmKeep = true"
       >
-        Keep largest group
+        {{ t('looper.compatibility.keepLargest') }}
       </button>
       <button
         class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
@@ -241,32 +249,39 @@ function onRemoveConfirm(): void {
         :disabled="report.mismatchingTrackIds.length === 0"
         @click="confirmRemove = true"
       >
-        Remove incompatible
+        {{ t('looper.compatibility.removeIncompatible') }}
       </button>
     </div>
 
-    <AppDialog :open="confirmKeep" title="Keep largest compatible group?" @cancel="confirmKeep = false">
+    <AppDialog :open="confirmKeep" :title="t('looper.compatibility.keepTitle')" @cancel="confirmKeep = false">
       <p class="text-sm text-zinc-400">
-        Keep {{ keepPreview.remain }} track{{ keepPreview.remain === 1 ? '' : 's' }}
-        ({{ formatClock(keepPreview.remainDuration) }}) and remove
-        {{ keepPreview.remove }} track{{ keepPreview.remove === 1 ? '' : 's' }}
-        ({{ formatClock(keepPreview.removeDuration) }}).
-        Remaining tracks keep their current order.
+        {{
+          t('looper.compatibility.keepBody', {
+            remain: keepPreview.remain,
+            remainDuration: formatClock(keepPreview.remainDuration),
+            remove: keepPreview.remove,
+            removeDuration: formatClock(keepPreview.removeDuration),
+          })
+        }}
       </p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="confirmKeep = false">Cancel</button>
-        <button class="btn btn-primary cursor-pointer" type="button" @click="onKeepConfirm">Keep group</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="confirmKeep = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary cursor-pointer" type="button" @click="onKeepConfirm">{{ t('looper.compatibility.keepAction') }}</button>
       </template>
     </AppDialog>
 
-    <AppDialog :open="confirmRemove" title="Remove incompatible tracks?" @cancel="confirmRemove = false">
+    <AppDialog :open="confirmRemove" :title="t('looper.compatibility.removeTitle')" @cancel="confirmRemove = false">
       <p class="text-sm text-zinc-400">
-        Remove {{ report.mismatchingTrackIds.length }} track{{ report.mismatchingTrackIds.length === 1 ? '' : 's' }}
-        that do not match {{ selectedGroup?.signature.label || 'the selected group' }}.
+        {{
+          t('looper.compatibility.removeBody', {
+            count: report.mismatchingTrackIds.length,
+            group: selectedGroup?.signature.label ?? t('looper.compatibility.selectedGroupFallback'),
+          })
+        }}
       </p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="confirmRemove = false">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="onRemoveConfirm">Remove</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="confirmRemove = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="onRemoveConfirm">{{ t('common.remove') }}</button>
       </template>
     </AppDialog>
   </section>

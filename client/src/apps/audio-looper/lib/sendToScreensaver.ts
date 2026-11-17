@@ -1,5 +1,7 @@
 import { router } from '../../../app/router'
+import { translate } from '../../../i18n'
 import * as api from '../../../lib/api'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { useScreensaverStore } from '../../frame-screensaver/stores/screensaver'
 import { useAudioLooperStore } from '../stores/audioLooper'
 import {
@@ -19,7 +21,7 @@ export type SendToScreensaverTarget = 'new' | 'current' | string
 export async function sendLooperPlanToScreensaver(target: SendToScreensaverTarget): Promise<void> {
   const looper = useAudioLooperStore()
   const files = looper.readyTracks.map((track) => track.file)
-  if (files.length === 0) throw new Error('Add at least one audio track first.')
+  if (files.length === 0) throw new Error(translate(useGlobalSettingsStore().general.language, 'looper.sendScreensaver.needTrack'))
 
   const settings = looper.buildExportSettings()
   const asset = await api.uploadLooperPlanForScreensaver(files, settings)
@@ -36,9 +38,9 @@ export async function sendLooperPlanToScreensaverProjects(
 ): Promise<SendTransferResult> {
   const looper = useAudioLooperStore()
   const files = looper.readyTracks.map((track) => track.file)
-  if (files.length === 0) throw new Error('Add at least one audio track first.')
+  if (files.length === 0) throw new Error(translate(useGlobalSettingsStore().general.language, 'looper.sendScreensaver.needTrack'))
   if (projectIds.length === 0 && !options.createNew) {
-    throw new Error('Select at least one Screensaver project.')
+    throw new Error(translate(useGlobalSettingsStore().general.language, 'looper.sendScreensaver.needSelection'))
   }
 
   const settings = looper.buildExportSettings()
@@ -122,7 +124,7 @@ export async function sendLooperJobToScreensaverProjects(
   options: { createNew?: boolean; navigate?: boolean } = {},
 ): Promise<SendTransferResult> {
   if (projectIds.length === 0 && !options.createNew) {
-    throw new Error('Select at least one Screensaver project.')
+    throw new Error(translate(useGlobalSettingsStore().general.language, 'looper.sendScreensaver.needSelection'))
   }
   const asset = await api.adoptLooperAudioForScreensaver(jobId)
   const screensaver = useScreensaverStore()

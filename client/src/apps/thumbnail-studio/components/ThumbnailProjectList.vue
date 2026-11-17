@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { Copy, Download, Info, Pencil, Trash2 } from '@lucide/vue'
 import { computed, ref } from 'vue'
+import { useI18n } from '../../../i18n'
 import { formatBytes } from '../../../lib/format'
 import { audioFormatLabel } from '../../../lib/media'
 import AppDialog from '../../../components/ui/AppDialog.vue'
 import { useThumbnailStore } from '../stores/thumbnail'
 
 const store = useThumbnailStore()
+const { t } = useI18n()
 const renameId = ref<string | null>(null)
 const renameValue = ref('')
 const deleteId = ref<string | null>(null)
@@ -27,10 +29,10 @@ function uploadIconClass(state: 'uploading' | 'processing' | 'ready' | 'error'):
 }
 
 function uploadStatusLabel(project: (typeof store.projects)[number]): string {
-  if (project.upload.state === 'uploading') return 'Uploading…'
-  if (project.upload.state === 'processing') return 'Reading image…'
-  if (project.upload.state === 'error') return 'Upload failed'
-  return 'Uploaded'
+  if (project.upload.state === 'uploading') return t('thumbnail.projects.uploadUploading')
+  if (project.upload.state === 'processing') return t('thumbnail.projects.uploadReading')
+  if (project.upload.state === 'error') return t('thumbnail.projects.uploadFailed')
+  return t('thumbnail.projects.uploadDone')
 }
 
 function uploadMeta(project: (typeof store.projects)[number]): string {
@@ -118,7 +120,7 @@ async function downloadAll() {
 <template>
   <section class="flex min-h-0 flex-1 flex-col">
     <div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-      <h3 class="section-label">Projects</h3>
+      <h3 class="section-label">{{ t('thumbnail.projects.section') }}</h3>
       <button
         class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
@@ -126,13 +128,13 @@ async function downloadAll() {
         @click="deleteAllOpen = true"
       >
         <Trash2 :size="14" />
-        Delete all
+        {{ t('common.deleteAll') }}
       </button>
     </div>
 
     <div class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">
       <p v-if="store.projects.length === 0" class="px-2 py-8 text-center text-sm text-zinc-500">
-        Drop an image to create a project.
+        {{ t('thumbnail.projects.empty') }}
       </p>
 
       <article
@@ -150,7 +152,7 @@ async function downloadAll() {
         <div class="flex gap-2">
           <div class="h-14 w-24 shrink-0 overflow-hidden rounded bg-zinc-900">
             <img v-if="project.previewUrl" :src="project.previewUrl" alt="" class="h-full w-full object-cover" />
-            <span v-else class="flex h-full items-center justify-center text-[10px] text-zinc-600">No image</span>
+            <span v-else class="flex h-full items-center justify-center text-[10px] text-zinc-600">{{ t('thumbnail.projects.noImage') }}</span>
           </div>
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-semibold text-zinc-100" :title="project.name">{{ project.name }}</p>
@@ -164,7 +166,7 @@ async function downloadAll() {
             class="icon-action"
             :class="uploadIconClass(project.upload.state)"
             type="button"
-            aria-label="Upload details"
+            :aria-label="t('thumbnail.projects.ariaUploadDetails')"
             @mouseenter="showUploadInfo($event, project.id)"
             @mouseleave="hideUploadInfo"
             @focus="showUploadInfo($event, project.id)"
@@ -175,8 +177,8 @@ async function downloadAll() {
           <button
             class="icon-action"
             type="button"
-            aria-label="Rename project"
-            title="Rename"
+            :aria-label="t('thumbnail.projects.ariaRename')"
+            :title="t('common.rename')"
             @click="startRename(project.id, project.name)"
           >
             <Pencil :size="16" />
@@ -184,8 +186,8 @@ async function downloadAll() {
           <button
             class="icon-action"
             type="button"
-            aria-label="Duplicate project"
-            title="Duplicate"
+            :aria-label="t('thumbnail.projects.ariaDuplicate')"
+            :title="t('common.duplicate')"
             @click="store.duplicateProject(project.id)"
           >
             <Copy :size="16" />
@@ -193,17 +195,17 @@ async function downloadAll() {
           <button
             class="icon-action"
             type="button"
-            aria-label="Download thumbnail"
-            title="Download"
+            :aria-label="t('thumbnail.projects.ariaDownload')"
+            :title="t('common.download')"
             @click="store.downloadProject(project.id)"
           >
             <Download :size="16" />
           </button>
           <button
-            class="icon-action icon-action--danger ml-auto"
+            class="icon-action icon-action--danger ms-auto"
             type="button"
-            aria-label="Delete project"
-            title="Delete"
+            :aria-label="t('thumbnail.projects.ariaDelete')"
+            :title="t('common.delete')"
             @click="startDelete(project.id)"
           >
             <Trash2 :size="16" />
@@ -220,7 +222,7 @@ async function downloadAll() {
         @click="downloadAll"
       >
         <Download :size="16" />
-        Download all
+        {{ t('thumbnail.projects.downloadAll') }}
       </button>
     </div>
 
@@ -241,30 +243,30 @@ async function downloadAll() {
       </div>
     </Teleport>
 
-    <AppDialog :open="renameId !== null" title="Rename project" @cancel="closeRename">
+    <AppDialog :open="renameId !== null" :title="t('thumbnail.projects.renameTitle')" @cancel="closeRename">
       <label class="block">
-        <span class="section-label mb-1 block">Name</span>
+        <span class="section-label mb-1 block">{{ t('thumbnail.projects.name') }}</span>
         <input v-model="renameValue" class="field text-sm" type="text" maxlength="80" @keydown.enter.prevent="confirmRename" />
       </label>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeRename">Cancel</button>
-        <button class="btn btn-primary cursor-pointer" type="button" @click="confirmRename">Save</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeRename">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary cursor-pointer" type="button" @click="confirmRename">{{ t('common.save') }}</button>
       </template>
     </AppDialog>
 
-    <AppDialog :open="deleteTarget !== null" title="Delete project" @cancel="closeDelete">
-      <p class="text-sm text-zinc-300">Delete “{{ deleteTarget?.name }}”? The project is removed from this browser.</p>
+    <AppDialog :open="deleteTarget !== null" :title="t('thumbnail.projects.deleteTitle')" @cancel="closeDelete">
+      <p class="text-sm text-zinc-300">{{ t('thumbnail.projects.deleteBody', { name: deleteTarget?.name ?? '' }) }}</p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDelete">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDelete">Delete</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDelete">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDelete">{{ t('common.delete') }}</button>
       </template>
     </AppDialog>
 
-    <AppDialog :open="deleteAllOpen" title="Delete all projects" @cancel="closeDeleteAll">
-      <p class="text-sm text-zinc-300">Delete every thumbnail project saved in this browser?</p>
+    <AppDialog :open="deleteAllOpen" :title="t('thumbnail.projects.deleteAllTitle')" @cancel="closeDeleteAll">
+      <p class="text-sm text-zinc-300">{{ t('thumbnail.projects.deleteAllBody') }}</p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">Delete all</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">{{ t('common.deleteAll') }}</button>
       </template>
     </AppDialog>
   </section>

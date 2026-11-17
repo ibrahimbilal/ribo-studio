@@ -4,6 +4,7 @@ import { DURATION_BADGE_OPTIONS, RESOLUTION_BADGE_OPTIONS } from '@shared/thumbn
 import { BADGE_STYLES, THUMBNAIL_OUTPUTS, type BadgeStyleId } from '@shared/thumbnailProject'
 import { Download } from '@lucide/vue'
 import { computed, ref } from 'vue'
+import { useI18n, type MessageKey } from '../../../i18n'
 import { stylePreviewSvgUrl } from '../lib/badgeAssets'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
 import SliderField from '../../../components/SliderField.vue'
@@ -11,17 +12,35 @@ import ToggleSwitch from '../../../components/ToggleSwitch.vue'
 import { useThumbnailStore } from '../stores/thumbnail'
 
 const store = useThumbnailStore()
+const { t } = useI18n()
 const group = ref<'content' | 'output' | 'style'>('content')
-const groupTabs = [
-  { id: 'content' as const, label: 'Content' },
-  { id: 'output' as const, label: 'Output' },
-  { id: 'style' as const, label: 'Style' },
-]
+const groupTabs = computed(() => [
+  { id: 'content' as const, label: t('thumbnail.settings.tabContent') },
+  { id: 'output' as const, label: t('thumbnail.settings.tabOutput') },
+  { id: 'style' as const, label: t('thumbnail.settings.tabStyle') },
+])
 
-const badges = [
-  { id: 'resolution' as const, title: 'Resolution Badge' },
-  { id: 'duration' as const, title: 'Duration Badge' },
-]
+const badges = computed(() => [
+  { id: 'resolution' as const, title: t('thumbnail.settings.resolutionBadge') },
+  { id: 'duration' as const, title: t('thumbnail.settings.durationBadge') },
+])
+
+const ANCHOR_LABEL_KEYS: Record<string, MessageKey> = {
+  'top-left': 'thumbnail.anchors.topLeft',
+  'top-center': 'thumbnail.anchors.topCenter',
+  'top-right': 'thumbnail.anchors.topRight',
+  'middle-left': 'thumbnail.anchors.middleLeft',
+  center: 'thumbnail.anchors.center',
+  'middle-right': 'thumbnail.anchors.middleRight',
+  'bottom-left': 'thumbnail.anchors.bottomLeft',
+  'bottom-center': 'thumbnail.anchors.bottomCenter',
+  'bottom-right': 'thumbnail.anchors.bottomRight',
+}
+
+function anchorLabel(id: string): string {
+  const key = ANCHOR_LABEL_KEYS[id]
+  return key ? t(key) : id
+}
 
 const marginMaxPx = computed(() => maxBadgeMarginPx(store.doc.export.width, store.doc.export.height))
 
@@ -53,7 +72,7 @@ function onExportSize(event: Event): void {
 <template>
   <aside class="studio-panel flex min-h-0 w-full shrink-0 flex-col lg:h-full lg:w-[360px] lg:max-w-[360px] lg:flex-none">
     <div class="shrink-0 border-b border-zinc-800">
-      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">Settings</h2>
+      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">{{ t('thumbnail.settings.title') }}</h2>
       <AppSettingsTabs v-model="group" :items="groupTabs" />
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto">
@@ -62,8 +81,12 @@ function onExportSize(event: Event): void {
           <section v-for="section in badges" :key="section.id" class="border-b border-zinc-800 px-4 py-4">
             <h2 class="section-label mb-3">{{ section.title }}</h2>
             <div class="flex items-center justify-between gap-3">
-              <span class="text-sm text-zinc-200">Show badge</span>
-              <ToggleSwitch :model-value="store.doc[section.id].enabled" :aria-label="`Show ${section.title}`" @update:model-value="store.setBadgeEnabled(section.id, $event)" />
+              <span class="text-sm text-zinc-200">{{ t('thumbnail.settings.showBadge') }}</span>
+              <ToggleSwitch
+                :model-value="store.doc[section.id].enabled"
+                :aria-label="t('thumbnail.settings.showBadgeAria', { section: section.title })"
+                @update:model-value="store.setBadgeEnabled(section.id, $event)"
+              />
             </div>
 
             <div
@@ -74,20 +97,20 @@ function onExportSize(event: Event): void {
               <div class="settings-reveal__inner">
                 <div class="space-y-3 pt-3">
                   <label v-if="section.id === 'resolution'" class="block text-xs text-zinc-400">
-                    Resolution
+                    {{ t('thumbnail.settings.resolution') }}
                     <select class="field mt-1" :value="store.doc.resolution.text" @change="onResolution">
                       <option v-for="option in RESOLUTION_BADGE_OPTIONS" :key="option.label" :value="option.label">{{ option.label }}</option>
                     </select>
                   </label>
                   <label v-else class="block text-xs text-zinc-400">
-                    Duration
+                    {{ t('thumbnail.settings.duration') }}
                     <select class="field mt-1" :value="store.doc.duration.text" @change="onDuration">
                       <option v-for="option in DURATION_BADGE_OPTIONS" :key="option.label" :value="option.label">{{ option.label }}</option>
                     </select>
                   </label>
 
                   <div>
-                    <p class="mb-2 text-xs text-zinc-400">Position</p>
+                    <p class="mb-2 text-xs text-zinc-400">{{ t('thumbnail.settings.position') }}</p>
                     <div class="grid grid-cols-3 gap-1">
                       <button
                         v-for="anchor in ANCHORS"
@@ -97,13 +120,13 @@ function onExportSize(event: Event): void {
                         type="button"
                         @click="store.place(section.id, anchor.id)"
                       >
-                        {{ anchor.label }}
+                        {{ anchorLabel(anchor.id) }}
                       </button>
                     </div>
                   </div>
                   <SliderField
                     v-if="!store.doc[section.id].deliberate"
-                    label="Distance from edges"
+                    :label="t('thumbnail.settings.distanceFromEdges')"
                     :model-value="Math.round(store.doc[section.id].margin)"
                     :min="0"
                     :max="marginMaxPx"
@@ -111,7 +134,7 @@ function onExportSize(event: Event): void {
                     @update:model-value="store.setMargin(section.id, $event)"
                   />
                   <SliderField
-                    :label="store.doc[section.id].deliberate ? 'Horizontal position' : 'Horizontal offset'"
+                    :label="store.doc[section.id].deliberate ? t('thumbnail.settings.horizontalPosition') : t('thumbnail.settings.horizontalOffset')"
                     :model-value="Math.round((store.doc[section.id].deliberate ? store.doc[section.id].x : store.doc[section.id].offsetX) * 100)"
                     :min="store.doc[section.id].deliberate ? 0 : -45"
                     :max="store.doc[section.id].deliberate ? 100 : 45"
@@ -119,28 +142,28 @@ function onExportSize(event: Event): void {
                     @update:model-value="store.setHorizontal(section.id, $event / 100)"
                   />
                   <SliderField
-                    :label="store.doc[section.id].deliberate ? 'Vertical position' : 'Vertical offset'"
+                    :label="store.doc[section.id].deliberate ? t('thumbnail.settings.verticalPosition') : t('thumbnail.settings.verticalOffset')"
                     :model-value="Math.round((store.doc[section.id].deliberate ? store.doc[section.id].y : store.doc[section.id].offsetY) * 100)"
                     :min="store.doc[section.id].deliberate ? 0 : -45"
                     :max="store.doc[section.id].deliberate ? 100 : 45"
                     suffix="%"
                     @update:model-value="store.setVertical(section.id, $event / 100)"
                   />
-                  <button class="btn btn-ghost cursor-pointer" type="button" @click="store.resetPosition(section.id)">Reset position</button>
+                  <button class="btn btn-ghost cursor-pointer" type="button" @click="store.resetPosition(section.id)">{{ t('thumbnail.settings.resetPosition') }}</button>
                 </div>
               </div>
             </div>
           </section>
         </div>
         <section v-else-if="group === 'style'" key="style" class="space-y-3 border-b border-zinc-800 px-4 py-4">
-          <h2 class="section-label">Badge style</h2>
-          <p v-if="!anyBadgeEnabled" class="text-xs text-zinc-500">Turn on a resolution or duration badge in Content to choose a style.</p>
+          <h2 class="section-label">{{ t('thumbnail.settings.badgeStyle') }}</h2>
+          <p v-if="!anyBadgeEnabled" class="text-xs text-zinc-500">{{ t('thumbnail.settings.badgeStyleHint') }}</p>
           <div class="settings-reveal" :class="{ 'is-open': anyBadgeEnabled }" :inert="!anyBadgeEnabled">
             <div class="settings-reveal__inner">
               <div class="space-y-3">
-                <p class="text-xs text-zinc-500">Same look on the resolution and duration badges. Previews show the 4K artwork.</p>
+                <p class="text-xs text-zinc-500">{{ t('thumbnail.settings.badgeStyleNote') }}</p>
                 <SliderField
-                  label="Badge size"
+                  :label="t('thumbnail.settings.badgeSize')"
                   :model-value="Math.round(store.doc.resolution.appearance.scale * 100)"
                   :min="25"
                   :max="200"
@@ -166,9 +189,9 @@ function onExportSize(event: Event): void {
           </div>
         </section>
         <section v-else key="output" class="space-y-3 border-b border-zinc-800 px-4 py-4">
-          <h2 class="section-label">Export</h2>
+          <h2 class="section-label">{{ t('thumbnail.settings.export') }}</h2>
           <label class="block text-xs text-zinc-400">
-            Size
+            {{ t('thumbnail.settings.size') }}
             <select class="field mt-1" :value="`${store.doc.export.width}x${store.doc.export.height}`" @change="onExportSize">
               <option v-for="size in THUMBNAIL_OUTPUTS" :key="size.label" :value="`${size.width}x${size.height}`">{{ size.label }}</option>
             </select>
@@ -179,7 +202,7 @@ function onExportSize(event: Event): void {
           </div>
           <SliderField
             v-if="store.doc.export.format === 'jpeg'"
-            label="JPEG quality"
+            :label="t('thumbnail.settings.jpegQuality')"
             :model-value="Math.round(store.doc.export.jpegQuality * 100)"
             :min="50"
             :max="100"
@@ -198,7 +221,7 @@ function onExportSize(event: Event): void {
         @click="store.download()"
       >
         <Download :size="16" />
-        Download Thumbnail
+        {{ t('thumbnail.settings.downloadThumbnail') }}
       </button>
       <p v-if="store.exportDuplicateBlocker" class="text-xs text-zinc-500">{{ store.exportDuplicateBlocker }}</p>
     </div>

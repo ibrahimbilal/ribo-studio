@@ -18,6 +18,7 @@ describe('globalSettings defaults', () => {
   it('exposes schema version 2 defaults', () => {
     assert.equal(DEFAULT_GLOBAL_SETTINGS.schemaVersion, GLOBAL_SETTINGS_SCHEMA_VERSION)
     assert.equal(GLOBAL_SETTINGS_SCHEMA_VERSION, 2)
+    assert.equal(DEFAULT_GLOBAL_SETTINGS.general.language, 'en')
     assert.equal(DEFAULT_GLOBAL_SETTINGS.general.exportCompletionNotifications, true)
     assert.equal(DEFAULT_GLOBAL_SETTINGS.appearance.theme, 'dark')
     assert.equal(DEFAULT_GLOBAL_SETTINGS.appearance.accent, 'default')
@@ -55,9 +56,28 @@ describe('migrateGlobalSettings', () => {
     assert.equal(migrated.schemaVersion, 2)
     assert.equal(migrated.general.desktopNotifications, true)
     assert.equal(migrated.general.exportCompletionNotifications, true)
+    assert.equal(migrated.general.language, 'en')
     assert.equal(migrated.appearance.theme, 'dark')
     assert.equal(migrated.storage.persistentAnimationCacheEnabled, true)
     assert.equal(migrated.screensaver.renderingMode, 'optimized-cfr')
+  })
+
+  it('accepts language and rejects invalid codes', () => {
+    const ok = migrateGlobalSettings({
+      schemaVersion: 2,
+      general: { language: 'es' },
+    })
+    assert.equal(ok.general.language, 'es')
+    const zh = migrateGlobalSettings({
+      schemaVersion: 2,
+      general: { language: 'zh' },
+    })
+    assert.equal(zh.general.language, 'zh')
+    const bad = migrateGlobalSettings({
+      schemaVersion: 2,
+      general: { language: 'xx' },
+    })
+    assert.equal(bad.general.language, 'en')
   })
 
   it('accepts appearance preferences', () => {

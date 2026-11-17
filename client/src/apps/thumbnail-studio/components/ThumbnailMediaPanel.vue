@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import FileDropZone from '../../../components/FileDropZone.vue'
+import { useI18n } from '../../../i18n'
 import { useThumbnailStore } from '../stores/thumbnail'
 
 const store = useThumbnailStore()
+const { t } = useI18n()
 
 const accept = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp'
 
@@ -20,17 +22,17 @@ async function updateFromScreensaver(): Promise<void> {
 
 <template>
   <section class="shrink-0 space-y-3">
-    <h3 class="section-label">Image</h3>
+    <h3 class="section-label">{{ t('thumbnail.media.sectionImage') }}</h3>
     <FileDropZone
       multiple
       compact
       :accept="accept"
-      label="Drop images here"
-      formats="PNG, JPEG, WebP"
+      :label="t('thumbnail.media.dropImages')"
+      :formats="t('thumbnail.media.formats')"
       @files="onFiles"
     />
     <p v-if="store.hasComposition" class="text-xs leading-5 text-zinc-400">
-      Screensaver crop, placement, and frame are already in this image.
+      {{ t('thumbnail.media.screensaverCropNote') }}
     </p>
     <button
       v-if="store.doc.source.app === 'frame-screensaver'"
@@ -38,7 +40,7 @@ async function updateFromScreensaver(): Promise<void> {
       type="button"
       @click="updateFromScreensaver"
     >
-      Update from Screensaver
+      {{ t('thumbnail.media.updateFromScreensaver') }}
     </button>
   </section>
 </template>

@@ -5,9 +5,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePlayback } from '../composables/usePlayback'
 import { drawOverlay, ensureFonts } from '../lib/drawOverlay'
 import { formatClock, overlayRanks } from '../lib/format'
+import { useI18n } from '../i18n'
 import { useProjectStore } from '../stores/project'
 
 const store = useProjectStore()
+const { t } = useI18n()
 const {
   videoA,
   videoB,
@@ -78,9 +80,9 @@ const frameAspectStyle = computed(() => ({
   aspectRatio: `${metrics.value.width} / ${metrics.value.height}`,
 }))
 const placeholder = computed(() => {
-  if (!activeClip.value) return 'Add at least one video.'
-  if (!activeClip.value.objectUrl) return 'This slot needs a video file. Upload one you have permission to use.'
-  if (activeClip.value.previewBlocked) return 'This browser cannot play this codec. Export can still try to render it.'
+  if (!activeClip.value) return t('ranking.preview.addVideo')
+  if (!activeClip.value.objectUrl) return t('ranking.preview.needsUpload')
+  if (activeClip.value.previewBlocked) return t('ranking.preview.codecBlocked')
   return ''
 })
 
@@ -208,7 +210,7 @@ function onSeek(event: Event) {
     >
       <div class="absolute inset-0 flex items-center justify-center overflow-hidden">
       <div :style="scaleBoxStyle">
-        <div class="preview-well relative cursor-pointer" :style="stageStyle" title="Play or pause" @click="toggle">
+        <div class="preview-well relative cursor-pointer" :style="stageStyle" :title="t('ranking.preview.playOrPause')" @click="toggle">
           <div class="absolute left-0 z-0 w-full overflow-hidden" :style="videoBoxStyle">
             <div v-if="placeholder" class="absolute inset-0 z-0 flex items-center justify-center px-16 text-center text-[42px] leading-snug text-zinc-400">
               {{ placeholder }}
@@ -244,16 +246,16 @@ function onSeek(event: Event) {
 
       <div ref="controlsEl" class="w-full shrink-0 px-3 pb-3 pt-2 absolute bottom-0 left-0 right-0">
         <div class="flex items-center gap-3 text-white">
-          <button class="cursor-pointer disabled:cursor-default disabled:opacity-40" type="button" :aria-label="playing ? 'Pause' : 'Play'" :title="playing ? 'Pause' : 'Play'" :disabled="duration <= 0" @click="toggle">
+          <button class="cursor-pointer disabled:cursor-default disabled:opacity-40" type="button" :aria-label="playing ? t('common.pause') : t('common.play')" :title="playing ? t('common.pause') : t('common.play')" :disabled="duration <= 0" @click="toggle">
             <Pause v-if="playing" :size="18" />
             <Play v-else :size="18" />
           </button>
-          <button class="cursor-pointer" type="button" :aria-label="muted ? 'Unmute' : 'Mute'" :title="muted ? 'Unmute' : 'Mute'" @click="toggleMute">
+          <button class="cursor-pointer" type="button" :aria-label="muted ? t('common.unmute') : t('common.mute')" :title="muted ? t('common.unmute') : t('common.mute')" @click="toggleMute">
             <VolumeX v-if="muted" :size="18" />
             <Volume2 v-else :size="18" />
           </button>
           <span class="text-sm tabular-nums">{{ formatClock(playhead) }} / {{ formatClock(duration) }}</span>
-          <button class="ml-auto cursor-pointer" type="button" :aria-label="fullscreen ? 'Exit fullscreen' : 'Fullscreen'" :title="fullscreen ? 'Exit fullscreen' : 'Fullscreen'" @click="toggleFullscreen">
+          <button class="ms-auto cursor-pointer" type="button" :aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')" :title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')" @click="toggleFullscreen">
             <Minimize v-if="fullscreen" :size="18" />
             <Maximize v-else :size="18" />
           </button>
@@ -267,7 +269,7 @@ function onSeek(event: Event) {
           :value="Math.min(playhead, duration)"
           :disabled="duration <= 0"
           :style="{ '--progress': `${progress}%` }"
-          aria-label="Playback position"
+          :aria-label="t('ranking.preview.playbackPosition')"
           @input="onSeek"
         />
       </div>

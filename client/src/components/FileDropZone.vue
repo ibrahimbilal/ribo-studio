@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Upload } from '@lucide/vue'
 import { computed, ref } from 'vue'
+import { useI18n } from '../i18n'
 
 const props = withDefaults(
   defineProps<{
@@ -12,7 +13,7 @@ const props = withDefaults(
     label: string
     dropLabel?: string
     busyLabel?: string
-    hint?: string
+    hint?: string | null
     formats?: string
     ignoreTypes?: string[]
     highlighted?: boolean
@@ -22,8 +23,8 @@ const props = withDefaults(
     disabled: false,
     compact: false,
     prominent: false,
-    dropLabel: 'Drop to upload',
-    hint: 'or click to browse',
+    dropLabel: undefined,
+    hint: undefined,
   },
 )
 
@@ -31,14 +32,22 @@ const emit = defineEmits<{
   files: [files: File[]]
 }>()
 
+const { t } = useI18n()
+
 const fileInput = ref<HTMLInputElement | null>(null)
 const fileDrag = ref(false)
 let dragDepth = 0
 
 const active = computed(() => props.highlighted === true || fileDrag.value)
+const resolvedDropLabel = computed(() => props.dropLabel ?? t('common.dropZone.dropToUpload'))
+const resolvedHint = computed(() => {
+  if (props.hint === null) return ''
+  if (props.hint != null && props.hint !== '') return props.hint
+  return t('common.dropZone.clickToBrowse')
+})
 const title = computed(() => {
   if (props.disabled && props.busyLabel) return props.busyLabel
-  if (active.value) return props.dropLabel
+  if (active.value) return resolvedDropLabel.value
   return props.label
 })
 
@@ -104,7 +113,7 @@ function openPicker() {
     >
       <Upload :size="prominent ? 28 : compact ? 16 : 18" />
       <span>{{ title }}</span>
-      <span v-if="hint" class="text-xs font-normal text-zinc-500">{{ hint }}</span>
+      <span v-if="resolvedHint" class="text-xs font-normal text-zinc-500">{{ resolvedHint }}</span>
       <span v-if="formats" class="mt-1 text-xs font-normal text-zinc-600">{{ formats }}</span>
     </button>
     <input ref="fileInput" class="hidden" type="file" :accept="accept" :multiple="multiple" @change="onFileChange" />

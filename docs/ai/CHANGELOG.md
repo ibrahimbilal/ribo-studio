@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.6.1**).
+Version source of truth: root `package.json` (currently **1.7.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,12 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.7.0** (2026-11-17) — Full-client i18n (Language in General settings; 13 locales + RTL); static subscribe-animation cache one entry per style.
+- 2026-11-17 — RTL chrome polish for `dir=rtl` (ar/ur): logical Tailwind/`inset-inline` in shell + settings; drawer/toast/toggle/export-status RTL keyframes in `style.css`.
+- 2026-11-17 — Full-client i18n: message modules for common/layout/settings/ranking/imageMotion/screensaver/thumbnail/upscaler/looper; `useI18n` + `{param}` interpolation; locale overlays deep-merge onto English; wired across shell, Global Settings, and all app editors (en/zh/hi/es/ar/fr/bn/pt/ru/ur/id/de/ja + RTL `dir`).
+- 2026-11-17 — UI chrome i18n for most-used languages (en/zh/hi/es/ar/fr/bn/pt/ru/ur/id/de/ja): `APP_LANGUAGES`, `client/src/i18n/` catalogs + `useI18n`, settings/shell/dashboard wired; `locale.ts` sets `lang` + RTL `dir`.
+- 2026-11-17 — General settings Language preference (`general.language` / `AppLanguage`, `locale.ts`, `SettingsGeneralPanel.vue`); persists with Global Settings, sets `html[lang]`.
+- 2026-11-17 — Static subscribe-animation cache: one entry per template; new size/width render replaces the previous static entry (`subscribeAnimationCache.ts`).
 - Release **v1.6.1** (2026-11-17) — Toast border/ink theme tokens for light + dark (`style.css`).
 - 2026-11-17 — Toast success/error borders and text use `--color-toast-*` tokens so light theme is readable (`style.css`).
 - Release **v1.6.0** (2026-11-17) — Global Settings (Appearance, Integrations, Backup & Restore, shared Screensaver/Shorts encoding prefs); header theme toggle; fixed icon-rail sidebar; dark-theme contrast fixes; channel-card cache per theme.

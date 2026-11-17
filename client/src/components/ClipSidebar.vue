@@ -4,11 +4,13 @@ import { ref } from 'vue'
 import { useCardReorder } from '../composables/useCardReorder'
 import { usePlayback } from '../composables/usePlayback'
 import { formatClock, sourceLabel } from '../lib/format'
+import { useI18n } from '../i18n'
 import { useProjectStore } from '../stores/project'
 import AppDialog from './ui/AppDialog.vue'
 import FileDropZone from './FileDropZone.vue'
 
 const store = useProjectStore()
+const { t } = useI18n()
 const playback = usePlayback()
 const urlInput = ref('')
 const listEl = ref<HTMLElement | null>(null)
@@ -96,7 +98,7 @@ function kept(duration: number, start: number, end: number): string {
 
 <template>
   <aside
-    class="flex min-h-0 flex-col border-zinc-800 bg-sidebar xl:border-r"
+    class="flex min-h-0 flex-col border-zinc-800 bg-sidebar xl:border-e"
     @dragenter.prevent="onFileDragEnter"
     @dragover.prevent
     @dragleave.prevent="onFileDragLeave"
@@ -104,12 +106,12 @@ function kept(duration: number, start: number, end: number): string {
   >
     <div class="space-y-3 border-b border-zinc-800 p-4">
       <label class="block">
-        <span class="mb-1 block section-label">Project</span>
+        <span class="mb-1 block section-label">{{ t('ranking.sidebar.project') }}</span>
         <input v-model="store.name" class="field text-sm font-semibold" maxlength="80" />
       </label>
       <form class="flex gap-2" @submit.prevent="submitUrl">
-        <input v-model="urlInput" class="field" placeholder="Paste a YouTube, TikTok, or Reel link" />
-        <button class="btn cursor-pointer btn-ghost shrink-0 px-2" type="submit" aria-label="Add link" title="Add link">
+        <input v-model="urlInput" class="field" :placeholder="t('ranking.sidebar.urlPlaceholder')" />
+        <button class="btn cursor-pointer btn-ghost shrink-0 px-2" type="submit" :aria-label="t('ranking.sidebar.addLink')" :title="t('ranking.sidebar.addLink')">
           <Plus :size="16" />
         </button>
       </form>
@@ -118,7 +120,7 @@ function kept(duration: number, start: number, end: number): string {
         compact
         accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v"
         multiple
-        label="Drop videos here"
+        :label="t('ranking.sidebar.dropVideos')"
         formats="MP4, MOV, WebM"
         :ignore-types="['application/x-ribo-clip']"
         :highlighted="fileDrag"
@@ -127,7 +129,7 @@ function kept(duration: number, start: number, end: number): string {
     </div>
 
     <div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-      <h3 class="section-label">Clips</h3>
+      <h3 class="section-label">{{ t('ranking.sidebar.clips') }}</h3>
       <button
         class="btn btn-ghost cursor-pointer px-2 py-1 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
@@ -135,7 +137,7 @@ function kept(duration: number, start: number, end: number): string {
         @click="deleteAllOpen = true"
       >
         <Trash2 :size="14" />
-        Delete all
+        {{ t('common.deleteAll') }}
       </button>
     </div>
 
@@ -146,7 +148,7 @@ function kept(duration: number, start: number, end: number): string {
       @dragover.prevent
     >
       <p v-if="store.clips.length === 0" class="px-2 py-8 text-center text-sm text-zinc-500">
-        Drop MP4, MOV, or WebM files here. Export stays off until there is at least one clip.
+        {{ t('ranking.sidebar.emptyClips') }}
       </p>
       <article
         v-for="(clip, index) in store.clips"
@@ -164,7 +166,7 @@ function kept(duration: number, start: number, end: number): string {
           <button
             class="mt-1 w-5 shrink-0 cursor-grab touch-none select-none text-zinc-500"
             type="button"
-            aria-label="Drag to reorder"
+            :aria-label="t('common.dragReorder')"
             @pointerdown.stop="onGripPointerDown($event, index)"
           >
             <GripVertical :size="16" />
@@ -177,8 +179,8 @@ function kept(duration: number, start: number, end: number): string {
             <div class="mb-1 flex items-center gap-2 text-xs text-zinc-500">
               <span class="font-semibold text-brand">{{ index + 1 }}</span>
               <span>{{ sourceLabel(clip.source) }}</span>
-              <span v-if="clip.playAtEnd" class="font-semibold text-brand">Plays last</span>
-              <span v-if="clip.duration > 0" class="ml-auto tabular-nums">{{ kept(clip.duration, clip.trimStart, clip.trimEnd) }}</span>
+              <span v-if="clip.playAtEnd" class="font-semibold text-brand">{{ t('ranking.sidebar.playsLast') }}</span>
+              <span v-if="clip.duration > 0" class="ms-auto tabular-nums">{{ kept(clip.duration, clip.trimStart, clip.trimEnd) }}</span>
             </div>
             <input
               v-model="clip.title"
@@ -193,19 +195,19 @@ function kept(duration: number, start: number, end: number): string {
         </div>
         <p v-if="clip.error" class="mt-2 text-xs text-red-300">{{ clip.error }}</p>
         <div class="mt-2 flex">
-          <button class="icon-action" type="button" aria-label="Move up" title="Move up" :disabled="index === 0" @click.stop="store.moveClip(index, index - 1)">
+          <button class="icon-action" type="button" :aria-label="t('common.moveUp')" :title="t('common.moveUp')" :disabled="index === 0" @click.stop="store.moveClip(index, index - 1)">
             <ChevronUp :size="16" />
           </button>
-          <button class="icon-action" type="button" aria-label="Move down" title="Move down" :disabled="index === store.clips.length - 1" @click.stop="store.moveClip(index, index + 1)">
+          <button class="icon-action" type="button" :aria-label="t('common.moveDown')" :title="t('common.moveDown')" :disabled="index === store.clips.length - 1" @click.stop="store.moveClip(index, index + 1)">
             <ChevronDown :size="16" />
           </button>
-          <button v-if="clip.uploadState === 'error'" class="icon-action" type="button" aria-label="Retry upload" title="Retry upload" @click.stop="store.retryUpload(clip.id)">
+          <button v-if="clip.uploadState === 'error'" class="icon-action" type="button" :aria-label="t('common.retry')" :title="t('common.retry')" @click.stop="store.retryUpload(clip.id)">
             <RotateCcw :size="16" />
           </button>
-          <button v-if="clip.uploadState === 'empty'" class="icon-action" type="button" aria-label="Add file" title="Add file" @click.stop="pickReplace(clip.id)">
+          <button v-if="clip.uploadState === 'empty'" class="icon-action" type="button" :aria-label="t('common.browse')" :title="t('common.browse')" @click.stop="pickReplace(clip.id)">
             <FilePlus :size="16" />
           </button>
-          <button class="icon-action icon-action--danger ml-auto" type="button" aria-label="Remove clip" title="Remove clip" @click.stop="store.removeClip(clip.id)">
+          <button class="icon-action icon-action--danger ms-auto" type="button" :aria-label="t('common.remove')" :title="t('common.remove')" @click.stop="store.removeClip(clip.id)">
             <Trash2 :size="16" />
           </button>
         </div>
@@ -213,11 +215,11 @@ function kept(duration: number, start: number, end: number): string {
       <input ref="replaceInput" class="hidden" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v" @change="onReplace" />
     </div>
 
-    <AppDialog :open="deleteAllOpen" title="Delete all clips" @cancel="closeDeleteAll">
-      <p class="text-sm text-zinc-300">Remove every clip from this ranking project?</p>
+    <AppDialog :open="deleteAllOpen" :title="t('ranking.sidebar.deleteAllTitle')" @cancel="closeDeleteAll">
+      <p class="text-sm text-zinc-300">{{ t('ranking.sidebar.deleteAllBody') }}</p>
       <template #actions>
-        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">Cancel</button>
-        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">Delete all</button>
+        <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDeleteAll">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger cursor-pointer" type="button" @click="confirmDeleteAll">{{ t('common.deleteAll') }}</button>
       </template>
     </AppDialog>
   </aside>
