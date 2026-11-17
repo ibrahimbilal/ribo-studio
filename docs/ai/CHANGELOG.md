@@ -9,6 +9,14 @@ Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
 Changes since the current `package.json` version. User-facing bullets also belong under **Unreleased** in root `CHANGELOG.md`. On release, the release-manager skill / `npm run release:*` promotes the root changelog; then summarize or clear this section as appropriate.
 
+- 2026-11-17 — Global Settings extended: Appearance (theme/accent/density/UI animations), Integrations (YouTube channel registry + engines), Backup & Restore (`shared/globalSettings.ts` v2, `shared/settingsBackup.ts`, `shared/appearanceTokens.ts`, settings panels, `appearance.ts`, `index.html` boot script, `YoutubeChannelSelector.vue`).
+- 2026-11-17 — Encoding method from Global Settings drives Screensaver and both Shorts apps (Ranking + Image Motion); per-app encoder controls removed (`project.ts`, `imageMotion.ts`, StylePanel / ImageMotionSettings).
+- 2026-11-17 — YouTube channel/video URL fetch moved to Global Settings → Storage & Cache; Screensaver keeps Channel picker only (`SettingsStoragePanel.vue`, `registerSubscribeChannelFromYoutubeUrl.ts`).
+- 2026-11-17 — Subscribe channel-card cache: one entry per channel + theme; new Fetch/data replaces the previous same-theme cache (`subscribeAnimationCache.ts`).
+- 2026-11-17 — Desktop sidebar is a fixed icon rail (no expand-on-hover); app titles show as right-side tooltips. Removed `sidebarExpandOnHover` setting and `useSidebarHover` (`AppSidebar.vue`, `globalSettings.ts`).
+- 2026-11-16 — Global Settings Screensaver output: renderingMode / cfrQuality / profile / previewRenderer / encoder live in `globalSettings.screensaver` (Export panel + Screensaver Settings); exports use `effectiveRenderingMode` so video still forces Fast VFR.
+- 2026-11-16 — Global Settings v1: versioned schema `shared/globalSettings.ts`, Pinia + localStorage, server prefs `/api/global-settings`, hover-overlay sidebar Settings, modal categories (General/Storage/Performance/Export/About), storage overview + subscribe-animation cache inventory/retention, system info `/api/system/info`, threading/HW/disk hooks (`ffmpegThreading`, `encoders`, `diskSpace`).
+
 ## History
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.

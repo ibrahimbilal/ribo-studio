@@ -29,6 +29,7 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Shell, toasts, page transition | `client/src/App.vue` |
 | Design tokens / shared classes | `client/src/style.css`, `docs/ui-design-system.md` |
 | Sidebar / header / mobile drawer / app version | `client/src/components/layout/` (`AppVersionLabel.vue`, `AppTempStorageButton.vue`) |
+| Global Settings modal + panels | `client/src/components/settings/` (Appearance / Integrations / Backup), store `client/src/stores/globalSettings.ts`, schema `shared/globalSettings.ts`, backup `shared/settingsBackup.ts`, appearance `client/src/lib/appearance.ts` |
 | Shared UI primitives | `client/src/components/ui/` |
 | Renderer health, notifications | `client/src/stores/platform.ts` |
 | Export queue / job poll / notifications | `client/src/lib/managedExportJobs.ts`, `exportQueueRunner.ts`, `jobPoll.ts`, `renderNotifications.ts` |
@@ -39,8 +40,10 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Responsibility | Path |
 | --- | --- |
 | HTTP routes | `server/src/index.ts` |
+| Global settings (server prefs) | `server/src/globalSettings.ts`, `globalSettingsRoutes.ts` → `server/tmp/global-settings.json` |
+| Storage overview / system info | `server/src/storageOverview.ts`, `systemInfo.ts` |
 | FFmpeg job queue (one at a time) | `server/src/jobs.ts` |
-| Disk / expiry / cleanup | `server/src/storage.ts` |
+| Disk / expiry / cleanup | `server/src/storage.ts`, `diskSpace.ts` |
 | Encoders / threading | `server/src/encoders.ts`, `ffmpegThreading.ts`, `ffmpegUtil.ts` |
 | Temp data | `server/tmp/` (gitignored) |
 

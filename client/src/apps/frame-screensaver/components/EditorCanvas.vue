@@ -857,7 +857,7 @@ onBeforeUnmount(() => {
     </div>
     <div
       ref="shell"
-      class="relative flex w-full max-w-full min-w-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-800 max-lg:aspect-video max-lg:max-h-[min(52vh,56vw)] max-lg:shrink-0 max-lg:min-h-[160px] lg:min-h-[180px] lg:min-h-0 lg:flex-1"
+      class="preview-well relative flex w-full max-w-full min-w-0 items-center justify-center overflow-hidden rounded-lg border border-line max-lg:aspect-video max-lg:max-h-[min(52vh,56vw)] max-lg:shrink-0 max-lg:min-h-[160px] lg:min-h-[180px] lg:min-h-0 lg:flex-1"
       style="touch-action: none"
       tabindex="0"
       @pointerdown="onPointerDown"

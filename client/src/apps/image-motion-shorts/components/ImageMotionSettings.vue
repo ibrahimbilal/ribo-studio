@@ -7,9 +7,11 @@ import AudioFileField from '../../../components/audio/AudioFileField.vue'
 import SettingsAccordion from '../../../components/SettingsAccordion.vue'
 import SliderField from '../../../components/SliderField.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { useImageMotionStore } from '../stores/imageMotion'
 
 const store = useImageMotionStore()
+const globalSettings = useGlobalSettingsStore()
 const tab = ref<'motion' | 'output' | 'sound'>('motion')
 const tabs = [
   { id: 'motion' as const, label: 'Motion' },
@@ -20,13 +22,6 @@ const tabs = [
 const selectedSegment = computed(() => store.selectedSegment)
 const motion = computed(() => selectedSegment.value?.motion)
 const slowMode = computed(() => motion.value?.mode === 'slow')
-
-const hardwareEncoders = computed(() => store.encoderOptions.filter((item) => item.hardware && item.listed))
-const selectedEncoder = computed(() => store.encoderOptions.find((item) => item.id === store.video.encoder))
-const autoEncoderLabel = computed(() => {
-  const hint = store.encoderAutoMotion ?? store.encoderAutoStill
-  return hint ? ` (${hint})` : ''
-})
 
 const zoom = computed({
   get: () => motion.value?.zoom ?? 1,
@@ -149,17 +144,6 @@ const start = computed({
                 <select class="field w-full" :value="store.video.fps" @change="store.setFps(Number(($event.target as HTMLSelectElement).value))">
                   <option v-for="fps in FRAME_RATES" :key="fps" :value="fps">{{ fps }} fps</option>
                 </select>
-              </label>
-              <label class="block">
-                <span class="mb-1 block text-xs text-zinc-500">Encoding method</span>
-                <select v-model="store.video.encoder" class="field w-full">
-                  <option value="auto">Auto (recommended){{ autoEncoderLabel }}</option>
-                  <option value="cpu">CPU</option>
-                  <option v-for="item in hardwareEncoders" :key="item.id" :value="item.id" :disabled="!item.verified">
-                    {{ item.label }}{{ item.verified ? '' : ' — unavailable' }}
-                  </option>
-                </select>
-                <p v-if="selectedEncoder && !selectedEncoder.verified" class="mt-1 text-xs text-amber-200">{{ selectedEncoder.detail }}</p>
               </label>
             </div>
           </SettingsAccordion>

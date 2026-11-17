@@ -1,24 +1,19 @@
-export type PreviewRendererMode = 'auto' | 'webgl2' | 'canvas2d'
+import type { PreviewRendererMode } from '@shared/globalSettings'
 
-const STORAGE_KEY = 'ribo-screensaver-renderer'
+export type { PreviewRendererMode }
 
+/** @deprecated Prefer Global Settings `screensaver.previewRenderer`. Kept for query-string overrides. */
 export function readPreviewRendererMode(): PreviewRendererMode {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'webgl2' || stored === 'canvas2d') return stored
     const fromQuery = new URLSearchParams(window.location.search).get('screensaver_renderer')
-    if (fromQuery === 'webgl2' || fromQuery === 'canvas2d') return fromQuery
+    if (fromQuery === 'webgl2' || fromQuery === 'canvas2d' || fromQuery === 'auto') return fromQuery
   } catch {
     // ignore
   }
   return 'canvas2d'
 }
 
-export function writePreviewRendererMode(mode: PreviewRendererMode): void {
-  try {
-    if (mode === 'auto') localStorage.removeItem(STORAGE_KEY)
-    else localStorage.setItem(STORAGE_KEY, mode)
-  } catch {
-    // ignore
-  }
+/** @deprecated Preview renderer is persisted via Global Settings. */
+export function writePreviewRendererMode(_mode: PreviewRendererMode): void {
+  // no-op — Global Settings owns this preference.
 }

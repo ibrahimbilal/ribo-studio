@@ -1,4 +1,5 @@
 import os from 'node:os'
+import { getServerGlobalSettings } from './globalSettings'
 
 export function logicalCpus(): number {
   return os.cpus().length
@@ -8,7 +9,21 @@ function lowMemoryHost(): boolean {
   return os.totalmem() < 8 * 1024 ** 3
 }
 
+function settingsThreadOverride(): number | null {
+  try {
+    const settings = getServerGlobalSettings()
+    if (settings.performance.autoCpuThreads) return null
+    const limit = settings.performance.cpuThreadLimit
+    if (Number.isFinite(limit) && limit >= 1) return Math.min(16, Math.floor(limit))
+  } catch {
+    // Settings may not be loaded yet during early boot.
+  }
+  return null
+}
+
 export function x264Threads(): number {
+  const fromSettings = settingsThreadOverride()
+  if (fromSettings != null) return fromSettings
   const env = Number(process.env.RIBO_X264_THREADS)
   if (Number.isFinite(env) && env >= 1) return Math.min(16, Math.floor(env))
   const cap = lowMemoryHost() ? 2 : 4
@@ -16,6 +31,8 @@ export function x264Threads(): number {
 }
 
 export function ffmpegGlobalThreads(): number {
+  const fromSettings = settingsThreadOverride()
+  if (fromSettings != null) return fromSettings
   const env = Number(process.env.RIBO_FFMPEG_THREADS)
   if (Number.isFinite(env) && env >= 1) return Math.min(16, Math.floor(env))
   const cap = lowMemoryHost() ? 4 : 8
@@ -23,6 +40,8 @@ export function ffmpegGlobalThreads(): number {
 }
 
 export function ffmpegFilterThreads(): number {
+  const fromSettings = settingsThreadOverride()
+  if (fromSettings != null) return Math.min(8, fromSettings)
   const env = Number(process.env.RIBO_FFMPEG_FILTER_THREADS)
   if (Number.isFinite(env) && env >= 1) return Math.min(8, Math.floor(env))
   return Math.max(1, Math.min(4, Math.floor(logicalCpus() / 2)))

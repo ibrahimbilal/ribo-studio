@@ -1,6 +1,6 @@
 # Ribo Studio UI
 
-Dark production workspace. Brand blue stays `#0078f8` (`--color-brand`). Inter is the application font. Overlay and badge artwork keep their own fonts and SVG assets.
+Dark production workspace by default. Brand blue stays `#0078f8` (`--color-brand`) unless Global Settings Appearance selects another accent. Theme (`data-theme`), density (`data-density`), and UI animations (`data-ui-animations`) are applied on `documentElement` — chrome only; never export/canvas timelines. Inter is the application font. Overlay and badge artwork keep their own fonts and SVG assets.
 
 Tokens and control classes live in `client/src/style.css`. Presentational components live in `client/src/components/ui/`. They do not import Pinia stores.
 
@@ -57,6 +57,7 @@ Motion tokens: `--ease-out-soft`, `--duration-fast` / `--duration-base` / `--dur
 | Component | Use it for | Leave in the app |
 | --- | --- | --- |
 | `AppDialog` | Modal title, body slot, actions slot. Escape and the backdrop emit `cancel`. | What cancel and confirm do |
+| `GlobalSettingsModal` (+ `components/settings/*`) | Application-wide settings shell with category nav | Preference logic lives in `stores/globalSettings.ts` |
 | `AppMobileTabs` | Settings / Preview / Clips rows. `v-model` is the tab id. `hide-from` is `lg` or `xl`. | Which panels that id shows |
 | `AppSettingsTabs` | Settings strip (Shorts: Clip / Style / Output / Sound). `v-model` is the tab id; optional `cols` `3` or `4`. | Which panels that id shows; wrap pane content in `Transition name="settings-pane"` |
 | `AppExportAction` | Primary export button, blocker text, optional hint, extra slot | Store handler, queue label, CPU fallback, status copy |

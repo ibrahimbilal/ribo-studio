@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { OUTPUTS, FRAME_RATES, frameMetrics } from '@shared/frame'
 import { Hash, ListOrdered, Minus, Palette, Plus, SlidersHorizontal, TextAlignCenter, TextAlignEnd, TextAlignStart, Trash2, Trophy, X } from '@lucide/vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { usePlayback } from '../composables/usePlayback'
 import { formatRank, pageLabel } from '../lib/format'
 import { FONT_OPTIONS } from '../lib/presets'
+import { useGlobalSettingsStore } from '../stores/globalSettings'
 import { useProjectStore } from '../stores/project'
 import ColorField from './ColorField.vue'
 import ColorSwatches from './ColorSwatches.vue'
@@ -27,6 +28,7 @@ const presets = [
 ]
 
 const store = useProjectStore()
+const globalSettings = useGlobalSettingsStore()
 const playback = usePlayback()
 
 const props = withDefaults(defineProps<{ focus?: 'look' | 'sound' | 'output' | 'all' }>(), { focus: 'all' })
@@ -52,16 +54,6 @@ const layoutMetrics = computed(() =>
     store.style.banner.visible === false ? 0 : store.style.banner.height,
   ),
 )
-const hardwareEncoders = computed(() => store.encoderOptions.filter((item) => item.hardware && item.listed))
-const selectedEncoder = computed(() => store.encoderOptions.find((item) => item.id === store.style.video.encoder))
-const autoEncoderLabel = computed(() => {
-  const hint = store.encoderAutoMotion ?? store.encoderAutoStill
-  return hint ? ` (${hint})` : ''
-})
-
-onMounted(() => {
-  void store.loadEncoders()
-})
 
 function onMusicFiles(files: File[]) {
   const file = files[0]
@@ -394,15 +386,6 @@ function setTitleHideAfterEnabled(enabled: boolean) {
             <option v-for="fps in FRAME_RATES" :key="fps" :value="fps">{{ fps }} fps</option>
           </select>
         </label>
-        <label class="mt-3 block text-xs text-zinc-500">Encoding method</label>
-        <select v-model="store.style.video.encoder" class="field mt-1">
-          <option value="auto">Auto (recommended){{ autoEncoderLabel }}</option>
-          <option value="cpu">CPU</option>
-          <option v-for="item in hardwareEncoders" :key="item.id" :value="item.id" :disabled="!item.verified">
-            {{ item.label }}{{ item.verified ? '' : ' — unavailable' }}
-          </option>
-        </select>
-        <p v-if="selectedEncoder && !selectedEncoder.verified" class="mt-1 text-xs text-amber-200">{{ selectedEncoder.detail }}</p>
         <label class="block text-xs text-zinc-400">
           Scaling
           <select v-model="store.style.video.scaleMode" class="field mt-1">

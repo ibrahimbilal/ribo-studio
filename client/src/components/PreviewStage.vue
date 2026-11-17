@@ -199,16 +199,16 @@ function onSeek(event: Event) {
 </script>
 
 <template>
-  <section ref="root" class="flex min-h-0 flex-1 items-center justify-center bg-[#0b0c0f] p-4">
+  <section ref="root" class="flex min-h-0 flex-1 items-center justify-center bg-inset p-4">
     <div
       ref="player"
-      class="relative flex max-h-full flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-black shadow-2xl"
+      class="preview-well relative flex max-h-full flex-col overflow-hidden rounded-2xl border border-line shadow-2xl"
       :class="fullscreen ? 'h-full w-full items-center justify-center rounded-none border-0' : 'h-full'"
       :style="fullscreen ? undefined : frameAspectStyle"
     >
       <div class="absolute inset-0 flex items-center justify-center overflow-hidden">
       <div :style="scaleBoxStyle">
-        <div class="relative cursor-pointer bg-black" :style="stageStyle" title="Play or pause" @click="toggle">
+        <div class="preview-well relative cursor-pointer" :style="stageStyle" title="Play or pause" @click="toggle">
           <div class="absolute left-0 z-0 w-full overflow-hidden" :style="videoBoxStyle">
             <div v-if="placeholder" class="absolute inset-0 z-0 flex items-center justify-center px-16 text-center text-[42px] leading-snug text-zinc-400">
               {{ placeholder }}

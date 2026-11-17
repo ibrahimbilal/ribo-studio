@@ -135,7 +135,7 @@ function toggleDetails(id: string): void {
       <div v-if="store.trackCount > 1" class="mt-2 flex">
         <button
           v-if="reorderEnabled"
-          class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40"
+          class="icon-action"
           type="button"
           aria-label="Move up"
           title="Move up"
@@ -146,7 +146,7 @@ function toggleDetails(id: string): void {
         </button>
         <button
           v-if="reorderEnabled"
-          class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40"
+          class="icon-action"
           type="button"
           aria-label="Move down"
           title="Move down"
@@ -155,12 +155,12 @@ function toggleDetails(id: string): void {
         >
           <ChevronDown :size="16" />
         </button>
-        <button class="ml-auto rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-red-300 hover:bg-red-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand" type="button" aria-label="Remove track" title="Remove track" @click.stop="store.removeTrack(track.id)">
+        <button class="icon-action icon-action--danger ml-auto" type="button" aria-label="Remove track" title="Remove track" @click.stop="store.removeTrack(track.id)">
           <Trash2 :size="16" />
         </button>
       </div>
       <div v-else class="mt-2 flex justify-end">
-        <button class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-red-300 hover:bg-red-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand" type="button" aria-label="Remove audio" title="Remove audio" @click.stop="store.removeTrack(track.id)">
+        <button class="icon-action icon-action--danger" type="button" aria-label="Remove audio" title="Remove audio" @click.stop="store.removeTrack(track.id)">
           <Trash2 :size="16" />
         </button>
       </div>

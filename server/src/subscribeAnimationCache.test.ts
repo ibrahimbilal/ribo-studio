@@ -5,10 +5,12 @@ import path from 'node:path'
 import { after, before, describe, it } from 'node:test'
 import { buildSubscribeAnimationCachePayload, resolveSubscribeAnimationCacheKey } from '../../shared/subscribeAnimationCacheKey'
 import {
+  applySubscribeAnimationCacheRetention,
   clearSubscribeAnimationCache,
   ensureSubscribeAnimationCache,
   getCachedAnimation,
   getSubscribeAnimationCacheStats,
+  listSubscribeAnimationCacheInventory,
   materializeCachedAnimation,
   putCachedAnimation,
   releaseSubscribeAnimationCache,
@@ -109,6 +111,10 @@ describe('subscribe animation persistent cache', () => {
       durationSec: 7,
       renderConfig: dynamicResolved.payload,
     })
+    const inventoryAfterDynamic = listSubscribeAnimationCacheInventory()
+    const channelAGroup = inventoryAfterDynamic.channels.find((item) => item.channelId === channelId)
+    assert.ok(channelAGroup)
+    assert.ok(channelAGroup!.animations.some((item) => item.name === 'Channel card - Light'))
 
     const channelB = 'UCyyyyyyyyyyyyyyyyyyyyyy'
     await upsertSubscribeChannelMeta({
@@ -143,6 +149,114 @@ describe('subscribe animation persistent cache', () => {
     await rm(staging, { recursive: true, force: true }).catch(() => undefined)
     await rm(stagingB, { recursive: true, force: true }).catch(() => undefined)
     await rm(path.dirname(dest), { recursive: true, force: true }).catch(() => undefined)
+  })
+
+  it('replaces older channel-card cache for the same theme when channel data changes', async () => {
+    const channelId = 'UCzzzzzzzzzzzzzzzzzzzzzz'
+    await upsertSubscribeChannelMeta({
+      channelId,
+      channelName: 'Channel Z',
+      channelUrl: `https://www.youtube.com/channel/${channelId}`,
+      subscriberCount: '100K subscribers',
+      avatarContentHash: createHash('sha256').update('avatar-z1').digest('hex'),
+      avatarUrl: null,
+      updatedAt: Date.now(),
+    })
+    const first = await resolveSubscribeAnimationCacheKey({
+      style: 'channel-card',
+      sizePercent: 27,
+      edgeDistance: 0,
+      outputWidth: 1920,
+      channelId,
+      channelName: 'Channel Z',
+      channelSubscriberCount: '100K subscribers',
+      channelCardTheme: 'light',
+      avatarContentHash: createHash('sha256').update('avatar-z1').digest('hex'),
+    })
+    const staging = path.join(tmpDir, `anim-cache-theme-replace-${Date.now()}`)
+    await mkdir(staging, { recursive: true })
+    const firstFrames = [path.join(staging, 'a1.png')]
+    await writeTinyPng(firstFrames[0]!)
+    await putCachedAnimation({
+      cacheKey: first.key,
+      kind: 'dynamic',
+      templateId: 'channel-card',
+      channelId,
+      framePaths: firstFrames,
+      width: 20,
+      height: 20,
+      fps: 60,
+      durationSec: 7,
+      renderConfig: first.payload,
+    })
+
+    const second = await resolveSubscribeAnimationCacheKey({
+      style: 'channel-card',
+      sizePercent: 27,
+      edgeDistance: 0,
+      outputWidth: 1920,
+      channelId,
+      channelName: 'Channel Z',
+      channelSubscriberCount: '250K subscribers',
+      channelCardTheme: 'light',
+      avatarContentHash: createHash('sha256').update('avatar-z2').digest('hex'),
+    })
+    assert.notEqual(first.key, second.key)
+    const secondFrames = [path.join(staging, 'a2.png')]
+    await writeTinyPng(secondFrames[0]!)
+    await putCachedAnimation({
+      cacheKey: second.key,
+      kind: 'dynamic',
+      templateId: 'channel-card',
+      channelId,
+      framePaths: secondFrames,
+      width: 20,
+      height: 20,
+      fps: 60,
+      durationSec: 7,
+      renderConfig: second.payload,
+    })
+
+    const inventory = listSubscribeAnimationCacheInventory()
+    const group = inventory.channels.find((item) => item.channelId === channelId)
+    assert.ok(group)
+    const lightCards = group!.animations.filter((item) => item.channelCardTheme === 'light')
+    assert.equal(lightCards.length, 1)
+    assert.equal(lightCards[0]!.cacheKey, second.key)
+    assert.equal(await getCachedAnimation(first.key), null)
+    assert.ok(await getCachedAnimation(second.key))
+
+    const dark = await resolveSubscribeAnimationCacheKey({
+      style: 'channel-card',
+      sizePercent: 27,
+      edgeDistance: 0,
+      outputWidth: 1920,
+      channelId,
+      channelName: 'Channel Z',
+      channelSubscriberCount: '250K subscribers',
+      channelCardTheme: 'dark',
+      avatarContentHash: createHash('sha256').update('avatar-z2').digest('hex'),
+    })
+    const darkFrames = [path.join(staging, 'a3.png')]
+    await writeTinyPng(darkFrames[0]!)
+    await putCachedAnimation({
+      cacheKey: dark.key,
+      kind: 'dynamic',
+      templateId: 'channel-card',
+      channelId,
+      framePaths: darkFrames,
+      width: 20,
+      height: 20,
+      fps: 60,
+      durationSec: 7,
+      renderConfig: dark.payload,
+    })
+    const afterDark = listSubscribeAnimationCacheInventory().channels.find((item) => item.channelId === channelId)
+    assert.equal(afterDark!.animations.length, 2)
+    assert.ok(afterDark!.animations.some((item) => item.channelCardTheme === 'light' && item.cacheKey === second.key))
+    assert.ok(afterDark!.animations.some((item) => item.channelCardTheme === 'dark' && item.cacheKey === dark.key))
+
+    await rm(staging, { recursive: true, force: true }).catch(() => undefined)
   })
 
   it('does not delete retained entries during LRU clear-all of busy keys', async () => {
@@ -214,5 +328,45 @@ describe('subscribe animation persistent cache', () => {
     assert.ok(subscribeAnimationCacheDir.includes('subscribe-animation-cache'))
     assert.equal(subscribeAnimationCacheDir.includes(`${path.sep}jobs${path.sep}`), false)
     setSubscribeAnimationCacheMaxBytes(2 * 1024 * 1024 * 1024)
+  })
+
+  it('lists inventory with static templates and skips retained keys during retention cleanup', async () => {
+    const resolved = await resolveSubscribeAnimationCacheKey({
+      style: 'subscribe-alerts',
+      sizePercent: 18,
+      edgeDistance: 2,
+      outputWidth: 1920,
+    })
+    const staging = path.join(tmpDir, `anim-cache-retention-${Date.now()}`)
+    await mkdir(staging, { recursive: true })
+    const frames = [path.join(staging, 'a.png')]
+    await writeTinyPng(frames[0]!)
+    await putCachedAnimation({
+      cacheKey: resolved.key,
+      kind: 'static',
+      templateId: 'subscribe-alerts',
+      channelId: null,
+      framePaths: frames,
+      width: 8,
+      height: 8,
+      fps: 60,
+      durationSec: 7,
+      renderConfig: resolved.payload,
+    })
+    const inventory = listSubscribeAnimationCacheInventory()
+    assert.ok(inventory.staticAnimations.some((item) => item.templateId === 'subscribe-only'))
+    assert.ok(inventory.staticAnimations.some((item) => item.cacheKey === resolved.key && item.status === 'cached'))
+
+    retainSubscribeAnimationCache([resolved.key])
+    const skipped = await applySubscribeAnimationCacheRetention(1)
+    assert.equal(skipped.removed, 0)
+    releaseSubscribeAnimationCache([resolved.key])
+
+    const entry = await validateCachedAnimation(resolved.key)
+    assert.ok(entry)
+    entry!.lastUsedAt = Date.now() - 60_000
+    const removed = await applySubscribeAnimationCacheRetention(1000)
+    assert.equal(removed.removed >= 1, true)
+    await rm(staging, { recursive: true, force: true }).catch(() => undefined)
   })
 })

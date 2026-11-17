@@ -3,6 +3,7 @@ import { Pause, Play, Volume2, VolumeX } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { BRAND } from '../../../lib/brand'
 import { formatClock } from '../../../lib/format'
+import { themeInkColor, themePreviewWellColor, themeWaveformDimOverlay } from '../../../lib/themePaint'
 import {
   playbackProgress,
   resamplePeaks,
@@ -10,8 +11,10 @@ import {
   WAVEFORM_UNPLAYED_OPACITY,
 } from '../lib/waveform'
 import { useAudioLooperStore } from '../stores/audioLooper'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 
 const store = useAudioLooperStore()
+const globalSettings = useGlobalSettingsStore()
 const audioEl = ref<HTMLAudioElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 const playing = ref(false)
@@ -77,12 +80,13 @@ function paint(): void {
   if (!ctx) return
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = '#000000'
+  ctx.fillStyle = themePreviewWellColor()
   ctx.fillRect(0, 0, width, height)
 
   const ratio = playbackProgress(currentAudioTime(), duration.value || store.sourceDuration || 0)
   const progressX = ratio * width
   const peaks = store.waveform?.peaks
+  const ink = themeInkColor()
 
   if (peaks && peaks.length > 0) {
     const barCount = Math.max(48, Math.min(peaks.length, Math.floor(width / 2.5)))
@@ -100,15 +104,15 @@ function paint(): void {
     const { start, end } = trimBounds()
     const startX = (start / total) * width
     const endX = (end / total) * width
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'
+    ctx.fillStyle = themeWaveformDimOverlay()
     if (startX > 1) ctx.fillRect(0, 0, startX, height)
     if (endX < width - 1) ctx.fillRect(endX, 0, width - endX, height)
-    ctx.fillStyle = '#f4f4f5'
+    ctx.fillStyle = ink
     ctx.fillRect(startX, 0, 2, height)
     ctx.fillRect(Math.max(0, endX - 2), 0, 2, height)
   }
 
-  ctx.fillStyle = '#f4f4f5'
+  ctx.fillStyle = ink
   const head = Math.min(width - 1, Math.max(0, progressX))
   ctx.fillRect(head, 6, 1.5, height - 12)
 }
@@ -391,6 +395,11 @@ watch(
   () => paint(),
 )
 
+watch(
+  () => [globalSettings.appearance.theme, globalSettings.appearance.accent],
+  () => paint(),
+)
+
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => paint())
   if (canvas.value) resizeObserver.observe(canvas.value)
@@ -412,7 +421,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-2xl border border-zinc-700 bg-black shadow-2xl">
+  <div class="preview-well overflow-hidden rounded-2xl border border-line shadow-2xl">
     <audio
       ref="audioEl"
       class="hidden"
@@ -445,7 +454,7 @@ onBeforeUnmount(() => {
       />
     </div>
     <div class="w-full px-3 pb-3 pt-2">
-      <div class="flex items-center gap-3 text-white">
+      <div class="flex items-center gap-3 text-ink">
         <button
           class="cursor-pointer disabled:cursor-default disabled:opacity-40"
           type="button"

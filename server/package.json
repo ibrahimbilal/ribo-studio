@@ -11,6 +11,7 @@
     "test:screensaver": "tsx --test --test-concurrency=1 ../shared/screensaverAudio.test.ts src/audioAssets.test.ts src/screensaverAudioMux.test.ts ../client/src/apps/frame-screensaver/lib/exportAllPlan.test.ts ../client/src/apps/frame-screensaver/lib/screensaverAudioRefs.test.ts ../client/src/apps/frame-screensaver/lib/screensaverProjectModel.test.ts && tsx scripts/verify-screensaver.ts",
     "test:screensaver-subscribe": "tsx scripts/verify-screensaver-subscribe.ts",
     "test:subscribe-animation-cache": "tsx --test ../shared/subscribeAnimationCacheKey.test.ts src/subscribeAnimationCache.test.ts",
+    "test:global-settings": "tsx --test ../shared/globalSettings.test.ts ../shared/settingsBackup.test.ts ../shared/appearanceTokens.test.ts ../shared/youtubeChannelInput.test.ts src/globalSettings.test.ts",
     "probe:subscribe-animation-format": "tsx scripts/probe-subscribe-animation-format.ts",
     "test:screensaver-cfr": "tsx --test ../shared/screensaverCfr.test.ts ../shared/screensaverMuxStrategy.test.ts src/screensaverCfr/timeline.test.ts src/screensaverCfr/encodingConfig.test.ts src/diskSpace.test.ts && tsx scripts/verify-screensaver-cfr.ts",
     "test:screensaver-visual": "tsx scripts/visual-screensaver-adjust.ts",

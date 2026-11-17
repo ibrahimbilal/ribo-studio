@@ -10,6 +10,22 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Global Settings** — sidebar Settings opens an application-wide modal (General, Appearance, Performance, Storage & Cache, Export, Integrations, Backup & Restore, About) with persistent preferences, Subscribe Animation cache management, storage overview, and system information.
+- **Appearance** — Light / Dark / System theme, accent colors, interface density, and UI animation toggle (application chrome only; never affects exports or canvas timelines). Light theme uses semantic shell/panel tokens so dashboard cards, sidebar, and header stay readable.
+- **Integrations** — centralized YouTube channel registry (add by URL / ID / @handle, default channel, refresh, remove with project-reference warnings), public metadata status, and external engine detection (FFmpeg / FFprobe / upscalers).
+- **Backup & Restore** — export/import versioned settings JSON with category selection, merge or replace-category modes, preview, safe rollback, and preference reset (projects, media, caches, channels, and credentials are preserved).
+- Global Screensaver output prefs: Rendering mode, Quality/Profile, Preview rendering, and Encoding method (shared across projects; also editable from Screensaver Settings).
+
+### Changed
+
+- Desktop sidebar stays as a fixed icon rail; app names appear as tooltips on the right on hover/focus.
+- Screensaver Rendering mode / Quality / Preview rendering / Encoding method are no longer per-project; Global Settings is the source of truth (video/loop exports still force Fast VFR).
+- Dynamic channel-card cache keeps one entry per channel theme (Light/Dark); Fetching updated channel data replaces the previous same-theme cache.
+- YouTube channel management lives in Global Settings → Integrations; Screensaver Settings uses the shared channel selector (Storage & Cache still manages animation caches).
+- Encoding method in Global Settings applies to Screensaver and both Shorts apps (Ranking and Image Motion).
+
 ## [1.5.0] — 2026-11-16
 
 ### Added

@@ -3,10 +3,13 @@ import { Pause, Play, Volume2, VolumeX } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { BRAND } from '../../../lib/brand'
 import { formatClock } from '../../../lib/format'
+import { themeInkColor, themePreviewWellColor } from '../../../lib/themePaint'
 import { combineSequencePeaks, playbackProgress, resamplePeaks, WAVEFORM_PLAYED_OPACITY, WAVEFORM_UNPLAYED_OPACITY } from '../lib/waveform'
 import { useAudioLooperStore, type LooperTrack } from '../stores/audioLooper'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 
 const store = useAudioLooperStore()
+const globalSettings = useGlobalSettingsStore()
 const primary = ref<HTMLAudioElement | null>(null)
 const secondary = ref<HTMLAudioElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -82,7 +85,7 @@ function paint(): void {
   if (!ctx) return
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = '#000000'
+  ctx.fillStyle = themePreviewWellColor()
   ctx.fillRect(0, 0, width, height)
   const ratio = playbackProgress(clockNow.value, clockTotal.value || 1)
   const progressX = ratio * width
@@ -105,7 +108,7 @@ function paint(): void {
     }
     ctx.globalAlpha = 1
   }
-  ctx.fillStyle = '#f4f4f5'
+  ctx.fillStyle = themeInkColor()
   ctx.fillRect(Math.min(width - 1, Math.max(0, progressX)), 6, 1.5, height - 12)
 }
 
@@ -396,6 +399,11 @@ watch(sequencePeaks, () => {
   paint()
 })
 
+watch(
+  () => [globalSettings.appearance.theme, globalSettings.appearance.accent],
+  () => paint(),
+)
+
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => paint())
   if (canvas.value) resizeObserver.observe(canvas.value)
@@ -411,7 +419,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-2xl border border-zinc-700 bg-black shadow-2xl">
+  <div class="preview-well overflow-hidden rounded-2xl border border-line shadow-2xl">
     <audio ref="primary" class="hidden" preload="auto" />
     <audio ref="secondary" class="hidden" preload="auto" />
     <div class="px-3 pt-3">
@@ -429,7 +437,7 @@ onBeforeUnmount(() => {
       />
     </div>
     <div class="w-full px-3 pb-3 pt-2">
-      <div class="flex items-center gap-3 text-white">
+      <div class="flex items-center gap-3 text-ink">
         <button class="cursor-pointer" type="button" :aria-label="playing ? 'Pause' : 'Play'" @click="toggle">
           <Pause v-if="playing" :size="18" />
           <Play v-else :size="18" />
@@ -439,7 +447,7 @@ onBeforeUnmount(() => {
           <Volume2 v-else :size="18" />
         </button>
         <span class="text-sm tabular-nums">{{ formatClock(clockNow) }} / {{ formatClock(clockTotal) }}</span>
-        <span class="truncate text-xs text-zinc-400">{{ mixMode ? 'Server mix' : audible ? store.displayName(audible) : '' }}</span>
+        <span class="truncate text-xs text-faint">{{ mixMode ? 'Server mix' : audible ? store.displayName(audible) : '' }}</span>
       </div>
       <p v-if="error" class="mt-2 text-xs text-red-300">{{ error }}</p>
     </div>

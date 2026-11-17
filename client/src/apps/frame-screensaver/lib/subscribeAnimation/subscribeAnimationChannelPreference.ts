@@ -3,13 +3,37 @@ import {
   sanitizeSubscribeAnimation,
   type SubscribeAnimationSettings,
 } from '@shared/screensaverSubscribeAnimation'
+import { youtubeHandleFromUrl } from '@shared/youtubeChannel'
 import { isYoutubeChannelId } from '@shared/youtubeChannelId'
+import type { YoutubeChannelBackupRecord } from '@shared/settingsBackup'
 
 const STORAGE_KEY = 'ribo-screensaver-subscribe-channels'
+
+type SubscribeChannelsListener = () => void
+const channelListeners = new Set<SubscribeChannelsListener>()
+
+/** Notify when saved YouTube channels change (Global Settings fetch, project select, etc.). */
+export function onSubscribeChannelsChanged(listener: SubscribeChannelsListener): () => void {
+  channelListeners.add(listener)
+  return () => {
+    channelListeners.delete(listener)
+  }
+}
+
+function emitSubscribeChannelsChanged(): void {
+  for (const listener of channelListeners) {
+    try {
+      listener()
+    } catch {
+      // Ignore listener failures.
+    }
+  }
+}
 
 export interface SubscribeChannelPreference {
   channelId: string
   channelName: string
+  channelHandle: string | null
   channelUrl: string
   channelAvatarUrl: string | null
   channelSubscriberCount: string | null
@@ -37,9 +61,14 @@ function normalizeChannel(raw: Partial<SubscribeChannelPreference> | null | unde
     typeof raw.channelUrl === 'string' && raw.channelUrl.trim()
       ? raw.channelUrl.trim().slice(0, 600)
       : `https://www.youtube.com/channel/${channelId}`
+  const handleFromField =
+    typeof raw.channelHandle === 'string' && raw.channelHandle.trim()
+      ? raw.channelHandle.trim().replace(/^@/, '').slice(0, 64)
+      : null
   return {
     channelId,
     channelName,
+    channelHandle: handleFromField ?? youtubeHandleFromUrl(channelUrl),
     channelUrl,
     channelAvatarUrl:
       typeof raw.channelAvatarUrl === 'string' && raw.channelAvatarUrl.trim()
@@ -73,6 +102,7 @@ export function mergeSubscribeChannelsFromServer(
     const merged = normalizeChannel({
       channelId: remote.channelId,
       channelName: remote.channelName ?? existing?.channelName ?? remote.channelId,
+      channelHandle: existing?.channelHandle ?? null,
       channelUrl: remote.channelUrl ?? existing?.channelUrl ?? undefined,
       channelAvatarUrl: remote.avatarUrl ?? existing?.channelAvatarUrl ?? null,
       channelSubscriberCount: remote.subscriberCount ?? existing?.channelSubscriberCount ?? null,
@@ -90,6 +120,7 @@ export function mergeSubscribeChannelsFromServer(
         ? channels[0]?.channelId ?? null
         : store.selectedChannelId ?? channels[0]?.channelId ?? null
   writeStore({ selectedChannelId, channels })
+  emitSubscribeChannelsChanged()
   return channels
 }
 
@@ -150,6 +181,11 @@ export function getSelectedSubscribeChannelId(): string | null {
   return readStore().selectedChannelId
 }
 
+/** Alias: selected channel is the Global Settings default channel. */
+export function getDefaultSubscribeChannelId(): string | null {
+  return getSelectedSubscribeChannelId()
+}
+
 export function readSubscribeChannelPreference(channelId?: string | null): SubscribeChannelPreference | null {
   const store = readStore()
   const id = channelId ?? store.selectedChannelId
@@ -165,19 +201,30 @@ export function selectSubscribeChannelPreference(channelId: string): SubscribeCh
     item.channelId === channelId ? { ...item, updatedAt: Date.now() } : item,
   )
   writeStore({ channels, selectedChannelId: channelId })
+  emitSubscribeChannelsChanged()
   return channels.find((item) => item.channelId === channelId) ?? found
 }
 
+export function setDefaultSubscribeChannel(channelId: string): SubscribeChannelPreference | null {
+  return selectSubscribeChannelPreference(channelId)
+}
+
 export function upsertSubscribeChannelPreference(
-  settings: Pick<
-    SubscribeAnimationSettings,
-    'channelId' | 'channelName' | 'channelUrl' | 'channelAvatarUrl' | 'channelSubscriberCount' | 'channelCardTheme'
-  >,
+  settings: Partial<
+    Pick<
+      SubscribeAnimationSettings,
+      'channelId' | 'channelName' | 'channelUrl' | 'channelAvatarUrl' | 'channelSubscriberCount' | 'channelCardTheme'
+    >
+  > & {
+    channelId?: string | null
+    channelHandle?: string | null
+  },
   options?: { select?: boolean },
 ): SubscribeChannelPreference | null {
   const next = normalizeChannel({
     channelId: settings.channelId ?? undefined,
     channelName: settings.channelName,
+    channelHandle: settings.channelHandle ?? youtubeHandleFromUrl(settings.channelUrl),
     channelUrl: settings.channelUrl ?? undefined,
     channelAvatarUrl: settings.channelAvatarUrl,
     channelSubscriberCount: settings.channelSubscriberCount,
@@ -188,14 +235,43 @@ export function upsertSubscribeChannelPreference(
   const store = readStore()
   const index = store.channels.findIndex((item) => item.channelId === next.channelId)
   const channels = [...store.channels]
-  if (index >= 0) channels[index] = { ...channels[index]!, ...next, updatedAt: Date.now() }
-  else channels.push(next)
+  if (index >= 0) {
+    const prev = channels[index]!
+    channels[index] = {
+      ...prev,
+      ...next,
+      // Preserve previously valid metadata when a refresh omits fields.
+      channelAvatarUrl: next.channelAvatarUrl ?? prev.channelAvatarUrl,
+      channelSubscriberCount: next.channelSubscriberCount ?? prev.channelSubscriberCount,
+      channelHandle: next.channelHandle ?? prev.channelHandle,
+      updatedAt: Date.now(),
+    }
+  } else {
+    channels.push(next)
+  }
   const select = options?.select !== false
   writeStore({
     channels,
     selectedChannelId: select ? next.channelId : store.selectedChannelId ?? next.channelId,
   })
-  return next
+  emitSubscribeChannelsChanged()
+  return channels.find((item) => item.channelId === next.channelId) ?? next
+}
+
+/**
+ * Remove a channel from the registry. Does not delete Subscribe Animation caches.
+ * Returns false when the channel is missing.
+ */
+export function removeSubscribeChannelPreference(channelId: string): boolean {
+  if (!isYoutubeChannelId(channelId)) return false
+  const store = readStore()
+  if (!store.channels.some((item) => item.channelId === channelId)) return false
+  const channels = store.channels.filter((item) => item.channelId !== channelId)
+  const selectedChannelId =
+    store.selectedChannelId === channelId ? channels[0]?.channelId ?? null : store.selectedChannelId
+  writeStore({ channels, selectedChannelId })
+  emitSubscribeChannelsChanged()
+  return true
 }
 
 export function applyChannelPreferenceToSettings(
@@ -223,4 +299,85 @@ export function defaultSubscribeAnimationWithPreference(): SubscribeAnimationSet
 
 export function rememberSubscribeChannelFromSettings(settings: SubscribeAnimationSettings): void {
   upsertSubscribeChannelPreference(settings, { select: true })
+}
+
+export function exportChannelsForBackup(): {
+  channels: YoutubeChannelBackupRecord[]
+  defaultChannelId: string | null
+} {
+  const store = readStore()
+  return {
+    defaultChannelId: store.selectedChannelId,
+    channels: store.channels.map((channel) => ({
+      channelId: channel.channelId,
+      channelName: channel.channelName,
+      channelHandle: channel.channelHandle,
+      channelUrl: channel.channelUrl,
+      channelAvatarUrl: channel.channelAvatarUrl,
+      channelSubscriberCount: channel.channelSubscriberCount,
+      updatedAt: channel.updatedAt,
+    })),
+  }
+}
+
+export function importChannelsFromBackup(options: {
+  channels: YoutubeChannelBackupRecord[]
+  defaultChannelId?: string | null
+  replaceExisting?: boolean
+}): void {
+  const store = options.replaceExisting ? emptyStore() : readStore()
+  const byId = new Map(store.channels.map((item) => [item.channelId, item]))
+  for (const incoming of options.channels) {
+    const normalized = normalizeChannel({
+      channelId: incoming.channelId,
+      channelName: incoming.channelName,
+      channelHandle: incoming.channelHandle,
+      channelUrl: incoming.channelUrl,
+      channelAvatarUrl: incoming.channelAvatarUrl,
+      channelSubscriberCount: incoming.channelSubscriberCount,
+      updatedAt: incoming.updatedAt,
+      channelCardTheme: byId.get(incoming.channelId)?.channelCardTheme ?? 'light',
+    })
+    if (!normalized) continue
+    const existing = byId.get(normalized.channelId)
+    if (existing) {
+      byId.set(normalized.channelId, {
+        ...existing,
+        ...normalized,
+        channelAvatarUrl: normalized.channelAvatarUrl ?? existing.channelAvatarUrl,
+        channelSubscriberCount: normalized.channelSubscriberCount ?? existing.channelSubscriberCount,
+        channelHandle: normalized.channelHandle ?? existing.channelHandle,
+        updatedAt: Math.max(existing.updatedAt, normalized.updatedAt),
+      })
+    } else {
+      byId.set(normalized.channelId, normalized)
+    }
+  }
+  const channels = [...byId.values()]
+  let selectedChannelId = store.selectedChannelId
+  if (options.defaultChannelId && byId.has(options.defaultChannelId)) {
+    // Deterministic: keep existing default unless none set.
+    if (!selectedChannelId || !byId.has(selectedChannelId)) {
+      selectedChannelId = options.defaultChannelId
+    }
+  }
+  if (selectedChannelId && !byId.has(selectedChannelId)) {
+    selectedChannelId = channels[0]?.channelId ?? null
+  }
+  writeStore({ channels, selectedChannelId })
+  emitSubscribeChannelsChanged()
+}
+
+/** Fields that affect Subscribe Animation cache identity / painted channel chrome. */
+export function channelMetadataAffectsCache(
+  before: SubscribeChannelPreference | null,
+  after: SubscribeChannelPreference | null,
+): boolean {
+  if (!before || !after) return false
+  if (before.channelId !== after.channelId) return true
+  return (
+    before.channelName !== after.channelName ||
+    before.channelAvatarUrl !== after.channelAvatarUrl ||
+    before.channelSubscriberCount !== after.channelSubscriberCount
+  )
 }

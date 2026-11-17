@@ -6,7 +6,7 @@ const store = useImageUpscalerStore()
 </script>
 
 <template>
-  <div class="grid h-full min-h-[240px] place-items-center overflow-hidden rounded-xl border border-zinc-800 bg-black">
+  <div class="preview-well grid h-full min-h-[240px] place-items-center overflow-hidden rounded-xl border border-line">
     <img
       v-if="store.selected"
       :src="store.selected.previewUrl"

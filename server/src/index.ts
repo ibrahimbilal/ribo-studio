@@ -69,6 +69,10 @@ import { imageUpscalerRouter, purgeImageUpscaler, sweepImageUpscaler } from './i
 import { audioLooperRouter } from './audioLooperRoutes'
 import { createScreensaverAudioRouter } from './screensaverAudioRoutes'
 import { createSubscribeAnimationCacheRouter } from './subscribeAnimationCacheRoutes'
+import { createGlobalSettingsRouter } from './globalSettingsRoutes'
+import { loadServerGlobalSettings, getServerGlobalSettings } from './globalSettings'
+import { getStorageOverview, invalidateStorageOverviewCache } from './storageOverview'
+import { getSystemInfo, isLocalRequestHost, openLocalPath, resolveOpenTarget } from './systemInfo'
 import { getAudioAsset } from './audioAssets'
 import { materializeCachedAnimation } from './subscribeAnimationCache'
 import { isValidCacheKeyHex } from '../../shared/subscribeAnimationCache'
@@ -546,6 +550,15 @@ app.get('/api/storage/temp', async (_req, res) => {
   }
 })
 
+app.get('/api/storage/overview', async (req, res) => {
+  try {
+    const force = req.query.refresh === '1' || req.query.refresh === 'true'
+    res.json(await getStorageOverview(force))
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Could not measure storage.' })
+  }
+})
+
 app.post('/api/storage/temp/clean', async (_req, res) => {
   try {
     await removeAllFrames()
@@ -557,9 +570,37 @@ app.post('/api/storage/temp/clean', async (_req, res) => {
     await purgeImageUpscaler()
     await purgeTempAuxFolders()
     // subscribe-animation-cache / subscribe-animation-cache.json are intentionally retained.
+    invalidateStorageOverviewCache()
     res.json({ ok: true, bytes: await measureTempDirBytes() })
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Could not clean temp storage.' })
+  }
+})
+
+app.get('/api/system/info', async (req, res) => {
+  try {
+    res.json(await getSystemInfo(req.get('host') ?? undefined))
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Could not read system information.' })
+  }
+})
+
+app.post('/api/system/open-path', async (req, res) => {
+  try {
+    if (!isLocalRequestHost(req.get('host') ?? undefined)) {
+      res.status(403).json({ error: 'Opening folders is only available on the local server.' })
+      return
+    }
+    const target = typeof req.body?.target === 'string' ? req.body.target : ''
+    const dir = resolveOpenTarget(target)
+    if (!dir) {
+      res.status(400).json({ error: 'Unknown path target.' })
+      return
+    }
+    await openLocalPath(dir)
+    res.json({ ok: true, path: dir })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Could not open the folder.' })
   }
 })
 
@@ -706,7 +747,8 @@ app.post(
           const expectedFrames = subscribeAnimationFrameCount(project.subscribeAnimation.durationSec)
           animationDir = path.join(dir, 'anim')
           await mkdir(animationDir, { recursive: true })
-          if (animationCacheKey) {
+          const cacheEnabled = getServerGlobalSettings().storage.persistentAnimationCacheEnabled
+          if (animationCacheKey && cacheEnabled) {
             if (animationFrameFiles.length) {
               throw new ClientError(400, 'Do not upload animation frames when using a cached animation.')
             }
@@ -720,6 +762,7 @@ app.post(
               throw new ClientError(400, messageOf(error, 'Cached subscribe animation is missing or invalid.'))
             }
           } else {
+            if (animationCacheKey && !cacheEnabled) animationCacheKey = null
             if (animationFrameFiles.length !== expectedFrames) {
               throw new ClientError(400, `Expected ${expectedFrames} animation frames, received ${animationFrameFiles.length}.`)
             }
@@ -848,6 +891,7 @@ app.use('/api/image-upscaler', imageUpscalerRouter)
 app.use('/api/audio-looper', audioLooperRouter)
 app.use('/api/screensaver', createScreensaverAudioRouter())
 app.use('/api/screensaver', createSubscribeAnimationCacheRouter())
+app.use('/api', createGlobalSettingsRouter())
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Not found.' })
@@ -1312,6 +1356,7 @@ const host = process.env.HOST || (process.env.PORT ? '0.0.0.0' : '127.0.0.1')
 
 async function main(): Promise<void> {
   await ensureStorage()
+  await loadServerGlobalSettings()
   await ensureFrames()
   await sweepStorage()
   await purgeJobDirs(jobIdsInUse())

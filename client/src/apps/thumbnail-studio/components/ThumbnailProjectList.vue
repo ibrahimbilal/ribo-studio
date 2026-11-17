@@ -161,7 +161,7 @@ async function downloadAll() {
 
         <div class="mt-2 flex" @click.stop>
           <button
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             :class="uploadIconClass(project.upload.state)"
             type="button"
             aria-label="Upload details"
@@ -173,7 +173,7 @@ async function downloadAll() {
             <Info :size="16" />
           </button>
           <button
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Rename project"
             title="Rename"
@@ -182,7 +182,7 @@ async function downloadAll() {
             <Pencil :size="16" />
           </button>
           <button
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Duplicate project"
             title="Duplicate"
@@ -191,7 +191,7 @@ async function downloadAll() {
             <Copy :size="16" />
           </button>
           <button
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Download thumbnail"
             title="Download"
@@ -200,7 +200,7 @@ async function downloadAll() {
             <Download :size="16" />
           </button>
           <button
-            class="ml-auto rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-red-300 hover:bg-red-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action icon-action--danger ml-auto"
             type="button"
             aria-label="Delete project"
             title="Delete"

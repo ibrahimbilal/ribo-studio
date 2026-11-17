@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-density="comfortable" data-ui-animations="on">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,6 +10,46 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/logo.webmanifest" />
+    <script>
+      /* Prevent theme flash before Vue hydrates Global Settings. UI chrome only. */
+      (function () {
+        try {
+          var raw = localStorage.getItem('ribo-global-settings')
+          var appearance = raw ? JSON.parse(raw).appearance : null
+          var root = document.documentElement
+          var theme = appearance && appearance.theme ? appearance.theme : 'dark'
+          var resolved = theme
+          if (theme === 'system') {
+            resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          if (resolved !== 'light' && resolved !== 'dark') resolved = 'dark'
+          root.dataset.theme = resolved
+          root.style.colorScheme = resolved
+          if (appearance && appearance.density) root.dataset.density = appearance.density
+          if (appearance && appearance.interfaceAnimations === false) root.dataset.uiAnimations = 'off'
+          var accents = {
+            default: ['#0078f8', '#2898ff', '#0060c4', '#ffffff', '#132d52'],
+            blue: ['#2563eb', '#3b82f6', '#1d4ed8', '#ffffff', '#1e3a5f'],
+            indigo: ['#4f46e5', '#6366f1', '#4338ca', '#ffffff', '#2e2a5a'],
+            purple: ['#9333ea', '#a855f7', '#7e22ce', '#ffffff', '#3b2458'],
+            teal: ['#0d9488', '#14b8a6', '#0f766e', '#ffffff', '#1a3d3a'],
+            green: ['#16a34a', '#22c55e', '#15803d', '#ffffff', '#1a3d28'],
+            orange: ['#ea580c', '#f97316', '#c2410c', '#ffffff', '#4a2c18'],
+            red: ['#dc2626', '#ef4444', '#b91c1c', '#ffffff', '#4a1c1c'],
+            slate: ['#64748b', '#94a3b8', '#475569', '#ffffff', '#2a3038'],
+          }
+          var accent = appearance && appearance.accent && accents[appearance.accent] ? appearance.accent : 'default'
+          var p = accents[accent]
+          root.style.setProperty('--color-brand', p[0])
+          root.style.setProperty('--color-brand-hover', p[1])
+          root.style.setProperty('--color-brand-deep', p[2])
+          root.style.setProperty('--color-brand-on', p[3])
+          root.style.setProperty('--color-brand-surface', p[4])
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', p[0])
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

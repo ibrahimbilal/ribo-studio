@@ -337,7 +337,7 @@ async function openSoundSettingsFor(id: string) {
 
         <div class="mt-2 flex" @click.stop>
           <button
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             :class="uploadIconClass(project.upload.state)"
             type="button"
             aria-label="Upload details"
@@ -350,7 +350,7 @@ async function openSoundSettingsFor(id: string) {
           </button>
           <button
             v-if="project.audio.present"
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             :class="audioIconClass(project.audio.state)"
             type="button"
             aria-label="Open Sound settings"
@@ -364,7 +364,7 @@ async function openSoundSettingsFor(id: string) {
             <Music :size="16" />
           </button>
           <button
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Rename project"
             title="Rename"
@@ -373,7 +373,7 @@ async function openSoundSettingsFor(id: string) {
             <Pencil :size="16" />
           </button>
           <button
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Duplicate project"
             title="Duplicate"
@@ -383,7 +383,7 @@ async function openSoundSettingsFor(id: string) {
           </button>
           <button
             v-if="canImageHandoff(project)"
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Create Thumbnail"
             title="Create Thumbnail"
@@ -393,7 +393,7 @@ async function openSoundSettingsFor(id: string) {
           </button>
           <button
             v-if="canImageHandoff(project)"
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Send image to Image Motion Shorts"
             title="Send image to Image Motion Shorts"
@@ -403,7 +403,7 @@ async function openSoundSettingsFor(id: string) {
           </button>
           <button
             v-if="project.render.outputUrl && !project.outputMissing"
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Download video"
             title="Download"
@@ -413,7 +413,7 @@ async function openSoundSettingsFor(id: string) {
           </button>
           <button
             v-if="project.render.status === 'failed'"
-            class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            class="icon-action"
             type="button"
             aria-label="Retry render"
             title="Retry"
@@ -422,7 +422,7 @@ async function openSoundSettingsFor(id: string) {
             <RotateCcw :size="16" />
           </button>
           <button
-            class="ml-auto rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-red-300 hover:bg-red-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40"
+            class="icon-action icon-action--danger ml-auto"
             type="button"
             aria-label="Delete project"
             title="Delete"
