@@ -10,10 +10,6 @@ import {
   DURATION_PRESETS,
   estimateOutputBytes,
   formatDurationLabel,
-  isEncoderChoice,
-  isScreensaverCfrQuality,
-  isScreensaverProfile,
-  isScreensaverRenderMode,
   MAX_DURATION_SECONDS,
   MIN_DURATION_SECONDS,
   profileFps,
@@ -45,10 +41,13 @@ import {
   getSelectedSubscribeChannelId,
   listSubscribeChannelPreferences,
   mergeSubscribeChannelsFromServer,
+  onSubscribeChannelsChanged,
+  readSubscribeChannelPreference,
   rememberSubscribeChannelFromSettings,
   selectSubscribeChannelPreference,
   type SubscribeChannelPreference,
 } from '../lib/subscribeAnimation/subscribeAnimationChannelPreference'
+import { registerSubscribeChannelFromYoutubeUrl } from '../lib/subscribeAnimation/registerSubscribeChannelFromYoutubeUrl'
 import type { SubscribeAnimationCachePrepStatus } from '@shared/subscribeAnimationCache'
 import { isDynamicSubscribeAnimationStyle } from '@shared/subscribeAnimationTemplates'
 import { defineStore } from 'pinia'
@@ -69,6 +68,7 @@ import { SCREENSAVER_AUDIO_MAX_BYTES } from '@shared/screensaverAudio'
 import { idleExport, isActiveExportPhase, pickDisplayExportState } from '../../../lib/exportState'
 import { useManagedExportJobs } from '../../../lib/managedExportJobs'
 import { pageWasReloaded } from '../../../lib/pageNavigation'
+import { buildExportDownloadName } from '../../../lib/exportFilename'
 import { triggerDownload } from '../../../lib/triggerDownload'
 import { usePlatformStore } from '../../../stores/platform'
 import type { ExportState } from '../../../types'
@@ -93,12 +93,9 @@ import {
 import { composeExportPng } from '../lib/exportComposeWorker'
 import { resolveBuiltinFrameUrl } from '../lib/defaultFrames'
 import { frameImageUrl } from '../lib/frameImageUrl'
-import {
-  readPreviewRendererMode,
-  writePreviewRendererMode,
-  type PreviewRendererMode,
-} from '../lib/previewRendererPreference'
+import type { PreviewRendererMode } from '../lib/previewRendererPreference'
 import type { ScreensaverRendererBackend } from '../lib/render/types'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { ensureServerUploadCleanupOnClose } from '../../../lib/serverUploadCleanup'
 import { DUPLICATE_EXPORT_MESSAGE, screensaverExportFingerprint } from '../../../lib/exportFingerprint'
 import { submitScreensaverExport } from '../lib/screensaverExport'
@@ -114,8 +111,7 @@ import {
   type ExportAllDecision,
 } from '../lib/exportAllPlan'
 import { subscribeAnimationOverlayOnOutput } from '../lib/subscribeAnimation/subscribeAnimationLayout'
-import { ingestSubscribeChannelAvatar, preloadSubscribeChannelAvatar } from '../lib/subscribeAnimation/subscribeAnimationChannelAvatar'
-import { resolveSubscribeAvatarContentHash } from '../lib/subscribeAnimation/subscribeAnimationAvatarHash'
+import { preloadSubscribeChannelAvatar } from '../lib/subscribeAnimation/subscribeAnimationChannelAvatar'
 import {
   getOrRenderSubscribeAnimation,
   onSubscribeCacheStatusChange,
@@ -284,13 +280,36 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   const uploadError = ref<string | null>(null)
   const sourceUploads = ref<Record<string, SourceUploadStatus>>({})
 
+  const globalSettings = useGlobalSettingsStore()
   const outputWidth = ref<number>(DEFAULT_SCREENSAVER_OUTPUT.width)
   const outputHeight = ref<number>(DEFAULT_SCREENSAVER_OUTPUT.height)
   const fps = ref(DEFAULT_CFR_FPS)
-  const profile = ref<ScreensaverProfile>('balanced')
-  const encoder = ref<EncoderChoice>('cpu')
-  const renderingMode = ref<ScreensaverRenderMode>(DEFAULT_SCREENSAVER_RENDER_MODE)
-  const cfrQuality = ref<ScreensaverCfrQuality>(DEFAULT_SCREENSAVER_CFR_QUALITY)
+  /** Shared via Global Settings — not per-project. */
+  const profile = computed({
+    get: () => globalSettings.screensaver.profile,
+    set: (value: ScreensaverProfile) => globalSettings.patchScreensaver({ profile: value }),
+  })
+  const encoder = computed({
+    get: () => globalSettings.screensaver.encoder,
+    set: (value: EncoderChoice) => globalSettings.patchScreensaver({ encoder: value }),
+  })
+  const renderingMode = computed({
+    get: () => globalSettings.screensaver.renderingMode,
+    set: (value: ScreensaverRenderMode) => globalSettings.patchScreensaver({ renderingMode: value }),
+  })
+  const cfrQuality = computed({
+    get: () => globalSettings.screensaver.cfrQuality,
+    set: (value: ScreensaverCfrQuality) => globalSettings.patchScreensaver({ cfrQuality: value }),
+  })
+  const previewRenderer = computed({
+    get: () => globalSettings.screensaver.previewRenderer,
+    set: (value: PreviewRendererMode) => globalSettings.patchScreensaver({ previewRenderer: value }),
+  })
+  /** Video / loop exports always use Fast VFR even when the global preference is Optimized CFR. */
+  const effectiveRenderingMode = computed<ScreensaverRenderMode>(() => {
+    if (mediaKind.value === 'video' || mode.value === 'loop') return 'fast-vfr'
+    return renderingMode.value
+  })
   const composition = ref<ScreensaverComposition>(defaultComposition())
   const frames = ref<api.ScreensaverFrame[]>([])
   const framesLoaded = ref(false)
@@ -301,7 +320,6 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   const cropEditing = ref(false)
   const previewInteracting = ref(false)
   let previewInteractTimer = 0
-  const previewRenderer = ref<PreviewRendererMode>(readPreviewRendererMode())
   const previewRendererActive = ref<ScreensaverRendererBackend | 'none'>('none')
   const encoderOptions = ref<Awaited<ReturnType<typeof api.screensaverEncoders>>['encoders']>([])
   const autoStill = ref<string | null>(null)
@@ -415,7 +433,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       durationSeconds.value,
       hasOutAudio,
       mode.value === 'static' ? 'still' : 'motion',
-      { renderingMode: renderingMode.value, fps: fps.value },
+      { renderingMode: effectiveRenderingMode.value, fps: fps.value },
     )
   })
 
@@ -449,7 +467,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       audioAssetId: audioAssetId.value,
       profile: profile.value,
       encoder: encoder.value,
-      renderingMode: renderingMode.value,
+      renderingMode: effectiveRenderingMode.value,
       cfrQuality: cfrQuality.value,
       composition: cloneComposition(composition.value),
       subscribeAnimation: overlay
@@ -471,9 +489,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     if (uploadState.value !== 'ready' || !serverId.value) return 'Upload an image or video first.'
     if (mode.value === 'loop' && mediaKind.value !== 'video') return 'Looping mode needs a video source.'
     if (mode.value === 'static' && mediaKind.value !== 'image') return 'Static art mode needs an image source.'
-    if (renderingMode.value === 'optimized-cfr' && (mode.value !== 'static' || mediaKind.value !== 'image')) {
-      return 'Optimized CFR is only available for static image exports. Switch to Fast VFR for video.'
-    }
+    // Video/loop exports automatically use Fast VFR via effectiveRenderingMode.
     if (durationSeconds.value < MIN_DURATION_SECONDS || durationSeconds.value > MAX_DURATION_SECONDS) {
       return `Duration must be between ${formatDurationLabel(MIN_DURATION_SECONDS)} and ${formatDurationLabel(MAX_DURATION_SECONDS)}.`
     }
@@ -1184,11 +1200,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       saved.audioMode === 'upload' || saved.audioFileName || saved.audioAssetId ? 'validating' : 'idle'
     audioError.value = null
     audioUploadProgress.value = 0
-    profile.value = isScreensaverProfile(saved.profile) ? saved.profile : 'balanced'
-    encoder.value = isEncoderChoice(saved.encoder) ? saved.encoder : 'cpu'
-    // Older saves omit renderingMode — keep Fast VFR; do not migrate to Optimized CFR.
-    renderingMode.value = isScreensaverRenderMode(saved.renderingMode) ? saved.renderingMode : 'fast-vfr'
-    cfrQuality.value = isScreensaverCfrQuality(saved.cfrQuality) ? saved.cfrQuality : DEFAULT_SCREENSAVER_CFR_QUALITY
+    // Rendering mode, quality, encoder, and profile are Global Settings — not restored per project.
     composition.value =
       saved.version !== 1 && saved.composition
         ? clampComposition(saved.composition)
@@ -1296,14 +1308,10 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     sourceFileSize.value = file.size
     mediaKind.value = kind
     mode.value = kind === 'image' ? 'static' : 'loop'
+    // Output encoding prefs stay in Global Settings; only adjust fps for the active media kind.
     if (kind === 'image') {
-      renderingMode.value = DEFAULT_SCREENSAVER_RENDER_MODE
-      cfrQuality.value = DEFAULT_SCREENSAVER_CFR_QUALITY
-      profile.value = 'balanced'
-      fps.value = DEFAULT_CFR_FPS
+      fps.value = renderingMode.value === 'optimized-cfr' ? DEFAULT_CFR_FPS : profileFps(profile.value)
     } else {
-      renderingMode.value = 'fast-vfr'
-      profile.value = 'animated'
       fps.value = 30
     }
     if (name.value.trim() === defaultProject().name) name.value = projectNameFromFile(file)
@@ -1427,11 +1435,11 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       sourceDuration,
       hasAudio: hasSourceAudio,
       thumbnail,
-      fps: kind === 'image' ? DEFAULT_CFR_FPS : 30,
-      profile: kind === 'image' ? 'balanced' : 'animated',
-      encoder: 'cpu',
-      renderingMode: kind === 'image' ? DEFAULT_SCREENSAVER_RENDER_MODE : 'fast-vfr',
-      cfrQuality: DEFAULT_SCREENSAVER_CFR_QUALITY,
+      fps: kind === 'image' ? (renderingMode.value === 'optimized-cfr' ? DEFAULT_CFR_FPS : profileFps(profile.value)) : 30,
+      profile: profile.value,
+      encoder: encoder.value,
+      renderingMode: kind === 'image' ? renderingMode.value : 'fast-vfr',
+      cfrQuality: cfrQuality.value,
       composition: compositionForFit(
         'contain',
         sourceWidth || 1,
@@ -1632,10 +1640,8 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     audioAvailability.value = 'idle'
     audioUploadProgress.value = 0
     audioError.value = null
-    profile.value = 'balanced'
-    encoder.value = 'cpu'
-    renderingMode.value = DEFAULT_SCREENSAVER_RENDER_MODE
-    cfrQuality.value = DEFAULT_SCREENSAVER_CFR_QUALITY
+    // Keep Global Settings output prefs; reset only project-local state.
+    fps.value = renderingMode.value === 'optimized-cfr' ? DEFAULT_CFR_FPS : profileFps(profile.value)
     composition.value = defaultComposition()
     history.value = [cloneComposition(composition.value)]
     historyIndex.value = 0
@@ -2150,34 +2156,21 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     }
     subscribeChannelLookupLoading.value = true
     try {
-      const result = await api.lookupYoutubeChannel(target)
-      await ingestSubscribeChannelAvatar(result.avatarUrl, result.avatarDataUrl)
-      const avatarContentHash = await resolveSubscribeAvatarContentHash(result.avatarUrl)
-      if (result.channelId) {
-        try {
-          await api.upsertSubscribeAnimationChannel({
-            channelId: result.channelId,
-            channelName: result.channelName,
-            channelUrl: result.channelUrl,
-            subscriberCount: result.subscriberCount,
-            avatarContentHash,
-            avatarUrl: result.avatarUrl,
-          })
-        } catch {
-          // Channel metadata cache is best-effort.
-        }
-      }
-      replaceSubscribeAnimation({
-        channelUrl: result.channelUrl ?? target,
-        channelId: result.channelId,
-        channelName: result.channelName ?? subscribeAnimation.value.channelName,
-        channelAvatarUrl: result.avatarUrl,
-        channelSubscriberCount: result.subscriberCount,
+      const { settings, lookup } = await registerSubscribeChannelFromYoutubeUrl(target, {
+        channelCardTheme: subscribeAnimation.value.channelCardTheme,
+        prepareCacheWidth:
+          subscribeAnimation.value.style === 'channel-card' ? outputWidth.value : null,
       })
-      rememberSubscribeChannelFromSettings(subscribeAnimation.value)
+      replaceSubscribeAnimation({
+        channelUrl: settings.channelUrl,
+        channelId: settings.channelId,
+        channelName: settings.channelName || subscribeAnimation.value.channelName,
+        channelAvatarUrl: settings.channelAvatarUrl,
+        channelSubscriberCount: settings.channelSubscriberCount,
+      })
       refreshSubscribeChannelOptions()
-      toast(result.channelName ? `Loaded ${result.channelName}.` : 'Channel info updated.', 'success')
-      if (result.channelId && subscribeAnimation.value.style === 'channel-card') {
+      toast(lookup.channelName ? `Loaded ${lookup.channelName}.` : 'Channel info updated.', 'success')
+      if (settings.channelId && subscribeAnimation.value.style === 'channel-card') {
         void ensureSelectedSubscribeAnimationPrepared(10)
       }
     } catch (error) {
@@ -2196,6 +2189,23 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       subscribeChannelLookupLoading.value = false
     }
   }
+
+  onSubscribeChannelsChanged(() => {
+    refreshSubscribeChannelOptions()
+    const selectedId = getSelectedSubscribeChannelId()
+    const pref = selectedId ? readSubscribeChannelPreference(selectedId) : null
+    if (!pref) return
+    if (subscribeAnimation.value.channelId && subscribeAnimation.value.channelId !== pref.channelId) {
+      // Keep an explicitly different project channel until the user picks from the dropdown.
+      return
+    }
+    const next = applyChannelPreferenceToSettings(subscribeAnimation.value, pref)
+    subscribeAnimation.value = next
+    void preloadSubscribeChannelAvatar(next.channelAvatarUrl)
+    void refreshSubscribeCacheKey().then(() => {
+      if (next.enabled && next.style === 'channel-card') void ensureSelectedSubscribeAnimationPrepared(8)
+    })
+  })
 
   watch(
     () => subscribeAnimation.value.channelAvatarUrl,
@@ -2309,16 +2319,14 @@ export const useScreensaverStore = defineStore('screensaver', () => {
 
   function setProfile(next: ScreensaverProfile) {
     profile.value = next
-    if (renderingMode.value === 'fast-vfr') fps.value = profileFps(next)
+    if (effectiveRenderingMode.value === 'fast-vfr') fps.value = profileFps(next)
   }
 
   function setRenderingMode(next: ScreensaverRenderMode) {
     renderingMode.value = next
     if (next === 'optimized-cfr') {
       if (!(SCREENSAVER_CFR_FPS as readonly number[]).includes(fps.value)) fps.value = DEFAULT_CFR_FPS
-      if (mode.value === 'loop' || mediaKind.value === 'video') {
-        // Optimized CFR is static-image only; keep selection but export will require static mode.
-      }
+      // Optimized CFR is static-image only; video/loop exports use effectiveRenderingMode → fast-vfr.
     } else if (!(SCREENSAVER_FPS as readonly number[]).includes(fps.value)) {
       fps.value = profileFps(profile.value)
     }
@@ -2368,7 +2376,6 @@ export const useScreensaverStore = defineStore('screensaver', () => {
 
   function setPreviewRenderer(mode: PreviewRendererMode): void {
     previewRenderer.value = mode
-    writePreviewRendererMode(mode)
     if (mode === 'webgl2') {
       try {
         sessionStorage.removeItem('ribo-screensaver-webgl-failed')
@@ -2557,6 +2564,12 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     const mediaId = serverId.value
     const kind = mediaKind.value
     if (!mediaId || !kind) return
+    const downloadFilename = buildExportDownloadName({
+      projectName: filename,
+      appName: 'Screensaver',
+      resolution: `${outputWidth.value}x${outputHeight.value}`,
+      extension: 'mp4',
+    })
 
     const snapshot: ScreensaverExportSnapshot = {
       filename,
@@ -2577,7 +2590,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     enqueueScreensaverExportJob({
       capturedProjectId: projectId.value,
       displayName: filename,
-      downloadFilename: `${filename}.mp4`,
+      downloadFilename,
       fingerprint: currentExportFingerprint.value,
       kind,
       snapshot,
@@ -2611,7 +2624,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
         ? audioAvailability.value === 'available' && Boolean(audioAssetId.value || audioFile)
         : Boolean(card.audioAssetId) || audioIds.value.includes(card.id)
       const savedMode = isActive ? mode.value : undefined
-      const savedRenderingMode = isActive ? renderingMode.value : undefined
+      const savedRenderingMode = isActive ? effectiveRenderingMode.value : undefined
       const summary = projects.value.find((item) => item.id === card.id)
       return {
         id: card.id,
@@ -2622,7 +2635,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
         uploadReady: card.upload.state === 'ready' && Boolean(card.serverId),
         renderStatus: card.render.status,
         mode: (savedMode ?? 'static') as 'static' | 'loop',
-        renderingMode: savedRenderingMode ?? 'optimized-cfr',
+        renderingMode: savedRenderingMode ?? (card.mediaKind === 'video' ? 'fast-vfr' : renderingMode.value),
         durationSeconds: card.durationSeconds,
         audioMode: card.audioMode,
         audioAvailable: card.audioMode !== 'upload' || audioAvailable,
@@ -3180,6 +3193,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     profile,
     encoder,
     renderingMode,
+    effectiveRenderingMode,
     cfrQuality,
     composition,
     frames,

@@ -97,7 +97,10 @@ onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
-  <div ref="stage" class="relative grid min-h-[240px] min-w-0 flex-1 place-items-center overflow-hidden bg-chrome p-4">
+  <div
+    ref="stage"
+    class="preview-well relative grid min-h-[240px] min-w-0 flex-1 place-items-center overflow-hidden rounded-xl p-4"
+  >
     <div ref="frame" class="relative" :style="{ width: `${display.width}px`, height: `${display.height}px` }">
       <canvas ref="canvasRef" class="block h-full w-full rounded-sm shadow-2xl" />
       <ThumbnailBadge
@@ -114,7 +117,7 @@ onBeforeUnmount(() => observer?.disconnect())
         @pointercancel="onPointerUp"
       />
     </div>
-    <p v-if="store.hydrated && !store.hasImage" class="pointer-events-none absolute bottom-4 left-1/2 z-20 -translate-x-1/2 text-xs text-zinc-500">
+    <p v-if="store.hydrated && !store.hasImage" class="pointer-events-none absolute bottom-4 left-1/2 z-20 -translate-x-1/2 text-xs text-faint">
       Upload a PNG, JPEG, or WebP image.
     </p>
   </div>

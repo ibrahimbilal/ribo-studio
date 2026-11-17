@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.5.0**).
+Version source of truth: root `package.json` (currently **1.6.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,16 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.6.0** (2026-11-17) — Global Settings (Appearance, Integrations, Backup & Restore, shared Screensaver/Shorts encoding prefs); header theme toggle; fixed icon-rail sidebar; dark-theme contrast fixes; channel-card cache per theme.
+- 2026-11-17 — Header quick theme toggle (light/dark) left of temp storage (`AppThemeToggle.vue`, `AppHeader.vue`).
+- 2026-11-17 — Dark theme shell/icon-action contrast after Appearance rollout (`style.css`, dashboard/sidebar/header).
+- 2026-11-17 — Global Settings extended: Appearance (theme/accent/density/UI animations), Integrations (YouTube channel registry + engines), Backup & Restore (`shared/globalSettings.ts` v2, `shared/settingsBackup.ts`, `shared/appearanceTokens.ts`, settings panels, `appearance.ts`, `index.html` boot script, `YoutubeChannelSelector.vue`).
+- 2026-11-17 — Encoding method from Global Settings drives Screensaver and both Shorts apps (Ranking + Image Motion); per-app encoder controls removed (`project.ts`, `imageMotion.ts`, StylePanel / ImageMotionSettings).
+- 2026-11-17 — YouTube channel/video URL fetch moved to Global Settings → Storage & Cache; Screensaver keeps Channel picker only (`SettingsStoragePanel.vue`, `registerSubscribeChannelFromYoutubeUrl.ts`).
+- 2026-11-17 — Subscribe channel-card cache: one entry per channel + theme; new Fetch/data replaces the previous same-theme cache (`subscribeAnimationCache.ts`).
+- 2026-11-17 — Desktop sidebar is a fixed icon rail (no expand-on-hover); app titles show as right-side tooltips. Removed `sidebarExpandOnHover` setting and `useSidebarHover` (`AppSidebar.vue`, `globalSettings.ts`).
+- 2026-11-16 — Global Settings Screensaver output: renderingMode / cfrQuality / profile / previewRenderer / encoder live in `globalSettings.screensaver` (Export panel + Screensaver Settings); exports use `effectiveRenderingMode` so video still forces Fast VFR.
+- 2026-11-16 — Global Settings v1: versioned schema `shared/globalSettings.ts`, Pinia + localStorage, server prefs `/api/global-settings`, hover-overlay sidebar Settings, modal categories (General/Storage/Performance/Export/About), storage overview + subscribe-animation cache inventory/retention, system info `/api/system/info`, threading/HW/disk hooks (`ffmpegThreading`, `encoders`, `diskSpace`).
 - Release **v1.5.0** (2026-11-16) — Screensaver preview audio player (playlist seek/Range); Looper unique playlist order; header Clear all + temp storage; floating export status; session reset for Screensaver/Thumbnail + idle audio-asset purge; Export All shortest-first; Single-Pass Direct Mux.
 - 2026-11-16 — Header notifications panel **Clear all** dismisses finished/failed/cancelled rows (`AppNotifications.vue`, `platform.clearAllNotifications`).
 - 2026-11-16 — Screensaver Export All queues eligible projects shortest duration first (`exportAllPlan.ts`).

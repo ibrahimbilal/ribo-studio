@@ -14,16 +14,21 @@ import type { SubscribeAnimationCacheKeyPayload } from '../../shared/subscribeAn
 import { isYoutubeChannelId } from '../../shared/youtubeChannelId'
 import { incomingDir } from './storage'
 import {
+  applySubscribeAnimationCacheRetention,
   clearSubscribeAnimationCache,
   getCachedAnimation,
   getSubscribeAnimationCacheStats,
   getSubscribeChannelMeta,
   listMissingStaticCacheHints,
+  listSubscribeAnimationCacheInventory,
   listSubscribeChannelMetas,
   putCachedAnimation,
   storeChannelAvatar,
   upsertSubscribeChannelMeta,
 } from './subscribeAnimationCache'
+import { cacheRetentionMs } from '../../shared/globalSettings'
+import { getServerGlobalSettings, loadServerGlobalSettings } from './globalSettings'
+import { invalidateStorageOverviewCache } from './storageOverview'
 
 const entryUpload = multer({
   dest: incomingDir,
@@ -60,6 +65,29 @@ export function createSubscribeAnimationCacheRouter(): Router {
       res.json(await getSubscribeAnimationCacheStats())
     } catch (error) {
       res.status(400).json({ error: messageOf(error, 'Could not read cache stats.') })
+    }
+  })
+
+  router.get('/subscribe-animation-cache/inventory', async (_req, res) => {
+    try {
+      await loadServerGlobalSettings()
+      const retention = cacheRetentionMs(getServerGlobalSettings().storage.cacheRetention)
+      if (retention != null) await applySubscribeAnimationCacheRetention(retention)
+      res.json(listSubscribeAnimationCacheInventory())
+    } catch (error) {
+      res.status(400).json({ error: messageOf(error, 'Could not read cache inventory.') })
+    }
+  })
+
+  router.post('/subscribe-animation-cache/retention-cleanup', async (_req, res) => {
+    try {
+      await loadServerGlobalSettings()
+      const retention = cacheRetentionMs(getServerGlobalSettings().storage.cacheRetention)
+      const result = await applySubscribeAnimationCacheRetention(retention)
+      invalidateStorageOverviewCache()
+      res.json(result)
+    } catch (error) {
+      res.status(400).json({ error: messageOf(error, 'Retention cleanup failed.') })
     }
   })
 
@@ -207,6 +235,7 @@ export function createSubscribeAnimationCacheRouter(): Router {
         channelId: typeof req.body?.channelId === 'string' ? req.body.channelId : undefined,
         cacheKey: typeof req.body?.cacheKey === 'string' ? req.body.cacheKey : undefined,
       })
+      invalidateStorageOverviewCache()
       res.json(result)
     } catch (error) {
       res.status(400).json({ error: messageOf(error, 'Could not clear cache.') })

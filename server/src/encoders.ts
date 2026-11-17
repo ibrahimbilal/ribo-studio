@@ -5,6 +5,7 @@ import type { EncoderChoice, ScreensaverProfile } from '../../shared/screensaver
 import { profileQualityTier } from '../../shared/screensaver'
 import { execFileAsync, ffmpegBinary } from './binaries'
 import { x264Params, x264Threads } from './ffmpegThreading'
+import { getServerGlobalSettings } from './globalSettings'
 import { tmpDir } from './storage'
 
 export { x264Threads }
@@ -120,6 +121,14 @@ export async function encoderCatalog(): Promise<{ version: string; encoders: Enc
   }
 }
 
+function globalHardwareMode(): 'auto' | 'enabled' | 'disabled' {
+  try {
+    return getServerGlobalSettings().performance.hardwareAcceleration
+  } catch {
+    return 'auto'
+  }
+}
+
 export async function selectEncoder(input: {
   choice: EncoderChoice
   profile?: ScreensaverProfile
@@ -132,11 +141,15 @@ export async function selectEncoder(input: {
   const profile = input.profile ?? 'balanced'
   const tier = input.tier ?? profileQualityTier(profile)
   const still = input.still ?? false
-  if (input.choice === 'cpu') {
+  const hwMode = globalHardwareMode()
+  // Project-specific encoder wins. Global HW mode only shapes Auto (and blocks Auto→HW when disabled).
+  let choice = input.choice
+  if (choice === 'auto' && hwMode === 'disabled') choice = 'cpu'
+  if (input.choice === 'cpu' || choice === 'cpu') {
     return { id: 'libx264', label: encoderLabel('libx264'), hardware: false, args: encoderArgs('libx264', tier, still) }
   }
-  if (input.choice !== 'auto') {
-    const id = input.choice
+  if (choice !== 'auto') {
+    const id = choice
     const check = await verifyEncoder(id, input.width, input.height, await loadCache())
     if (!check.ok) {
       throw new EncoderRejected(
@@ -146,7 +159,18 @@ export async function selectEncoder(input: {
     return { id, label: encoderLabel(id), hardware: encoderIsHardware(id), args: encoderArgs(id, tier, still) }
   }
   const workload = input.workload ?? benchWorkload(profile, still)
-  const winner = await benchWinner(input.width, input.height, workload, tier, still)
+  let winner = await benchWinner(input.width, input.height, workload, tier, still)
+  if (hwMode === 'enabled' && !encoderIsHardware(winner)) {
+    const cache = await loadCache()
+    for (const candidate of CANDIDATES) {
+      if (!candidate.hardware) continue
+      const check = await verifyEncoder(candidate.id, input.width, input.height, cache)
+      if (check.ok) {
+        winner = candidate.id
+        break
+      }
+    }
+  }
   return { id: winner, label: encoderLabel(winner), hardware: encoderIsHardware(winner), args: encoderArgs(winner, tier, still) }
 }
 

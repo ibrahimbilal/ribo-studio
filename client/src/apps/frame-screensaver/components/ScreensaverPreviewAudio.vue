@@ -384,7 +384,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="visible" class="mt-3 shrink-0 rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2">
+  <div v-if="visible" class="mt-3 shrink-0 rounded-lg border border-line bg-elevated/90 px-3 py-2">
     <div class="flex min-w-0 items-center gap-3 text-zinc-200">
       <button
         class="cursor-pointer disabled:cursor-default disabled:opacity-40"

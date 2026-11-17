@@ -1,18 +1,25 @@
 <script setup lang="ts">
-import { X } from '@lucide/vue'
+import { Settings, X } from '@lucide/vue'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { navItems } from '../../app/navigation'
+import { useGlobalSettingsStore } from '../../stores/globalSettings'
 import { usePlatformStore } from '../../stores/platform'
 import AppVersionLabel from './AppVersionLabel.vue'
 
 const platform = usePlatformStore()
+const globalSettings = useGlobalSettingsStore()
 const route = useRoute()
 const panelRef = ref<HTMLElement | null>(null)
 let triggerEl: HTMLElement | null = null
 
 const props = defineProps<{ open: boolean; trigger?: HTMLElement | null }>()
 const emit = defineEmits<{ close: [] }>()
+
+function openSettings(): void {
+  emit('close')
+  globalSettings.openModal('general')
+}
 
 function isActive(path: string): boolean {
   if (path === '/') return route.path === '/'
@@ -108,7 +115,15 @@ function onNavigate() {
             {{ item.label }}
           </RouterLink>
         </nav>
-        <div class="mt-auto border-t border-zinc-800">
+        <div class="mt-auto border-t border-zinc-800 p-3">
+          <button
+            class="nav-link focus-ring flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100"
+            type="button"
+            @click="openSettings"
+          >
+            <Settings :size="18" />
+            Global Settings
+          </button>
           <AppVersionLabel show-brand />
         </div>
       </div>

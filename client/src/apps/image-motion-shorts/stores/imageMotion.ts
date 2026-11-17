@@ -12,9 +12,9 @@ import {
 } from '@shared/imageMotion'
 import { timelineDuration } from '@shared/imageMotionTimeline'
 import { OUTPUTS, FRAME_RATES } from '@shared/frame'
-import { isEncoderChoice } from '@shared/screensaver'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { usePlatformStore } from '../../../stores/platform'
 import * as api from '../../../lib/api'
 import { DUPLICATE_EXPORT_MESSAGE } from '../../../lib/exportFingerprint'
@@ -46,21 +46,29 @@ function blankSegment(fileName: string, width: number, height: number, thumb: st
 
 export const useImageMotionStore = defineStore('image-motion', () => {
   const platform = usePlatformStore()
+  const globalSettings = useGlobalSettingsStore()
   const exportQueue = useManagedExportJobs()
   const defaults = defaultImageMotionProject()
   const hydrated = ref(false)
   const name = ref(defaults.name)
   const segments = ref<ImageMotionSegment[]>([])
   const selectedSegmentId = ref<string | null>(null)
-  const video = ref({ ...defaults.video })
+  const video = ref({ ...defaults.video, encoder: globalSettings.screensaver.encoder })
   const audio = ref({ ...defaults.audio })
   const musicUrl = ref<string | null>(null)
   const musicName = ref<string | null>(null)
   const musicFileSize = ref<number | null>(null)
   const muted = ref(false)
-  const encoderOptions = ref<Awaited<ReturnType<typeof api.fetchEncoders>>['encoders']>([])
-  const encoderAutoStill = ref<string | null>(null)
-  const encoderAutoMotion = ref<string | null>(null)
+
+  /** Shared via Global Settings — not per-project. */
+  watch(
+    () => globalSettings.screensaver.encoder,
+    (encoder) => {
+      if (video.value.encoder === encoder) return
+      video.value = { ...video.value, encoder }
+    },
+    { immediate: true },
+  )
 
   const selectedSegment = computed(() => segments.value.find((s) => s.id === selectedSegmentId.value) ?? null)
 
@@ -84,7 +92,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
     const saved = await idb.loadImageMotionProject()
     if (saved) {
       name.value = saved.name
-      video.value = { ...saved.video }
+      video.value = { ...saved.video, encoder: globalSettings.screensaver.encoder }
       audio.value = { ...saved.audio }
       segments.value = saved.segments.map((s) => ({
         ...s,
@@ -112,19 +120,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
       }
     }
     hydrated.value = true
-    void loadEncoders()
     scheduleSave()
-  }
-
-  async function loadEncoders() {
-    try {
-      const catalog = await api.fetchEncoders()
-      encoderOptions.value = catalog.encoders
-      encoderAutoStill.value = catalog.autoStill
-      encoderAutoMotion.value = catalog.autoMotion
-    } catch {
-      encoderOptions.value = []
-    }
   }
 
   function scheduleSave() {
@@ -146,12 +142,6 @@ export const useImageMotionStore = defineStore('image-motion', () => {
   }
 
   watch([name, segments, video, audio, selectedSegmentId, musicName], scheduleSave, { deep: true })
-  watch(
-    () => platform.serverOnline,
-    (online) => {
-      if (online) void loadEncoders()
-    },
-  )
 
   function toast(text: string, tone: 'info' | 'error' | 'success' = 'info') {
     platform.toast(text, tone)
@@ -309,12 +299,6 @@ export const useImageMotionStore = defineStore('image-motion', () => {
     scheduleSave()
   }
 
-  function setEncoder(encoder: string) {
-    if (!isEncoderChoice(encoder)) return
-    video.value.encoder = encoder
-    scheduleSave()
-  }
-
   async function setMusic(file: File | null) {
     if (musicUrl.value) URL.revokeObjectURL(musicUrl.value)
     if (!file) {
@@ -351,7 +335,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
     musicFileSize.value = null
     const fresh = defaultImageMotionProject()
     name.value = fresh.name
-    video.value = { ...fresh.video }
+    video.value = { ...fresh.video, encoder: globalSettings.screensaver.encoder }
     audio.value = { ...fresh.audio }
     segments.value = []
     selectedSegmentId.value = null
@@ -386,7 +370,7 @@ export const useImageMotionStore = defineStore('image-motion', () => {
     const project = normalizeImageMotionProject({
       name: name.value,
       segments: snapshot,
-      video: video.value,
+      video: { ...video.value, encoder: globalSettings.screensaver.encoder },
       audio: audio.value,
     })
     const snapMusic = musicFile
@@ -425,9 +409,6 @@ export const useImageMotionStore = defineStore('image-motion', () => {
     musicName,
     musicFileSize,
     muted,
-    encoderOptions,
-    encoderAutoStill,
-    encoderAutoMotion,
     duration,
     exportBlocker,
     exportState,
@@ -446,7 +427,6 @@ export const useImageMotionStore = defineStore('image-motion', () => {
     resetMotionDefaults,
     setResolution,
     setFps,
-    setEncoder,
     setMusic,
     newProject,
     startExport,

@@ -15,6 +15,7 @@ import {
 import type { SubscribeAnimationCachePrepStatus } from '@shared/subscribeAnimationCache'
 import { staticSubscribeAnimationStyles } from '@shared/subscribeAnimationTemplates'
 import * as api from '../../../../lib/api'
+import { useGlobalSettingsStore } from '../../../../stores/globalSettings'
 import { resolveSubscribeAvatarContentHash } from './subscribeAnimationAvatarHash'
 import { renderSubscribeAnimationFrames } from './subscribeAnimationExportFrames'
 import { subscribeAnimationLayout } from './subscribeAnimationLayout'
@@ -193,6 +194,10 @@ export function queueSubscribeAnimationPrepare(
   return new Promise((resolve, reject) => {
     void (async () => {
       try {
+        if (!persistentCacheEnabled()) {
+          reject(new Error('Persistent animation caching is disabled in Global Settings.'))
+          return
+        }
         const { key } = await resolveCurrentSubscribeCacheKey(settings, outputWidth)
         const inflight = inFlight.get(key)
         if (inflight) {
@@ -233,6 +238,14 @@ export function queueSubscribeAnimationPrepare(
   })
 }
 
+function persistentCacheEnabled(): boolean {
+  try {
+    return useGlobalSettingsStore().storage.persistentAnimationCacheEnabled
+  } catch {
+    return true
+  }
+}
+
 export async function getOrRenderSubscribeAnimation(
   settings: SubscribeAnimationSettings,
   outputWidth: number,
@@ -241,6 +254,11 @@ export async function getOrRenderSubscribeAnimation(
 ): Promise<{ cacheKey: string; frames: Blob[] | null }> {
   setSubscribeCacheExportBusy(true)
   try {
+    if (!persistentCacheEnabled()) {
+      log('Persistent cache disabled; rendering frames for upload')
+      const frames = await renderSubscribeAnimationFrames(settings, outputWidth, onProgress)
+      return { cacheKey: '', frames }
+    }
     const { key } = await resolveCurrentSubscribeCacheKey(settings, outputWidth)
     const inflight = inFlight.get(key)
     if (inflight) {
@@ -272,6 +290,10 @@ export async function getOrRenderSubscribeAnimation(
 }
 
 export async function prepareDefaultStaticAnimations(outputWidth: number): Promise<void> {
+  if (!persistentCacheEnabled()) {
+    log('Persistent cache disabled; skipping static pre-render')
+    return
+  }
   const candidates: Array<{ cacheKey: string; templateId: SubscribeAnimationStyle; settings: SubscribeAnimationSettings }> = []
   for (const style of staticSubscribeAnimationStyles()) {
     const settings: SubscribeAnimationSettings = {

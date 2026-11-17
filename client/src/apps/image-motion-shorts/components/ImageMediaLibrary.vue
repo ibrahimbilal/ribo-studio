@@ -123,13 +123,13 @@ async function confirmDeleteAll() {
           <span>seconds</span>
         </label>
         <div class="mt-2 flex">
-          <button class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40" type="button" aria-label="Move up" title="Move up" :disabled="index === 0" @click.stop="store.reorder(index, index - 1)">
+          <button class="icon-action" type="button" aria-label="Move up" title="Move up" :disabled="index === 0" @click.stop="store.reorder(index, index - 1)">
             <ChevronUp :size="16" />
           </button>
-          <button class="rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-zinc-300 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40" type="button" aria-label="Move down" title="Move down" :disabled="index === store.segments.length - 1" @click.stop="store.reorder(index, index + 1)">
+          <button class="icon-action" type="button" aria-label="Move down" title="Move down" :disabled="index === store.segments.length - 1" @click.stop="store.reorder(index, index + 1)">
             <ChevronDown :size="16" />
           </button>
-          <button class="ml-auto rounded-sm inline-flex size-7 cursor-pointer items-center justify-center bg-transparent text-red-300 hover:bg-red-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand" type="button" aria-label="Remove image" title="Remove image" @click.stop="store.removeSegment(segment.id)">
+          <button class="icon-action icon-action--danger ml-auto" type="button" aria-label="Remove image" title="Remove image" @click.stop="store.removeSegment(segment.id)">
             <Trash2 :size="16" />
           </button>
         </div>

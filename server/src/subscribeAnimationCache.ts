@@ -14,10 +14,14 @@ import {
 import {
   SUBSCRIBE_ANIMATION_CACHE_FORMAT,
   SUBSCRIBE_ANIMATION_CACHE_SCHEMA_VERSION,
+  SUBSCRIBE_ANIMATION_TEMPLATES,
   type SubscribeAnimationTemplateKind,
 } from '../../shared/subscribeAnimationTemplates'
 import type { SubscribeAnimationCacheKeyPayload } from '../../shared/subscribeAnimationCacheKey'
-import type { SubscribeAnimationStyle } from '../../shared/screensaverSubscribeAnimation'
+import {
+  subscribeAnimationStyleLabel,
+  type SubscribeAnimationStyle,
+} from '../../shared/screensaverSubscribeAnimation'
 import { isYoutubeChannelId } from '../../shared/youtubeChannelId'
 import { tmpDir } from './storage'
 
@@ -30,6 +34,8 @@ export interface StoredSubscribeAnimationCacheEntry {
   kind: SubscribeAnimationTemplateKind
   templateId: SubscribeAnimationStyle
   channelId: string | null
+  /** Channel card theme when template is channel-card (from renderConfig). */
+  channelCardTheme: string | null
   dir: string
   frameCount: number
   width: number
@@ -85,6 +91,71 @@ function log(message: string): void {
   console.log(`${LOG} ${message}`)
 }
 
+function inventoryEntryName(templateId: SubscribeAnimationStyle, channelCardTheme: string | null | undefined): string {
+  const base = subscribeAnimationStyleLabel(templateId)
+  if (templateId !== 'channel-card' || !channelCardTheme) return base
+  const style =
+    channelCardTheme === 'dark' ? 'Dark' : channelCardTheme === 'light' ? 'Light' : channelCardTheme
+  return `${base} - ${style}`
+}
+
+async function readChannelCardThemeFromManifest(dir: string): Promise<string | null> {
+  try {
+    const raw = await readFile(path.join(dir, 'manifest.json'), 'utf8')
+    const manifest = validateCacheManifest(JSON.parse(raw))
+    const theme = manifest?.renderConfig?.channelCardTheme
+    return typeof theme === 'string' && theme ? theme : null
+  } catch {
+    return null
+  }
+}
+
+/** One dynamic channel-card cache per channel + theme (light/dark). */
+function channelThemeSlotKey(entry: StoredSubscribeAnimationCacheEntry): string | null {
+  if (entry.kind !== 'dynamic' || entry.templateId !== 'channel-card' || !entry.channelId) return null
+  if (!entry.channelCardTheme) return null
+  return `${entry.channelId}|${entry.templateId}|${entry.channelCardTheme}`
+}
+
+/**
+ * Keep a single channel-card entry per (channelId, theme). Prefer `keepCacheKey`, else newest lastUsedAt.
+ * Skips busy keys. Returns how many entries were removed.
+ */
+async function pruneChannelThemeDuplicates(options?: {
+  keepCacheKey?: string
+  channelId?: string
+  channelCardTheme?: string | null
+}): Promise<number> {
+  const groups = new Map<string, StoredSubscribeAnimationCacheEntry[]>()
+  for (const entry of entries.values()) {
+    const slot = channelThemeSlotKey(entry)
+    if (!slot) continue
+    if (options?.channelId && entry.channelId !== options.channelId) continue
+    if (options?.channelCardTheme && entry.channelCardTheme !== options.channelCardTheme) continue
+    const list = groups.get(slot) ?? []
+    list.push(entry)
+    groups.set(slot, list)
+  }
+
+  let removed = 0
+  for (const group of groups.values()) {
+    if (group.length < 2 && !options?.keepCacheKey) continue
+    const keep =
+      (options?.keepCacheKey && group.find((item) => item.cacheKey === options.keepCacheKey)) ||
+      [...group].sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0))[0]
+    if (!keep) continue
+    for (const entry of group) {
+      if (entry.cacheKey === keep.cacheKey) continue
+      if (subscribeAnimationCacheIsBusy(entry.cacheKey)) continue
+      entries.delete(entry.cacheKey)
+      await rm(entry.dir, { recursive: true, force: true }).catch(() => undefined)
+      removed += 1
+      log(`Replaced stale channel-card cache (${entry.channelCardTheme}) ${entry.cacheKey.slice(0, 12)}…`)
+    }
+  }
+  return removed
+}
+
 async function loadRegistry(): Promise<void> {
   let raw = ''
   try {
@@ -105,7 +176,14 @@ async function loadRegistry(): Promise<void> {
     if (!entry?.cacheKey || !entry.dir || !isValidCacheKeyHex(entry.cacheKey)) continue
     try {
       await stat(path.join(entry.dir, 'manifest.json'))
-      entries.set(entry.cacheKey, entry)
+      const channelCardTheme =
+        typeof entry.channelCardTheme === 'string' && entry.channelCardTheme
+          ? entry.channelCardTheme
+          : await readChannelCardThemeFromManifest(entry.dir)
+      entries.set(entry.cacheKey, {
+        ...entry,
+        channelCardTheme,
+      })
     } catch {
       // Drop missing entries.
     }
@@ -114,6 +192,8 @@ async function loadRegistry(): Promise<void> {
     if (!channel?.channelId || !isYoutubeChannelId(channel.channelId)) continue
     channels.set(channel.channelId, channel)
   }
+  const pruned = await pruneChannelThemeDuplicates()
+  if (pruned > 0) await saveRegistry()
 }
 
 async function saveRegistry(): Promise<void> {
@@ -319,6 +399,12 @@ export async function putCachedAnimation(options: {
   durationSec: number
   renderConfig: SubscribeAnimationCacheKeyPayload
 }): Promise<SubscribeAnimationCacheEntryPublic> {
+  {
+    const { getServerGlobalSettings } = await import('./globalSettings')
+    if (!getServerGlobalSettings().storage.persistentAnimationCacheEnabled) {
+      throw new Error('Persistent animation caching is disabled in Global Settings.')
+    }
+  }
   if (!isValidCacheKeyHex(options.cacheKey)) throw new Error('Invalid cache key.')
   if (options.framePaths.length < 1) throw new Error('Animation frames are required.')
   if (options.kind === 'dynamic' && !isYoutubeChannelId(options.channelId)) {
@@ -371,6 +457,10 @@ export async function putCachedAnimation(options: {
         kind: options.kind,
         templateId: options.templateId,
         channelId: options.channelId,
+        channelCardTheme:
+          typeof options.renderConfig.channelCardTheme === 'string' && options.renderConfig.channelCardTheme
+            ? options.renderConfig.channelCardTheme
+            : null,
         dir: finalDir,
         frameCount: options.framePaths.length,
         width: options.width,
@@ -380,6 +470,13 @@ export async function putCachedAnimation(options: {
         lastUsedAt: now,
       }
       entries.set(options.cacheKey, stored)
+      if (stored.kind === 'dynamic' && stored.templateId === 'channel-card' && stored.channelId && stored.channelCardTheme) {
+        await pruneChannelThemeDuplicates({
+          keepCacheKey: stored.cacheKey,
+          channelId: stored.channelId,
+          channelCardTheme: stored.channelCardTheme,
+        })
+      }
       await saveRegistry()
       await sweepSubscribeAnimationCacheLru()
       log(`Animation prepared and stored (${options.framePaths.length} frames, ${(fileSize / 1024 / 1024).toFixed(1)} MB)`)
@@ -543,4 +640,187 @@ export function listMissingStaticCacheHints(
   candidates: Array<{ cacheKey: string; templateId: SubscribeAnimationStyle }>,
 ): Array<{ cacheKey: string; templateId: SubscribeAnimationStyle }> {
   return candidates.filter((item) => !entries.has(item.cacheKey))
+}
+
+export type SubscribeAnimationCacheInventoryStatus =
+  | 'cached'
+  | 'not_cached'
+  | 'outdated'
+  | 'rendering'
+  | 'failed'
+
+export interface SubscribeAnimationCacheInventoryEntry {
+  cacheKey: string | null
+  templateId: SubscribeAnimationStyle
+  name: string
+  kind: SubscribeAnimationTemplateKind
+  status: SubscribeAnimationCacheInventoryStatus
+  fileSize: number
+  createdAt: number | null
+  lastUsedAt: number | null
+  channelId: string | null
+  channelName: string | null
+  channelCardTheme: string | null
+  width: number | null
+  height: number | null
+  frameCount: number | null
+  busy: boolean
+}
+
+export interface SubscribeAnimationCacheChannelGroup {
+  channelId: string
+  channelName: string | null
+  channelAvatarUrl: string | null
+  animationCount: number
+  totalBytes: number
+  lastUpdatedAt: number | null
+  animations: SubscribeAnimationCacheInventoryEntry[]
+}
+
+export interface SubscribeAnimationCacheInventory {
+  staticAnimations: SubscribeAnimationCacheInventoryEntry[]
+  channels: SubscribeAnimationCacheChannelGroup[]
+  entries: SubscribeAnimationCacheInventoryEntry[]
+}
+
+function entryStatus(entry: StoredSubscribeAnimationCacheEntry | undefined): SubscribeAnimationCacheInventoryStatus {
+  if (!entry) return 'not_cached'
+  if (subscribeAnimationCacheIsBusy(entry.cacheKey)) return 'rendering'
+  return 'cached'
+}
+
+export function listSubscribeAnimationCacheInventory(): SubscribeAnimationCacheInventory {
+  const staticAnimations: SubscribeAnimationCacheInventoryEntry[] = SUBSCRIBE_ANIMATION_TEMPLATES.filter(
+    (template) => template.kind === 'static',
+  ).map((template) => {
+    const match = [...entries.values()].find((entry) => entry.kind === 'static' && entry.templateId === template.id)
+    return {
+      cacheKey: match?.cacheKey ?? null,
+      templateId: template.id,
+      name: inventoryEntryName(template.id, match?.channelCardTheme),
+      kind: 'static',
+      status: entryStatus(match),
+      fileSize: match?.fileSize ?? 0,
+      createdAt: match?.createdAt ?? null,
+      lastUsedAt: match?.lastUsedAt ?? null,
+      channelId: null,
+      channelName: null,
+      channelCardTheme: match?.channelCardTheme ?? null,
+      width: match?.width ?? null,
+      height: match?.height ?? null,
+      frameCount: match?.frameCount ?? null,
+      busy: match ? subscribeAnimationCacheIsBusy(match.cacheKey) : false,
+    }
+  })
+
+  for (const entry of entries.values()) {
+    if (entry.kind !== 'static') continue
+    if (staticAnimations.some((item) => item.cacheKey === entry.cacheKey)) continue
+    staticAnimations.push({
+      cacheKey: entry.cacheKey,
+      templateId: entry.templateId,
+      name: inventoryEntryName(entry.templateId, entry.channelCardTheme),
+      kind: 'static',
+      status: entryStatus(entry),
+      fileSize: entry.fileSize,
+      createdAt: entry.createdAt,
+      lastUsedAt: entry.lastUsedAt,
+      channelId: null,
+      channelName: null,
+      channelCardTheme: entry.channelCardTheme,
+      width: entry.width,
+      height: entry.height,
+      frameCount: entry.frameCount,
+      busy: subscribeAnimationCacheIsBusy(entry.cacheKey),
+    })
+  }
+
+  const channelGroups: SubscribeAnimationCacheChannelGroup[] = []
+  for (const meta of listSubscribeChannelMetas()) {
+    const animations = [...entries.values()]
+      .filter((entry) => entry.kind === 'dynamic' && entry.channelId === meta.channelId)
+      .map((entry) => ({
+        cacheKey: entry.cacheKey,
+        templateId: entry.templateId,
+        name: inventoryEntryName(entry.templateId, entry.channelCardTheme),
+        kind: 'dynamic' as const,
+        status: entryStatus(entry),
+        fileSize: entry.fileSize,
+        createdAt: entry.createdAt,
+        lastUsedAt: entry.lastUsedAt,
+        channelId: entry.channelId,
+        channelName: meta.channelName,
+        channelCardTheme: entry.channelCardTheme,
+        width: entry.width,
+        height: entry.height,
+        frameCount: entry.frameCount,
+        busy: subscribeAnimationCacheIsBusy(entry.cacheKey),
+      }))
+    channelGroups.push({
+      channelId: meta.channelId,
+      channelName: meta.channelName,
+      channelAvatarUrl: meta.avatarUrl,
+      animationCount: animations.length,
+      totalBytes: animations.reduce((sum, item) => sum + item.fileSize, 0),
+      lastUpdatedAt: Math.max(meta.updatedAt ?? 0, ...animations.map((item) => item.lastUsedAt ?? 0)) || null,
+      animations,
+    })
+  }
+
+  const knownChannels = new Set(channelGroups.map((item) => item.channelId))
+  for (const entry of entries.values()) {
+    if (entry.kind !== 'dynamic' || !entry.channelId || knownChannels.has(entry.channelId)) continue
+    knownChannels.add(entry.channelId)
+    channelGroups.push({
+      channelId: entry.channelId,
+      channelName: null,
+      channelAvatarUrl: null,
+      animationCount: 1,
+      totalBytes: entry.fileSize,
+      lastUpdatedAt: entry.lastUsedAt,
+      animations: [
+        {
+          cacheKey: entry.cacheKey,
+          templateId: entry.templateId,
+          name: inventoryEntryName(entry.templateId, entry.channelCardTheme),
+          kind: 'dynamic',
+          status: entryStatus(entry),
+          fileSize: entry.fileSize,
+          createdAt: entry.createdAt,
+          lastUsedAt: entry.lastUsedAt,
+          channelId: entry.channelId,
+          channelName: null,
+          channelCardTheme: entry.channelCardTheme,
+          width: entry.width,
+          height: entry.height,
+          frameCount: entry.frameCount,
+          busy: subscribeAnimationCacheIsBusy(entry.cacheKey),
+        },
+      ],
+    })
+  }
+
+  return {
+    staticAnimations,
+    channels: channelGroups,
+    entries: [...staticAnimations, ...channelGroups.flatMap((channel) => channel.animations)],
+  }
+}
+
+/** Remove cache entries older than retention based on lastUsedAt. Never deletes busy keys. */
+export async function applySubscribeAnimationCacheRetention(maxAgeMs: number | null): Promise<{ removed: number }> {
+  if (maxAgeMs == null || maxAgeMs <= 0) return { removed: 0 }
+  const cutoff = Date.now() - maxAgeMs
+  let removed = 0
+  for (const entry of [...entries.values()]) {
+    if (subscribeAnimationCacheIsBusy(entry.cacheKey)) continue
+    const stamp = entry.lastUsedAt || entry.createdAt
+    if (stamp >= cutoff) continue
+    entries.delete(entry.cacheKey)
+    await rm(entry.dir, { recursive: true, force: true }).catch(() => undefined)
+    removed += 1
+  }
+  if (removed > 0) await saveRegistry()
+  if (removed > 0) log(`Retention cleanup removed=${removed}`)
+  return { removed }
 }

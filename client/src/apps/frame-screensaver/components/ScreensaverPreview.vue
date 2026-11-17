@@ -71,7 +71,7 @@ watch(
   <div class="flex h-full flex-col">
     <div class="flex flex-1 items-center justify-center">
       <div
-        class="relative w-full max-h-full overflow-hidden rounded-lg border border-zinc-800 shadow-lg"
+        class="relative w-full max-h-full overflow-hidden rounded-lg border border-line shadow-lg"
         style="aspect-ratio: 16 / 9"
         :style="{ backgroundColor: store.backgroundColor }"
       >

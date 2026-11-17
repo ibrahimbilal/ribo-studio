@@ -152,7 +152,7 @@ onUnmounted(() => {
   <div class="flex h-full min-h-[280px] flex-col gap-3">
     <div
       ref="viewport"
-      class="relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl border border-zinc-800 bg-black"
+      class="preview-well relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl border border-line"
       :class="zoom > 1 ? 'cursor-grab' : ''"
       tabindex="0"
       role="application"
@@ -164,7 +164,7 @@ onUnmounted(() => {
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
     >
-      <div class="absolute inset-0 bg-black select-none" :style="layerStyle">
+      <div class="preview-well absolute inset-0 select-none" :style="layerStyle">
         <img :src="store.selected?.previewUrl" alt="Before" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
         <img
           :key="afterKey"

@@ -1,35 +1,27 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { Download, Eye, Loader2, RefreshCw, RotateCcw, SquareSplitHorizontal, Trash2, X } from '@lucide/vue'
+import { computed } from 'vue'
+import { Eye, RotateCcw, SquareSplitHorizontal, Trash2, X } from '@lucide/vue'
 import { ADJUSTMENT_FIELDS } from '@shared/screensaverAdjust'
 import { FRAME_FILE_LIMIT } from '@shared/screensaverFrames'
-import { DURATION_PRESETS, SCREENSAVER_OUTPUTS, type ScreensaverCfrQuality, type ScreensaverRenderMode } from '@shared/screensaver'
+import { DURATION_PRESETS, SCREENSAVER_OUTPUTS } from '@shared/screensaver'
 import { SUBSCRIBE_ANIMATION_DURATION_SEC, SUBSCRIBE_ANIMATION_FPS, SUBSCRIBE_ANIMATION_POSITIONS, SUBSCRIBE_ANIMATION_STYLES, SUBSCRIBE_CHANNEL_CARD_THEMES, MAX_SUBSCRIBE_EDGE_DISTANCE, MIN_SUBSCRIBE_EDGE_DISTANCE, MIN_SUBSCRIBE_SIZE_PERCENT, MAX_SUBSCRIBE_SIZE_PERCENT, defaultSubscribeSizePercent, type SubscribeAnimationStyle } from '@shared/screensaverSubscribeAnimation'
-import type { SubscribeAnimationCachePrepStatus } from '@shared/subscribeAnimationCache'
 import AdvancedAudioControls from '../../../components/audio/AdvancedAudioControls.vue'
 import AudioFileField from '../../../components/audio/AudioFileField.vue'
 import FileDropZone from '../../../components/FileDropZone.vue'
 import SettingsAccordion from '../../../components/SettingsAccordion.vue'
+import YoutubeChannelSelector from '../../../components/YoutubeChannelSelector.vue'
 import AppRadio from '../../../components/ui/AppRadio.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
 import SliderField from '../../../components/SliderField.vue'
 import ToggleSwitch from '../../../components/ToggleSwitch.vue'
-import { formatBytes } from '../../../lib/format'
-import { webGl2Available } from '../lib/render/createScreensaverRenderer'
-import type { PreviewRendererMode } from '../lib/previewRendererPreference'
 import { useScreensaverStore } from '../stores/screensaver'
+import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { DEFAULT_FRAMES } from '../lib/defaultFrames'
 import { positionLabel } from '../lib/subscribeAnimation/subscribeAnimationLayout'
 
 const store = useScreensaverStore()
-const channelUrlDraft = ref(store.subscribeAnimation.channelUrl)
-watch(
-  () => store.subscribeAnimation.channelUrl,
-  (url) => {
-    channelUrlDraft.value = url
-  },
-  { immediate: true },
-)
+const globalSettings = useGlobalSettingsStore()
+
 function onSubscribeStyleChange(event: Event) {
   const style = (event.target as HTMLSelectElement).value as SubscribeAnimationStyle
   store.replaceSubscribeAnimation({
@@ -39,35 +31,17 @@ function onSubscribeStyleChange(event: Event) {
   })
 }
 
-function onSubscribeChannelSelect(event: Event) {
-  const channelId = (event.target as HTMLSelectElement).value.trim()
-  if (!channelId) return
-  void store.selectSubscribeChannel(channelId)
+function onSubscribeChannelSelect(channelId: string) {
+  const id = channelId.trim()
+  if (!id) return
+  void store.selectSubscribeChannel(id)
 }
-
-function subscribeCacheStatusLabel(status: SubscribeAnimationCachePrepStatus): string {
-  switch (status) {
-    case 'ready':
-      return 'Ready'
-    case 'queued':
-      return 'Queued'
-    case 'preparing':
-      return 'Preparing animation'
-    case 'failed':
-      return 'Failed'
-    default:
-      return 'Not prepared'
-  }
-}
-
-const previewRendererActiveLabel = computed(() => {
-  if (store.previewRendererActive === 'webgl2') return 'GPU (WebGL2)'
-  if (store.previewRendererActive === 'canvas2d') return 'CPU (Canvas 2D)'
-  return 'not active'
-})
 
 const customMinutes = defineModel<number>('customMinutes', { default: 60 })
 const frameLimitMb = FRAME_FILE_LIMIT / (1024 * 1024)
+const fpsOptions = computed(() =>
+  store.effectiveRenderingMode === 'optimized-cfr' ? store.SCREENSAVER_CFR_FPS : store.SCREENSAVER_FPS,
+)
 
 function onFrameFiles(files: File[]) {
   if (files.length > 0) void store.uploadFrames(files)
@@ -87,12 +61,17 @@ function onAudioFiles(files: File[]) {
   if (file) void store.setAudioFile(file)
 }
 
-const hardwareEncoders = computed(() => store.encoderOptions.filter((item) => item.hardware && item.listed))
-const selectedEncoder = computed(() => store.encoderOptions.find((item) => item.id === store.encoder))
-const autoLabel = computed(() => {
-  const name = store.mode === 'static' ? store.autoStill : store.autoMotion
-  return name ? ` — ${name}` : ''
-})
+function openGlobalOutputSettings(): void {
+  globalSettings.openModal('export')
+}
+
+function openGlobalCacheSettings(): void {
+  globalSettings.openModal('storage')
+}
+
+function openChannelIntegrations(): void {
+  globalSettings.openModal('integrations')
+}
 
 function setPixel(key: 'x' | 'y' | 'width' | 'height', event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
@@ -192,67 +171,14 @@ const inspectorTabs = [
                           <option v-for="item in SUBSCRIBE_CHANNEL_CARD_THEMES" :key="item" :value="item">{{ item === 'light' ? 'Light' : 'Dark' }}</option>
                         </select>
                         <label class="mt-3 block text-xs text-zinc-500">Channel</label>
-                        <select
-                          class="field mt-1"
-                          :value="store.subscribeAnimation.channelId ?? ''"
-                          :disabled="store.subscribeChannelOptions.length === 0"
-                          @change="onSubscribeChannelSelect"
-                        >
-                          <option v-if="store.subscribeChannelOptions.length === 0" value="">
-                            Fetch a channel to save it here
-                          </option>
-                          <option
-                            v-for="channel in store.subscribeChannelOptions"
-                            :key="channel.channelId"
-                            :value="channel.channelId"
-                          >
-                            {{ channel.channelName }}
-                          </option>
-                        </select>
-                        <label class="mt-3 block text-xs text-zinc-500">YouTube channel or video URL</label>
-                        <div class="mt-1 flex gap-2">
-                          <input
-                            v-model="channelUrlDraft"
-                            class="field min-w-0 flex-1"
-                            type="url"
-                            placeholder="https://www.youtube.com/@…"
-                            @change="store.replaceSubscribeAnimation({ channelUrl: channelUrlDraft.trim() })"
-                          />
-                          <button
-                            class="btn btn-ghost shrink-0 cursor-pointer px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40"
-                            type="button"
-                            aria-label="Fetch channel"
-                            title="Fetch"
-                            :disabled="store.subscribeChannelLookupLoading"
-                            @click="void store.fetchSubscribeChannelFromUrl(channelUrlDraft)"
-                          >
-                            <Loader2
-                              v-if="store.subscribeChannelLookupLoading"
-                              :size="16"
-                              class="animate-spin"
-                            />
-                            <Download v-else :size="16" />
-                          </button>
-                        </div>
-                        <p class="mt-1 text-xs text-zinc-500">Fetch adds or updates a channel in the list. The selected channel is remembered for new projects.</p>
-                        <p
-                          v-if="store.subscribeAnimation.channelName"
-                          class="mt-2 text-xs text-zinc-400"
-                        >
-                          {{ store.subscribeAnimation.channelName
-                          }}<span v-if="store.subscribeAnimation.channelSubscriberCount"> · {{ store.subscribeAnimation.channelSubscriberCount }}</span>
-                        </p>
+                        <YoutubeChannelSelector
+                          class="mt-1"
+                          :model-value="store.subscribeAnimation.channelId"
+                          @update:model-value="onSubscribeChannelSelect"
+                          @manage="openChannelIntegrations"
+                        />
                       </div>
                     </div>
-                  </div>
-                  <div class="mt-3 flex items-center justify-between gap-3">
-                    <span class="text-xs text-zinc-500">Animation cache</span>
-                    <span
-                      class="text-xs"
-                      :class="store.subscribeAnimationCacheStatus === 'ready' ? 'text-emerald-400' : store.subscribeAnimationCacheStatus === 'failed' ? 'text-red-400' : 'text-zinc-400'"
-                    >
-                      {{ subscribeCacheStatusLabel(store.subscribeAnimationCacheStatus) }}
-                    </span>
                   </div>
                   <label class="mt-3 block text-xs text-zinc-500">Start time (seconds)</label>
                   <input
@@ -300,87 +226,12 @@ const inspectorTabs = [
                     />
                   </div>
                   <p class="mt-1 text-xs text-zinc-500">Loops on the main canvas so you can tune position, size, and edge distance while editing.</p>
-                  <div class="mt-4 border-t border-zinc-800 pt-3">
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="text-xs font-medium text-zinc-300">Subscribe Animation Cache</span>
-                      <button
-                        class="btn btn-ghost cursor-pointer px-2 py-1"
-                        type="button"
-                        aria-label="Refresh subscribe animation cache"
-                        title="Refresh"
-                        :disabled="store.subscribeCacheBusy"
-                        @click="void store.refreshSubscribeCacheStats()"
-                      >
-                        <RefreshCw :size="16" />
-                      </button>
-                    </div>
-                    <p class="mt-2 text-xs text-zinc-500">
-                      <template v-if="store.subscribeCacheStats">
-                        {{ formatBytes(store.subscribeCacheStats.totalBytes) }}
-                        · {{ store.subscribeCacheStats.staticCount }} static
-                        · {{ store.subscribeCacheStats.channelCount }} channels
-                        · {{ store.subscribeCacheStats.dynamicCount }} dynamic
-                      </template>
-                      <template v-else>
-                        Persistent across projects and restarts.
-                      </template>
-                    </p>
-                    <div
-                      v-if="store.subscribeCacheStats?.channels?.length"
-                      class="mt-2 max-h-28 space-y-1 overflow-y-auto text-xs text-zinc-500"
-                    >
-                      <div
-                        v-for="channel in store.subscribeCacheStats.channels"
-                        :key="channel.channelId"
-                        class="flex justify-between gap-2"
-                      >
-                        <span class="truncate">{{ channel.channelName || channel.channelId }}</span>
-                        <span class="shrink-0">{{ formatBytes(channel.bytes) }} · {{ channel.animationCount }}</span>
-                      </div>
-                    </div>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                      <button
-                        class="btn btn-ghost cursor-pointer text-xs"
-                        type="button"
-                        :disabled="store.subscribeCacheBusy"
-                        @click="void store.prepareStaticSubscribeAnimations()"
-                      >
-                        Prepare static
-                      </button>
-                      <button
-                        class="btn btn-ghost cursor-pointer text-xs"
-                        type="button"
-                        :disabled="store.subscribeCacheBusy || !store.subscribeAnimation.enabled"
-                        @click="void store.rebuildSelectedSubscribeAnimation()"
-                      >
-                        Rebuild selected
-                      </button>
-                      <button
-                        class="btn btn-ghost cursor-pointer text-xs"
-                        type="button"
-                        :disabled="store.subscribeCacheBusy"
-                        @click="void store.clearSubscribeAnimationCacheScope('static')"
-                      >
-                        Clear static
-                      </button>
-                      <button
-                        class="btn btn-ghost cursor-pointer text-xs"
-                        type="button"
-                        :disabled="store.subscribeCacheBusy || !store.subscribeAnimation.channelId"
-                        @click="void store.clearSubscribeAnimationCacheScope('channel')"
-                      >
-                        Clear channel
-                      </button>
-                      <button
-                        class="btn btn-ghost cursor-pointer text-xs text-red-400"
-                        type="button"
-                        :disabled="store.subscribeCacheBusy"
-                        @click="void store.clearSubscribeAnimationCacheScope('all')"
-                      >
-                        Clear all
-                      </button>
-                    </div>
-                  </div>
+                  <p class="mt-3 text-xs text-zinc-500">
+                    Subscribe Animation cache management lives in
+                    <button class="cursor-pointer font-semibold text-brand underline-offset-2 hover:underline" type="button" @click="openGlobalCacheSettings">
+                      Global Settings → Storage &amp; Cache
+                    </button>.
+                  </p>
                 </div>
               </div>
             </div>
@@ -498,76 +349,30 @@ const inspectorTabs = [
                 {{ output.label }}
               </option>
             </select>
-            <label class="mt-3 block text-xs text-zinc-500">Rendering mode</label>
-            <select
-              class="field mt-1"
-              :value="store.renderingMode"
-              @change="store.setRenderingMode(($event.target as HTMLSelectElement).value as ScreensaverRenderMode)"
-            >
-              <option v-for="item in store.SCREENSAVER_RENDER_MODES" :key="item.id" :value="item.id">
-                {{ item.label }}{{ item.recommended ? ' — Recommended' : ' — Legacy' }}
-              </option>
-            </select>
-            <p class="mt-1 text-xs text-zinc-500">{{ store.SCREENSAVER_RENDER_MODES.find((item) => item.id === store.renderingMode)?.detail }}</p>
-            <template v-if="store.renderingMode === 'optimized-cfr'">
-              <label class="mt-3 block text-xs text-zinc-500">Frame rate</label>
-              <select v-model.number="store.fps" class="field mt-1">
-                <option v-for="rate in store.SCREENSAVER_CFR_FPS" :key="rate" :value="rate">{{ rate }} fps</option>
-              </select>
-              <p class="mt-1 text-xs text-zinc-500">Constant frame rate for the whole timeline. Default is 60 fps.</p>
-              <label class="mt-3 block text-xs text-zinc-500">Quality</label>
-              <select
-                class="field mt-1"
-                :value="store.cfrQuality"
-                @change="store.setCfrQuality(($event.target as HTMLSelectElement).value as ScreensaverCfrQuality)"
-              >
-                <option v-for="item in store.SCREENSAVER_CFR_QUALITY_PRESETS" :key="item.id" :value="item.id">
-                  {{ item.label }}{{ item.id === 'balanced' ? ' — Default' : '' }}
-                </option>
-              </select>
-              <p class="mt-1 text-xs text-zinc-500">{{ store.SCREENSAVER_CFR_QUALITY_PRESETS.find((item) => item.id === store.cfrQuality)?.detail }}</p>
-            </template>
-            <template v-else>
-              <label class="mt-3 block text-xs text-zinc-500">Profile</label>
-              <select class="field mt-1" :value="store.profile" @change="store.setProfile(($event.target as HTMLSelectElement).value as never)">
-                <option v-for="item in store.SCREENSAVER_PROFILES" :key="item.id" :value="item.id">{{ item.label }}</option>
-              </select>
-              <p class="mt-1 text-xs text-zinc-500">{{ store.SCREENSAVER_PROFILES.find((item) => item.id === store.profile)?.detail }}</p>
-              <label class="mt-3 block text-xs text-zinc-500">Frame rate</label>
-              <select v-model.number="store.fps" class="field mt-1">
-                <option v-for="rate in store.SCREENSAVER_FPS" :key="rate" :value="rate">{{ rate }} fps</option>
-              </select>
-              <p class="mt-1 text-xs text-zinc-500">Static Art defaults to 1 fps. Mixed frame rates may be transcoded differently by YouTube.</p>
-            </template>
-            <label class="mt-3 block text-xs text-zinc-500">Preview rendering</label>
-            <select
-              class="field mt-1"
-              :value="store.previewRenderer"
-              @change="store.setPreviewRenderer(($event.target as HTMLSelectElement).value as PreviewRendererMode)"
-            >
-              <option value="auto">Auto (GPU when available)</option>
-              <option value="webgl2" :disabled="!webGl2Available()">GPU (WebGL2)</option>
-              <option value="canvas2d">CPU (Canvas 2D)</option>
+            <label class="mb-0 block text-xs text-zinc-500">Frame rate</label>
+            <select v-model.number="store.fps" class="field mt-1 mb-0">
+              <option v-for="rate in fpsOptions" :key="rate" :value="rate">{{ rate }} fps</option>
             </select>
             <p class="mt-1 text-xs text-zinc-500">
-              Active: {{ previewRendererActiveLabel }}.
-              <span v-if="store.previewRenderer === 'webgl2' && store.previewRendererActive === 'canvas2d'">WebGL could not start; using CPU.</span>
+              {{
+                store.effectiveRenderingMode === 'optimized-cfr'
+                  ? 'Constant frame rate for the whole timeline.'
+                  : 'Static Art defaults to 1 fps. Mixed frame rates may be transcoded differently by YouTube.'
+              }}
             </p>
-            <label class="mt-3 block text-xs text-zinc-500">Encoding method</label>
-            <select v-model="store.encoder" class="field mt-1">
-              <option value="auto">Auto (recommended){{ autoLabel }}</option>
-              <option value="cpu">CPU</option>
-              <option v-for="item in hardwareEncoders" :key="item.id" :value="item.id" :disabled="!item.verified">
-                {{ item.label }}{{ item.verified ? '' : ' — unavailable' }}
-              </option>
-            </select>
-            <p v-if="selectedEncoder && !selectedEncoder.verified" class="mt-1 text-xs text-amber-200">{{ selectedEncoder.detail }}</p>
-            <label class="mt-3 block text-xs text-zinc-500">Fit</label>
+            <label class="mt-3 mb-0 block text-xs text-zinc-500">Fit</label>
             <select class="field mt-1" :value="store.fit" @change="store.setFit(($event.target as HTMLSelectElement).value as 'contain' | 'cover' | 'blur')">
               <option value="contain">Contain</option>
               <option value="cover">Cover</option>
               <option value="blur">Blurred background</option>
             </select>
+
+            <p class="text-xs text-zinc-500">
+              Rendering mode, quality, preview rendering, and encoding method live in
+              <button class="cursor-pointer font-semibold text-brand underline-offset-2 hover:underline" type="button" @click="openGlobalOutputSettings">
+                Global Settings → Export
+              </button>.
+            </p>
           </SettingsAccordion>
 
           <SettingsAccordion v-show="store.settingsInspector === 'output'" title="Mode" :open="false">
@@ -720,7 +525,7 @@ const inspectorTabs = [
               <label class="text-xs text-zinc-500">Rotation<input class="field mt-1" type="number" min="-180" max="180" step="0.1" :value="store.composition.rotation" @change="setNumber('rotation', $event)" /></label>
               <label class="text-xs text-zinc-500">Opacity<input class="field mt-1" type="number" min="0" max="100" :value="Math.round(store.composition.opacity * 100)" @change="setOpacity($event)" /></label>
             </div>
-            <div class="mt-2 flex gap-2">
+            <div class="mt-2 grid grid-cols-2 gap-2">
               <button class="btn cursor-pointer" :class="store.composition.flipH ? 'btn-primary' : 'btn-ghost'" type="button" @click="toggleFlip('flipH')">Flip horizontal</button>
               <button class="btn cursor-pointer" :class="store.composition.flipV ? 'btn-primary' : 'btn-ghost'" type="button" @click="toggleFlip('flipV')">Flip vertical</button>
             </div>

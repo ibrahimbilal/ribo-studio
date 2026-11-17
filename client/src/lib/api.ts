@@ -548,6 +548,133 @@ export async function clearSubscribeAnimationCache(scope: {
   return (await response.json()) as { removed: number }
 }
 
+export async function fetchSubscribeAnimationCacheInventory(): Promise<SubscribeAnimationCacheInventory> {
+  const response = await fetch('/api/screensaver/subscribe-animation-cache/inventory')
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as SubscribeAnimationCacheInventory
+}
+
+export interface SubscribeAnimationCacheInventoryEntry {
+  cacheKey: string | null
+  templateId: string
+  name: string
+  kind: 'static' | 'dynamic'
+  status: 'cached' | 'not_cached' | 'outdated' | 'rendering' | 'failed'
+  fileSize: number
+  createdAt: number | null
+  lastUsedAt: number | null
+  channelId: string | null
+  channelName: string | null
+  channelCardTheme: string | null
+  width: number | null
+  height: number | null
+  frameCount: number | null
+  busy: boolean
+}
+
+export interface SubscribeAnimationCacheChannelGroup {
+  channelId: string
+  channelName: string | null
+  channelAvatarUrl: string | null
+  animationCount: number
+  totalBytes: number
+  lastUpdatedAt: number | null
+  animations: SubscribeAnimationCacheInventoryEntry[]
+}
+
+export interface SubscribeAnimationCacheInventory {
+  staticAnimations: SubscribeAnimationCacheInventoryEntry[]
+  channels: SubscribeAnimationCacheChannelGroup[]
+  entries: SubscribeAnimationCacheInventoryEntry[]
+}
+
+export interface StorageOverview {
+  totalTempBytes: number
+  temporaryFilesBytes: number
+  subscribeAnimationCacheBytes: number
+  staticAnimationCacheBytes: number
+  dynamicAnimationCacheBytes: number
+  availableDiskBytes: number | null
+  cacheDirectory: string
+  temporaryDirectory: string
+  refreshedAt: number
+}
+
+export async function fetchStorageOverview(refresh = false): Promise<StorageOverview> {
+  const response = await fetch(`/api/storage/overview${refresh ? '?refresh=1' : ''}`)
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as StorageOverview
+}
+
+export interface SystemInfo {
+  appName: string
+  version: string
+  os: string
+  platform: string
+  arch: string
+  cpuModel: string
+  cpuCount: number
+  totalRamBytes: number
+  availableRamBytes: number | null
+  gpu: string[]
+  ffmpegVersion: string | null
+  ffprobeVersion: string | null
+  upscalerEngines: Array<{ id: string; available: boolean; label: string }>
+  hardwareEncoders: Array<{ id: string; label: string; verified: boolean }>
+  enginePaths?: {
+    ffmpeg: string | null
+    ffprobe: string | null
+  }
+  capabilities: {
+    canOpenPaths: boolean
+    sleepPrevention: false
+    configurableTempDir: false
+    maxFfmpegConcurrency: 1
+    fileSystemAccessApiLikely: boolean
+  }
+  paths: {
+    temporaryDirectory: string
+    cacheDirectory: string
+    logsDirectory: string | null
+  }
+  repositoryUrl: string
+  homepageUrl: string
+}
+
+export async function fetchSystemInfo(): Promise<SystemInfo> {
+  const response = await fetch('/api/system/info')
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as SystemInfo
+}
+
+export async function openSystemPath(target: 'temp' | 'cache' | 'logs'): Promise<{ ok: true; path: string }> {
+  const response = await fetch('/api/system/open-path', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target }),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as { ok: true; path: string }
+}
+
+export async function fetchGlobalSettings(): Promise<import('@shared/globalSettings').ServerGlobalSettings> {
+  const response = await fetch('/api/global-settings')
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as import('@shared/globalSettings').ServerGlobalSettings
+}
+
+export async function putGlobalSettings(
+  payload: import('@shared/globalSettings').ServerGlobalSettings,
+): Promise<import('@shared/globalSettings').ServerGlobalSettings> {
+  const response = await fetch('/api/global-settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as import('@shared/globalSettings').ServerGlobalSettings
+}
+
 function sendForm<T>(url: string, body: FormData, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()

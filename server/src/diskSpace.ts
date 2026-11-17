@@ -3,8 +3,19 @@
  */
 
 import { statfs } from 'node:fs/promises'
+import { getServerGlobalSettings } from './globalSettings'
 
 const SAFETY_MARGIN_BYTES = 64 * 1024 * 1024
+
+export async function freeDiskBytes(dir: string): Promise<number | null> {
+  try {
+    const info = await statfs(dir)
+    const free = Number(info.bavail) * Number(info.bsize)
+    return Number.isFinite(free) && free >= 0 ? free : null
+  } catch {
+    return null
+  }
+}
 
 export async function assertDiskSpace(
   dir: string,
@@ -12,10 +23,12 @@ export async function assertDiskSpace(
   message = 'Not enough free disk space for this export.',
 ): Promise<void> {
   try {
-    const info = await statfs(dir)
-    const free = Number(info.bavail) * Number(info.bsize)
-    if (Number.isFinite(free) && free > 0 && free < neededBytes + SAFETY_MARGIN_BYTES) {
-      const needGiB = ((neededBytes + SAFETY_MARGIN_BYTES) / (1024 ** 3)).toFixed(2)
+    const free = await freeDiskBytes(dir)
+    if (free == null || free <= 0) return
+    const minFree = getServerGlobalSettings().performance.minFreeDiskBytes
+    const required = Math.max(neededBytes + SAFETY_MARGIN_BYTES, minFree)
+    if (free < required) {
+      const needGiB = (required / (1024 ** 3)).toFixed(2)
       const freeGiB = (free / (1024 ** 3)).toFixed(2)
       throw new Error(`${message} Need about ${needGiB} GiB free; about ${freeGiB} GiB available.`)
     }

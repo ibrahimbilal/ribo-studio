@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppNotifications from './AppNotifications.vue'
 import AppTempStorageButton from './AppTempStorageButton.vue'
+import AppThemeToggle from './AppThemeToggle.vue'
 import { useScreensaverStore } from '../../apps/frame-screensaver/stores/screensaver'
 import { useAudioLooperStore } from '../../apps/audio-looper/stores/audioLooper'
 import { useImageUpscalerStore } from '../../apps/image-upscaler/stores/imageUpscaler'
@@ -68,6 +69,7 @@ const emit = defineEmits<{ openNav: [trigger: HTMLElement] }>()
       <span class="hidden sm:inline">New project</span>
     </button>
     <div class="ml-auto flex items-center gap-1 sm:gap-2">
+      <AppThemeToggle />
       <AppTempStorageButton />
       <AppNotifications />
       <button

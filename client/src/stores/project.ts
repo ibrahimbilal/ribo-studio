@@ -5,6 +5,7 @@ import { parseVideoUrl } from '@shared/urls'
 import { defineStore } from 'pinia'
 import { storeToRefs } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { useGlobalSettingsStore } from './globalSettings'
 import { usePlatformStore } from './platform'
 import { OUTPUTS } from '@shared/frame'
 import * as api from '../lib/api'
@@ -59,6 +60,7 @@ function blankClip(partial: Partial<Clip>): Clip {
 
 export const useProjectStore = defineStore('project', () => {
   const platform = usePlatformStore()
+  const globalSettings = useGlobalSettingsStore()
   const { serverOnline } = storeToRefs(platform)
   const exportQueue = useManagedExportJobs()
   const name = ref('Untitled ranking')
@@ -77,9 +79,19 @@ export const useProjectStore = defineStore('project', () => {
   const musicFileSize = ref<number | null>(null)
   const hydrated = ref(false)
   const urlNotice = ref('')
-  const encoderOptions = ref<Awaited<ReturnType<typeof api.fetchEncoders>>['encoders']>([])
-  const encoderAutoStill = ref<string | null>(null)
-  const encoderAutoMotion = ref<string | null>(null)
+
+  /** Shared via Global Settings — not per-project. */
+  watch(
+    () => globalSettings.screensaver.encoder,
+    (encoder) => {
+      if (style.value.video.encoder === encoder) return
+      style.value = {
+        ...style.value,
+        video: { ...style.value.video, encoder },
+      }
+    },
+    { immediate: true },
+  )
 
   const selectedClip = computed(() => clips.value.find((clip) => clip.id === selectedClipId.value) ?? null)
   const activeColorSet = computed(() => colorSets.value.find((set) => set.id === activeColorSetId.value) ?? colorSets.value[0] ?? null)
@@ -169,18 +181,6 @@ export const useProjectStore = defineStore('project', () => {
     if (exportState.value.phase === 'done') exportQueue.clearFinished()
   }
 
-  async function loadEncoders() {
-    if (!serverOnline.value) return
-    try {
-      const catalog = await api.fetchEncoders()
-      encoderOptions.value = catalog.encoders
-      encoderAutoStill.value = catalog.autoStill
-      encoderAutoMotion.value = catalog.autoMotion
-    } catch {
-      encoderOptions.value = []
-    }
-  }
-
   async function init() {
     if (hydrated.value) return
     if (pageWasReloaded()) {
@@ -191,12 +191,14 @@ export const useProjectStore = defineStore('project', () => {
     try {
       const saved = await idb.loadRankingProject()
       await platform.refreshServer()
-      void loadEncoders()
       if (saved?.version === 1 && saved.style && saved.spans) {
         name.value = saved.name || 'Untitled ranking'
         titleText.value = saved.titleText || ''
         spans.value = saved.spans
-        style.value = saved.style
+        style.value = {
+          ...saved.style,
+          video: { ...saved.style.video, encoder: globalSettings.screensaver.encoder },
+        }
         if (style.value.ranking.display !== 'page' && style.value.ranking.display !== 'stack') {
           style.value.ranking.display = 'stack'
         }
@@ -432,7 +434,10 @@ export const useProjectStore = defineStore('project', () => {
   function applyPreset(id: 'classic' | 'tier' | 'minimal') {
     applying = true
     const next = materializePreset(id, style.value.video)
-    style.value = next.style
+    style.value = {
+      ...next.style,
+      video: { ...next.style.video, encoder: globalSettings.screensaver.encoder },
+    }
     titleText.value = next.titleText
     spans.value = next.spans
     activePreset.value = id
@@ -573,7 +578,10 @@ export const useProjectStore = defineStore('project', () => {
     name.value = 'Untitled ranking'
     titleText.value = fresh.titleText
     spans.value = fresh.spans
-    style.value = fresh.style
+    style.value = {
+      ...fresh.style,
+      video: { ...fresh.style.video, encoder: globalSettings.screensaver.encoder },
+    }
     activePreset.value = 'classic'
     clips.value = []
     selectedClipId.value = null
@@ -614,7 +622,12 @@ export const useProjectStore = defineStore('project', () => {
     const snapshotStyle = {
       ...style.value,
       banner: { ...style.value.banner, height: metrics.bannerHeight },
-      video: { ...style.value.video, width: metrics.width, height: metrics.height },
+      video: {
+        ...style.value.video,
+        width: metrics.width,
+        height: metrics.height,
+        encoder: globalSettings.screensaver.encoder,
+      },
     }
     const snapshotSpans = spans.value.map((span) => ({ ...span }))
     const snapshotMusic = musicFile
@@ -767,10 +780,6 @@ export const useProjectStore = defineStore('project', () => {
     exporting,
     activeExportCount,
     exportBlocker,
-    encoderOptions,
-    encoderAutoStill,
-    encoderAutoMotion,
-    loadEncoders,
     timeline,
     urlNotice,
     init,

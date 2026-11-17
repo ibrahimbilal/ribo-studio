@@ -21,8 +21,15 @@ function envFlagEnabled(raw: string | undefined, defaultEnabled: boolean): boole
   return v !== '0' && v !== 'false' && v !== 'off' && v !== 'no'
 }
 
+type EnvMap = Record<string, string | undefined>
+
+function defaultEnv(): EnvMap {
+  const g = globalThis as { process?: { env?: EnvMap } }
+  return g.process?.env ?? {}
+}
+
 /** Master switch. Default enabled; set RIBO_SINGLE_PASS_DIRECT_MUX=0 to force legacy multi-pass. */
-export function isSinglePassDirectMuxEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isSinglePassDirectMuxEnabled(env: EnvMap = defaultEnv()): boolean {
   return envFlagEnabled(env.RIBO_SINGLE_PASS_DIRECT_MUX, true)
 }
 
@@ -30,14 +37,14 @@ export function isSinglePassDirectMuxEnabled(env: NodeJS.ProcessEnv = process.en
  * Independent direct audio-period loop at mux.
  * Defaults to the master single-pass flag; override with RIBO_DIRECT_AUDIO_PERIOD_LOOP.
  */
-export function isDirectAudioPeriodLoopEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isDirectAudioPeriodLoopEnabled(env: EnvMap = defaultEnv()): boolean {
   const raw = env.RIBO_DIRECT_AUDIO_PERIOD_LOOP
   if (raw == null || raw.trim() === '') return isSinglePassDirectMuxEnabled(env)
   return envFlagEnabled(raw, true)
 }
 
 export function resolveScreensaverMuxEligibility(
-  env: NodeJS.ProcessEnv = process.env,
+  env: EnvMap = defaultEnv(),
 ): ScreensaverMuxEligibility {
   const singlePass = isSinglePassDirectMuxEnabled(env)
   return {

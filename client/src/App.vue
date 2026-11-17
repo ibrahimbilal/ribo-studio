@@ -1,20 +1,46 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { onMounted, ref, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { X } from '@lucide/vue'
 import AppHeader from './components/layout/AppHeader.vue'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import MobileNavDrawer from './components/layout/MobileNavDrawer.vue'
+import GlobalSettingsModal from './components/settings/GlobalSettingsModal.vue'
 import { resumePersistedRenderJobs } from './lib/resumePersistedRenderJobs'
+import { useGlobalSettingsStore } from './stores/globalSettings'
 import { usePlatformStore } from './stores/platform'
 
 const platform = usePlatformStore()
+const globalSettings = useGlobalSettingsStore()
 const route = useRoute()
+const router = useRouter()
 const navTrigger = ref<HTMLElement | null>(null)
+const restoredLastApp = ref(false)
 
 onMounted(() => {
+  void globalSettings.hydrate().then(() => {
+    maybeRestoreLastApp()
+  })
   void platform.refreshServer().then(() => resumePersistedRenderJobs())
 })
+
+watch(
+  () => route.path,
+  (path) => {
+    if (path !== '/') globalSettings.rememberAppPath(path)
+  },
+  { immediate: true },
+)
+
+function maybeRestoreLastApp(): void {
+  if (restoredLastApp.value) return
+  restoredLastApp.value = true
+  if (!globalSettings.general.rememberLastApp) return
+  if (route.path !== '/') return
+  const last = globalSettings.general.lastAppPath
+  if (!last || last === '/') return
+  void router.replace(last)
+}
 
 function onOpenNav(trigger: HTMLElement) {
   navTrigger.value = trigger
@@ -41,6 +67,7 @@ function onCloseNav() {
       </main>
     </div>
     <MobileNavDrawer :open="platform.mobileNavOpen" :trigger="navTrigger" @close="onCloseNav" />
+    <GlobalSettingsModal />
     <div class="pointer-events-none fixed bottom-6 right-4 z-40 flex w-[min(20rem,calc(100vw-2rem))] flex-col gap-2">
       <div
         v-for="item in platform.toasts"
