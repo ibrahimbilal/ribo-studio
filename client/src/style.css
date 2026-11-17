@@ -15,7 +15,7 @@
   --color-inset: #101114;
   --color-footer: #121318;
   --color-unread: #1a1d24;
-  --color-line: #3a3f48;
+  --color-line: var(--color-zinc-800);
   --color-line-strong: #3f4450;
   --color-field: #343841;
   --color-ink: #f4f4f5;

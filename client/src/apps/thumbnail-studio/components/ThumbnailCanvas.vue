@@ -99,7 +99,7 @@ onBeforeUnmount(() => observer?.disconnect())
 <template>
   <div
     ref="stage"
-    class="preview-well relative grid min-h-[240px] min-w-0 flex-1 place-items-center overflow-hidden rounded-xl border border-line p-4"
+    class="preview-well relative grid min-h-[240px] min-w-0 flex-1 place-items-center overflow-hidden rounded-xl p-4"
   >
     <div ref="frame" class="relative" :style="{ width: `${display.width}px`, height: `${display.height}px` }">
       <canvas ref="canvasRef" class="block h-full w-full rounded-sm shadow-2xl" />

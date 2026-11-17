@@ -10,13 +10,20 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-11-17
+
 ### Added
 
+- Header **theme toggle** — one-click light/dark switch (persists via Appearance settings; System remains available in Global Settings).
 - **Global Settings** — sidebar Settings opens an application-wide modal (General, Appearance, Performance, Storage & Cache, Export, Integrations, Backup & Restore, About) with persistent preferences, Subscribe Animation cache management, storage overview, and system information.
 - **Appearance** — Light / Dark / System theme, accent colors, interface density, and UI animation toggle (application chrome only; never affects exports or canvas timelines). Light theme uses semantic shell/panel tokens so dashboard cards, sidebar, and header stay readable.
 - **Integrations** — centralized YouTube channel registry (add by URL / ID / @handle, default channel, refresh, remove with project-reference warnings), public metadata status, and external engine detection (FFmpeg / FFprobe / upscalers).
 - **Backup & Restore** — export/import versioned settings JSON with category selection, merge or replace-category modes, preview, safe rollback, and preference reset (projects, media, caches, channels, and credentials are preserved).
 - Global Screensaver output prefs: Rendering mode, Quality/Profile, Preview rendering, and Encoding method (shared across projects; also editable from Screensaver Settings).
+
+### Fixed
+
+- Dark theme shell colors and icon-action contrast so dashboard, sidebar, header, and preview wells stay readable after the Appearance rollout.
 
 ### Changed
 
