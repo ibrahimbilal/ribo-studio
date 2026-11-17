@@ -27,7 +27,7 @@
   --color-toast-error: #2a1515;
   --color-toast-success: #122019;
   /** UI preview well behind canvases — not used by export paint paths. */
-  --color-preview-well: #07080b;
+  --color-preview-well: #000000;
   --color-danger: #ff9b9b;
   --color-danger-border: #5c3030;
   --color-danger-surface: #3a1d1d;
@@ -124,6 +124,39 @@ html[data-theme='light'] [class*='bg-[#14161c]'] {
 
 html[data-theme='light'] .bg-black {
   background-color: var(--color-preview-well);
+}
+
+html[data-theme='light'] .studio-shell {
+  background: var(--color-app);
+}
+
+html[data-theme='light'] .studio-panel {
+  border-color: var(--color-line);
+  background: var(--color-elevated);
+}
+
+html[data-theme='light'] .studio-stage {
+  border-color: var(--color-line);
+  background: var(--color-inset);
+}
+
+html[data-theme='light'] .panel,
+html[data-theme='light'] .dialog-card {
+  border-color: var(--color-line);
+}
+
+html[data-theme='light'] .icon-action {
+  color: var(--color-muted);
+}
+
+html[data-theme='light'] .icon-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  color: var(--color-ink);
+}
+
+html[data-theme='light'] .icon-action--danger:hover:not(:disabled) {
+  background: var(--color-danger-surface);
+  color: var(--color-danger);
 }
 
 html[data-density='compact'] {
@@ -272,13 +305,13 @@ input[type='color'] {
     justify-content: center;
     border-radius: 0.125rem;
     background: transparent;
-    color: var(--color-muted);
+    color: #d4d4d8;
     cursor: pointer;
   }
 
   .icon-action:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-ink) 8%, transparent);
-    color: var(--color-ink);
+    background: rgb(255 255 255 / 0.1);
+    color: #ffffff;
   }
 
   .icon-action:focus-visible {
@@ -296,7 +329,7 @@ input[type='color'] {
   }
 
   .icon-action--danger:hover:not(:disabled) {
-    background: var(--color-danger-surface);
+    background: rgb(239 68 68 / 0.1);
     color: var(--color-danger);
   }
 
@@ -388,7 +421,7 @@ input[type='color'] {
 
   .panel {
     border-radius: 0.75rem;
-    border: 1px solid var(--color-line);
+    border: 1px solid #27272a;
     background: var(--color-elevated);
     padding: 1rem;
   }
@@ -414,7 +447,7 @@ input[type='color'] {
     max-height: min(80vh, 100%);
     overflow-y: auto;
     border-radius: 0.5rem;
-    border: 1px solid var(--color-line);
+    border: 1px solid #27272a;
     background: var(--color-elevated);
     padding: 1rem;
     box-shadow: var(--shadow-overlay);
@@ -618,20 +651,21 @@ input[type='color'] {
     text-align: center;
   }
 
+  /* Dark chrome matches main; light theme overrides below. */
   .studio-shell {
-    background: var(--color-app);
+    background: #090a0d;
   }
 
   .studio-panel {
     border-radius: 1rem;
-    border: 1px solid var(--color-line);
-    background: var(--color-elevated);
+    border: 1px solid rgb(255 255 255 / 0.06);
+    background: #14161c;
   }
 
   .studio-stage {
     border-radius: 1rem;
-    border: 1px solid var(--color-line);
-    background: var(--color-inset);
+    border: 1px solid rgb(255 255 255 / 0.08);
+    background: #07080b;
   }
 
   .preview-well {

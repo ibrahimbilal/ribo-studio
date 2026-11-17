@@ -46,7 +46,7 @@ const emit = defineEmits<{ openNav: [trigger: HTMLElement] }>()
 </script>
 
 <template>
-  <header class="studio-shell flex h-16 shrink-0 items-center gap-3 border-b border-line bg-chrome px-4">
+  <header class="studio-shell flex h-16 shrink-0 items-center gap-3 border-b border-white/5 px-4">
     <button
       class="btn btn-ghost cursor-pointer xl:hidden"
       type="button"
@@ -55,7 +55,7 @@ const emit = defineEmits<{ openNav: [trigger: HTMLElement] }>()
     >
       <Menu :size="20" />
     </button>
-    <h1 class="min-w-0 truncate text-lg font-bold tracking-tight text-ink">
+    <h1 class="min-w-0 truncate text-lg font-bold tracking-tight text-zinc-200">
       {{ title }}
     </h1>
     <button

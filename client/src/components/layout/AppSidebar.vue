@@ -20,7 +20,7 @@ function openSettings(): void {
 
 <template>
   <aside
-    class="relative z-30 hidden h-full w-16 shrink-0 flex-col overflow-visible border-r border-line bg-chrome xl:flex"
+    class="studio-shell relative z-30 hidden h-full w-16 shrink-0 flex-col overflow-visible border-r border-white/5 xl:flex"
   >
     <div class="flex h-16 items-center justify-center">
       <RouterLink
@@ -30,7 +30,7 @@ function openSettings(): void {
       >
         <img src="/logo.png" alt="" class="h-7 w-7 object-contain" />
         <span
-          class="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-xs font-semibold text-ink opacity-0 shadow-overlay transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+          class="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
           role="tooltip"
         >
           Dashboard
@@ -45,15 +45,15 @@ function openSettings(): void {
         class="nav-link group relative focus-ring flex items-center justify-center rounded-xl px-1 py-2.5"
         :class="
           isActive(item.path)
-            ? 'nav-link--active bg-brand text-brand-on'
-            : 'text-faint hover:bg-ghost hover:text-ink'
+            ? 'nav-link--active bg-brand text-white'
+            : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100'
         "
         :aria-current="isActive(item.path) ? 'page' : undefined"
         :aria-label="item.label"
       >
         <component :is="item.icon" class="shrink-0" :size="18" />
         <span
-          class="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-xs font-semibold text-ink opacity-0 shadow-overlay transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+          class="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
           role="tooltip"
         >
           {{ item.label }}
@@ -63,14 +63,14 @@ function openSettings(): void {
     <AppVersionLabel compact class="mx-1 mb-1" />
     <div class="mx-2 mb-3 flex flex-col gap-1">
       <button
-        class="group relative focus-ring flex cursor-pointer items-center justify-center rounded-xl py-2 text-faint hover:bg-ghost hover:text-ink"
+        class="group relative focus-ring flex cursor-pointer items-center justify-center rounded-xl py-2 text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
         type="button"
         aria-label="Open Global Settings"
         @click="openSettings"
       >
         <Settings :size="16" />
         <span
-          class="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-xs font-semibold text-ink opacity-0 shadow-overlay transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+          class="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
           role="tooltip"
         >
           Global Settings
