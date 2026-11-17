@@ -10,6 +10,13 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-11-18
+
+### Fixed
+
+- Subscribe Animation dynamic (channel-card) cache keeps only the newest entry per YouTube channel after Fetch or re-render (older light/dark/size variants are replaced).
+- YouTube channel **Refresh** now persists updated name/avatar/subscribers to the server cache (and no longer gets overwritten by stale server data on reopen); Screensaver refresh applies the selected channel.
+
 ## [1.8.0] — 2026-11-17
 
 ### Added

@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.8.0**).
+Version source of truth: root `package.json` (currently **1.8.1**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,9 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.8.1** (2026-11-18) — Dynamic channel-card cache one entry per channel; YouTube Refresh persists meta and survives reopen.
+- 2026-11-17 — Dynamic channel-card cache: one entry per channel (newest wins); Fetch/HIT/put prune older variants including other themes (`subscribeAnimationCache.ts`).
+- 2026-11-18 — YouTube channel refresh persists server meta + prefers newer local/server timestamps on hydrate (`youtubeChannelLookup.ts`, `subscribeAnimationChannelPreference.ts`, screensaver store).
 - Release **v1.8.0** (2026-11-17) — Subscribe animation default start 20 s; optional repeat every N min/hours in CFR + Fast VFR export.
 - 2026-11-17 — Subscribe animation default `startSec` 20; optional `repeatEveryUnit`/`repeatEveryValue` (minutes/hours) applied in CFR timeline + Fast VFR hybrid via `subscribeAnimationOccurrences()` (`shared/screensaverSubscribeAnimation.ts`, `screensaverCfr/timeline.ts`, `renderScreensaverHybrid.ts`, Settings UI).
 - Release **v1.7.0** (2026-11-17) — Full-client i18n (Language in General settings; 13 locales + RTL); static subscribe-animation cache one entry per style.

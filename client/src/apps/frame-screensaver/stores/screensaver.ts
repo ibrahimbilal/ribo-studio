@@ -9,7 +9,6 @@ import {
   DEFAULT_SCREENSAVER_RENDER_MODE,
   DURATION_PRESETS,
   estimateOutputBytes,
-  formatDurationLabel,
   MAX_DURATION_SECONDS,
   MIN_DURATION_SECONDS,
   profileFps,
@@ -95,6 +94,8 @@ import { resolveBuiltinFrameUrl } from '../lib/defaultFrames'
 import { frameImageUrl } from '../lib/frameImageUrl'
 import type { PreviewRendererMode } from '../lib/previewRendererPreference'
 import type { ScreensaverRendererBackend } from '../lib/render/types'
+import { translate } from '../../../i18n'
+import { formatDurationLabelI18n } from '../../../lib/formatDurationLabelI18n'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { screensaverTranslate } from '../lib/screensaverI18n'
 import { ensureServerUploadCleanupOnClose } from '../../../lib/serverUploadCleanup'
@@ -283,6 +284,8 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   const sourceUploads = ref<Record<string, SourceUploadStatus>>({})
 
   const globalSettings = useGlobalSettingsStore()
+  const t = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
+    translate(globalSettings.general.language, key, params)
   const outputWidth = ref<number>(DEFAULT_SCREENSAVER_OUTPUT.width)
   const outputHeight = ref<number>(DEFAULT_SCREENSAVER_OUTPUT.height)
   const fps = ref(DEFAULT_CFR_FPS)
@@ -390,7 +393,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   const exporting = exportQueue.exporting
   const activeExportCount = exportQueue.activeExportCount
 
-  const durationLabel = computed(() => formatDurationLabel(durationSeconds.value))
+  const durationLabel = computed(() => formatDurationLabelI18n(durationSeconds.value, t))
 
   const projectCards = computed(() => {
     const queueJobs = exportQueue.jobs.value.map((job) => ({
@@ -497,8 +500,8 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     // Video/loop exports automatically use Fast VFR via effectiveRenderingMode.
     if (durationSeconds.value < MIN_DURATION_SECONDS || durationSeconds.value > MAX_DURATION_SECONDS) {
       return tt('exportBlocker.durationRange', {
-        min: formatDurationLabel(MIN_DURATION_SECONDS),
-        max: formatDurationLabel(MAX_DURATION_SECONDS),
+        min: formatDurationLabelI18n(MIN_DURATION_SECONDS, t),
+        max: formatDurationLabelI18n(MAX_DURATION_SECONDS, t),
       })
     }
     if (audioMode.value === 'upload') {
@@ -2026,7 +2029,10 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     if (!current.channelId) return
     try {
       const meta = await api.fetchSubscribeAnimationChannel(current.channelId)
-      if (meta) {
+      const local = readSubscribeChannelPreference(current.channelId)
+      const serverUpdated = meta?.updatedAt ?? 0
+      const localUpdated = local?.updatedAt ?? 0
+      if (meta && serverUpdated >= localUpdated) {
         const next = sanitizeSubscribeAnimation({
           ...current,
           channelName: meta.channelName ?? current.channelName,
@@ -2037,6 +2043,8 @@ export const useScreensaverStore = defineStore('screensaver', () => {
         subscribeAnimation.value = next
         // Keep the same selected channel; only refresh stored metadata.
         rememberSubscribeChannelFromSettings(next)
+      } else if (local) {
+        subscribeAnimation.value = applyChannelPreferenceToSettings(current, local)
       }
     } catch {
       // Keep the selected localStorage channel as-is.
@@ -2200,13 +2208,12 @@ export const useScreensaverStore = defineStore('screensaver', () => {
 
   onSubscribeChannelsChanged(() => {
     refreshSubscribeChannelOptions()
-    const selectedId = getSelectedSubscribeChannelId()
-    const pref = selectedId ? readSubscribeChannelPreference(selectedId) : null
+    // Prefer the project’s current channel; fall back to the registry default.
+    const projectId = subscribeAnimation.value.channelId
+    const pref = projectId
+      ? readSubscribeChannelPreference(projectId)
+      : readSubscribeChannelPreference(getSelectedSubscribeChannelId())
     if (!pref) return
-    if (subscribeAnimation.value.channelId && subscribeAnimation.value.channelId !== pref.channelId) {
-      // Keep an explicitly different project channel until the user picks from the dropdown.
-      return
-    }
     const next = applyChannelPreferenceToSettings(subscribeAnimation.value, pref)
     subscribeAnimation.value = next
     void preloadSubscribeChannelAvatar(next.channelAvatarUrl)

@@ -152,7 +152,7 @@ describe('subscribe animation persistent cache', () => {
     await rm(path.dirname(dest), { recursive: true, force: true }).catch(() => undefined)
   })
 
-  it('replaces older channel-card cache for the same theme when channel data changes', async () => {
+  it('keeps only the newest channel-card cache per channel after fetch/data changes', async () => {
     const channelId = 'UCzzzzzzzzzzzzzzzzzzzzzz'
     await upsertSubscribeChannelMeta({
       channelId,
@@ -221,9 +221,8 @@ describe('subscribe animation persistent cache', () => {
     const inventory = listSubscribeAnimationCacheInventory()
     const group = inventory.channels.find((item) => item.channelId === channelId)
     assert.ok(group)
-    const lightCards = group!.animations.filter((item) => item.channelCardTheme === 'light')
-    assert.equal(lightCards.length, 1)
-    assert.equal(lightCards[0]!.cacheKey, second.key)
+    assert.equal(group!.animations.length, 1)
+    assert.equal(group!.animations[0]!.cacheKey, second.key)
     assert.equal(await getCachedAnimation(first.key), null)
     assert.ok(await getCachedAnimation(second.key))
 
@@ -253,9 +252,11 @@ describe('subscribe animation persistent cache', () => {
       renderConfig: dark.payload,
     })
     const afterDark = listSubscribeAnimationCacheInventory().channels.find((item) => item.channelId === channelId)
-    assert.equal(afterDark!.animations.length, 2)
-    assert.ok(afterDark!.animations.some((item) => item.channelCardTheme === 'light' && item.cacheKey === second.key))
-    assert.ok(afterDark!.animations.some((item) => item.channelCardTheme === 'dark' && item.cacheKey === dark.key))
+    assert.equal(afterDark!.animations.length, 1)
+    assert.equal(afterDark!.animations[0]!.cacheKey, dark.key)
+    assert.equal(afterDark!.animations[0]!.channelCardTheme, 'dark')
+    assert.equal(await getCachedAnimation(second.key), null)
+    assert.ok(await getCachedAnimation(dark.key))
 
     await rm(staging, { recursive: true, force: true }).catch(() => undefined)
   })

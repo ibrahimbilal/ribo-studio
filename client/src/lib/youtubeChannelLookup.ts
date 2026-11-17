@@ -5,6 +5,8 @@
 
 import { normalizeYoutubeChannelInput, youtubeHandleFromUrl } from '@shared/youtubeChannel'
 import * as api from './api'
+import { ingestSubscribeChannelAvatar } from '../apps/frame-screensaver/lib/subscribeAnimation/subscribeAnimationChannelAvatar'
+import { resolveSubscribeAvatarContentHash } from '../apps/frame-screensaver/lib/subscribeAnimation/subscribeAnimationAvatarHash'
 import {
   channelMetadataAffectsCache,
   readSubscribeChannelPreference,
@@ -31,6 +33,24 @@ export async function lookupYoutubeChannelDeduped(rawInput: string): Promise<api
   return promise
 }
 
+async function persistChannelMetaToServer(meta: api.YoutubeChannelLookupResult): Promise<void> {
+  if (!meta.channelId) return
+  await ingestSubscribeChannelAvatar(meta.avatarUrl, meta.avatarDataUrl)
+  const avatarContentHash = await resolveSubscribeAvatarContentHash(meta.avatarUrl)
+  try {
+    await api.upsertSubscribeAnimationChannel({
+      channelId: meta.channelId,
+      channelName: meta.channelName,
+      channelUrl: meta.channelUrl,
+      subscriberCount: meta.subscriberCount,
+      avatarContentHash,
+      avatarUrl: meta.avatarUrl,
+    })
+  } catch {
+    // Server channel metadata cache is best-effort; local registry still updates.
+  }
+}
+
 export async function registerYoutubeChannel(
   rawInput: string,
   options?: { select?: boolean },
@@ -45,6 +65,7 @@ export async function registerYoutubeChannel(
     if (!meta.channelId) {
       return { ok: false, error: 'Could not resolve a stable YouTube channel ID.' }
     }
+    await persistChannelMetaToServer(meta)
     const before = readSubscribeChannelPreference(meta.channelId)
     const channel = upsertSubscribeChannelPreference(
       {
@@ -82,6 +103,7 @@ export async function refreshYoutubeChannel(
     if (!meta.channelId) {
       return { ok: false, error: 'Could not refresh channel metadata.', preserved: existing }
     }
+    await persistChannelMetaToServer(meta)
     const channel = upsertSubscribeChannelPreference(
       {
         channelId: meta.channelId,

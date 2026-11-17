@@ -99,16 +99,31 @@ export function mergeSubscribeChannelsFromServer(
   for (const remote of serverChannels) {
     if (!isYoutubeChannelId(remote.channelId)) continue
     const existing = byId.get(remote.channelId)
-    const merged = normalizeChannel({
-      channelId: remote.channelId,
-      channelName: remote.channelName ?? existing?.channelName ?? remote.channelId,
-      channelHandle: existing?.channelHandle ?? null,
-      channelUrl: remote.channelUrl ?? existing?.channelUrl ?? undefined,
-      channelAvatarUrl: remote.avatarUrl ?? existing?.channelAvatarUrl ?? null,
-      channelSubscriberCount: remote.subscriberCount ?? existing?.channelSubscriberCount ?? null,
-      channelCardTheme: existing?.channelCardTheme ?? 'light',
-      updatedAt: Math.max(existing?.updatedAt ?? 0, remote.updatedAt ?? 0, Date.now()),
-    })
+    const remoteUpdated = Number.isFinite(remote.updatedAt) ? Number(remote.updatedAt) : 0
+    const localUpdated = existing?.updatedAt ?? 0
+    // Prefer the newer side so a local Refresh is not clobbered by stale server meta.
+    const preferLocal = Boolean(existing && localUpdated > remoteUpdated)
+    const merged = normalizeChannel(
+      preferLocal
+        ? {
+            ...existing,
+            channelUrl: existing!.channelUrl || remote.channelUrl || undefined,
+            channelAvatarUrl: existing!.channelAvatarUrl ?? remote.avatarUrl ?? null,
+            channelSubscriberCount: existing!.channelSubscriberCount ?? remote.subscriberCount ?? null,
+            channelName: existing!.channelName || remote.channelName || existing!.channelId,
+            updatedAt: localUpdated,
+          }
+        : {
+            channelId: remote.channelId,
+            channelName: remote.channelName ?? existing?.channelName ?? remote.channelId,
+            channelHandle: existing?.channelHandle ?? null,
+            channelUrl: remote.channelUrl ?? existing?.channelUrl ?? undefined,
+            channelAvatarUrl: remote.avatarUrl ?? existing?.channelAvatarUrl ?? null,
+            channelSubscriberCount: remote.subscriberCount ?? existing?.channelSubscriberCount ?? null,
+            channelCardTheme: existing?.channelCardTheme ?? 'light',
+            updatedAt: Math.max(localUpdated, remoteUpdated, Date.now()),
+          },
+    )
     if (merged) byId.set(merged.channelId, merged)
   }
   const channels = [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)

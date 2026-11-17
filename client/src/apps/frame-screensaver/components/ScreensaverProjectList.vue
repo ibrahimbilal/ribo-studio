@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { formatDurationLabel, MAX_DURATION_SECONDS, MIN_DURATION_SECONDS } from '@shared/screensaver'
+import { MAX_DURATION_SECONDS, MIN_DURATION_SECONDS } from '@shared/screensaver'
 import { Copy, Download, FileOutput, FolderOutput, ImagePlay, ImagePlus, Info, Music, Pencil, RotateCcw, Trash2 } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { formatBytes, formatClock } from '../../../lib/format'
+import { formatDurationLabelI18n } from '../../../lib/formatDurationLabelI18n'
 import { audioFormatLabel } from '../../../lib/media'
 import AppCheckbox from '../../../components/ui/AppCheckbox.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
@@ -135,8 +136,8 @@ function skipReasonText(reason: ExportAllSkipReason): string {
   const path = EXPORT_ALL_SKIP_I18N[reason]
   if (reason === 'invalid-duration') {
     return t(S(path), {
-      min: formatDurationLabel(MIN_DURATION_SECONDS),
-      max: formatDurationLabel(MAX_DURATION_SECONDS),
+      min: formatDurationLabelI18n(MIN_DURATION_SECONDS, t),
+      max: formatDurationLabelI18n(MAX_DURATION_SECONDS, t),
     })
   }
   if (reason === 'queue-full') {
@@ -356,7 +357,7 @@ async function openSoundSettingsFor(id: string) {
               </span>
             </div>
             <p class="mt-0.5 truncate text-xs text-zinc-500">
-              {{ mediaKindLabel(project.mediaKind) }} · {{ formatDurationLabel(project.durationSeconds) }} · {{ project.outputWidth }}×{{ project.outputHeight }}
+              {{ mediaKindLabel(project.mediaKind) }} · {{ formatDurationLabelI18n(project.durationSeconds, t) }} · {{ project.outputWidth }}×{{ project.outputHeight }}
             </p>
             <p class="mt-0.5 text-xs text-zinc-500">{{ formatUpdated(project.updatedAt) }}</p>
           </div>

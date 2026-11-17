@@ -110,11 +110,10 @@ async function readChannelCardThemeFromManifest(dir: string): Promise<string | n
   }
 }
 
-/** One dynamic channel-card cache per channel + theme (light/dark). */
-function channelThemeSlotKey(entry: StoredSubscribeAnimationCacheEntry): string | null {
+/** One dynamic channel-card cache per channel (newest wins after Fetch / re-render). */
+function channelSlotKey(entry: StoredSubscribeAnimationCacheEntry): string | null {
   if (entry.kind !== 'dynamic' || entry.templateId !== 'channel-card' || !entry.channelId) return null
-  if (!entry.channelCardTheme) return null
-  return `${entry.channelId}|${entry.templateId}|${entry.channelCardTheme}`
+  return entry.channelId
 }
 
 async function pruneDuplicateGroup(
@@ -124,9 +123,15 @@ async function pruneDuplicateGroup(
   let removed = 0
   for (const group of groups.values()) {
     if (group.length < 2 && !options.keepCacheKey) continue
+    const preferred =
+      options.keepCacheKey != null
+        ? group.find((item) => item.cacheKey === options.keepCacheKey)
+        : undefined
     const keep =
-      (options.keepCacheKey && group.find((item) => item.cacheKey === options.keepCacheKey)) ||
-      [...group].sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0))[0]
+      preferred ??
+      [...group].sort(
+        (a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0),
+      )[0]
     if (!keep) continue
     for (const entry of group) {
       if (entry.cacheKey === keep.cacheKey) continue
@@ -141,20 +146,18 @@ async function pruneDuplicateGroup(
 }
 
 /**
- * Keep a single channel-card entry per (channelId, theme). Prefer `keepCacheKey`, else newest lastUsedAt.
+ * Keep a single channel-card entry per channelId. Prefer `keepCacheKey`, else newest lastUsedAt.
  * Skips busy keys. Returns how many entries were removed.
  */
-async function pruneChannelThemeDuplicates(options?: {
+async function pruneChannelDuplicates(options?: {
   keepCacheKey?: string
   channelId?: string
-  channelCardTheme?: string | null
 }): Promise<number> {
   const groups = new Map<string, StoredSubscribeAnimationCacheEntry[]>()
   for (const entry of entries.values()) {
-    const slot = channelThemeSlotKey(entry)
+    const slot = channelSlotKey(entry)
     if (!slot) continue
     if (options?.channelId && entry.channelId !== options.channelId) continue
-    if (options?.channelCardTheme && entry.channelCardTheme !== options.channelCardTheme) continue
     const list = groups.get(slot) ?? []
     list.push(entry)
     groups.set(slot, list)
@@ -162,7 +165,8 @@ async function pruneChannelThemeDuplicates(options?: {
 
   return pruneDuplicateGroup(groups, {
     keepCacheKey: options?.keepCacheKey,
-    label: (entry) => `channel-card (${entry.channelCardTheme})`,
+    label: (entry) =>
+      `channel-card${entry.channelCardTheme ? ` (${entry.channelCardTheme})` : ''}`,
   })
 }
 
@@ -225,7 +229,7 @@ async function loadRegistry(): Promise<void> {
     if (!channel?.channelId || !isYoutubeChannelId(channel.channelId)) continue
     channels.set(channel.channelId, channel)
   }
-  const prunedDynamic = await pruneChannelThemeDuplicates()
+  const prunedDynamic = await pruneChannelDuplicates()
   const prunedStatic = await pruneStaticTemplateDuplicates()
   if (prunedDynamic + prunedStatic > 0) await saveRegistry()
 }
@@ -337,6 +341,12 @@ export async function validateCachedAnimation(cacheKey: string): Promise<StoredS
     }
     entry.lastUsedAt = Date.now()
     entries.set(cacheKey, entry)
+    // Fetch / status HIT must still drop older dynamic variants for this channel.
+    if (entry.kind === 'dynamic' && entry.templateId === 'channel-card' && entry.channelId) {
+      await pruneChannelDuplicates({ keepCacheKey: entry.cacheKey, channelId: entry.channelId })
+    } else if (entry.kind === 'static') {
+      await pruneStaticTemplateDuplicates({ keepCacheKey: entry.cacheKey, templateId: entry.templateId })
+    }
     await saveRegistry()
     const label = entry.kind === 'dynamic' && entry.channelId
       ? `${entry.channelId}/${entry.templateId}`
@@ -504,11 +514,10 @@ export async function putCachedAnimation(options: {
         lastUsedAt: now,
       }
       entries.set(options.cacheKey, stored)
-      if (stored.kind === 'dynamic' && stored.templateId === 'channel-card' && stored.channelId && stored.channelCardTheme) {
-        await pruneChannelThemeDuplicates({
+      if (stored.kind === 'dynamic' && stored.templateId === 'channel-card' && stored.channelId) {
+        await pruneChannelDuplicates({
           keepCacheKey: stored.cacheKey,
           channelId: stored.channelId,
-          channelCardTheme: stored.channelCardTheme,
         })
       } else if (stored.kind === 'static') {
         await pruneStaticTemplateDuplicates({
