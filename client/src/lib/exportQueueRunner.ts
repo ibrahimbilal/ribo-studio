@@ -39,19 +39,40 @@ async function drainPrepQueue(): Promise<void> {
         continue
       }
       try {
-        // Elapsed starts when this export leaves the client wait queue and begins prep/upload.
-        const processStarted = Date.now()
+        // Elapsed starts when status leaves queued (preparing/rendering), not while waiting.
+        let renderStarted: number | null = null
         let prepareHandoffProgress = 0.16
         const onUpdate = (patch: JobPollUpdate) => {
           if (typeof patch.progress === 'number' && Number.isFinite(patch.progress)) {
             prepareHandoffProgress = Math.max(prepareHandoffProgress, patch.progress)
           }
-          const localElapsed = Math.round(((Date.now() - processStarted) / 1000) * 10) / 10
-          const serverElapsed = patch.elapsedSec
-          const elapsedSec =
-            serverElapsed != null && Number.isFinite(serverElapsed)
-              ? Math.max(serverElapsed, localElapsed)
-              : localElapsed
+          const phase = patch.phase
+          const waiting =
+            phase == null ||
+            phase === 'idle' ||
+            phase === 'overlays' ||
+            phase === 'uploading' ||
+            phase === 'queued'
+          if (
+            !waiting &&
+            renderStarted == null &&
+            (phase === 'preparing' || phase === 'rendering' || phase === 'verifying')
+          ) {
+            renderStarted = Date.now()
+          }
+          let elapsedSec: number | null = null
+          if (waiting) {
+            elapsedSec = null
+          } else if (renderStarted != null) {
+            const localElapsed = Math.round(((Date.now() - renderStarted) / 1000) * 10) / 10
+            const serverElapsed = patch.elapsedSec
+            elapsedSec =
+              serverElapsed != null && Number.isFinite(serverElapsed)
+                ? Math.max(serverElapsed, localElapsed)
+                : localElapsed
+          } else if (patch.elapsedSec != null && Number.isFinite(patch.elapsedSec)) {
+            elapsedSec = patch.elapsedSec
+          }
           item.onUpdate({ ...patch, elapsedSec })
         }
         const jobId = await item.submit(item.signal, onUpdate)

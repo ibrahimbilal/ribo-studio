@@ -22,7 +22,7 @@ function isActive(path: string): boolean {
 }
 
 function openSettings(): void {
-  globalSettings.openModal('general')
+  globalSettings.openModal()
 }
 </script>
 

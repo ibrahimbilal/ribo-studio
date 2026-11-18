@@ -10,6 +10,16 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-11-18
+
+### Added
+
+- Remember the last-visited settings tab separately for each app (Shorts Ranking, Image Motion, Screensaver, Thumbnails, Audio Looper) and Global Settings.
+
+### Fixed
+
+- Export elapsed time no longer counts while a job is queued; the timer starts when status moves to preparing/rendering.
+
 ## [1.8.1] — 2026-11-18
 
 ### Fixed

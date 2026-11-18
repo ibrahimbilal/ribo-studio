@@ -11,6 +11,7 @@ import SelectedClipPanel from '../../components/SelectedClipPanel.vue'
 import StylePanel from '../../components/StylePanel.vue'
 import RankingExportDetails from '../../components/RankingExportDetails.vue'
 import { useI18n } from '../../i18n'
+import { usePersistedSettingsTab } from '../../composables/usePersistedSettingsTab'
 import { usePlayback } from '../../composables/usePlayback'
 import { formatClock } from '../../lib/format'
 import { useProjectStore } from '../../stores/project'
@@ -18,13 +19,15 @@ import ImageMotionShortsView from '../image-motion-shorts/ImageMotionShortsView.
 import ShortsModeBar from '../image-motion-shorts/components/ShortsModeBar.vue'
 import { loadShortsMode, saveShortsMode, type ShortsEditorMode } from '../image-motion-shorts/lib/shortsMode'
 
+const RANKING_INSPECTOR_TABS = ['clip', 'look', 'output', 'sound'] as const
+
 const store = useProjectStore()
 const { t } = useI18n()
 const editorMode = ref<ShortsEditorMode>(loadShortsMode())
 watch(editorMode, (mode) => saveShortsMode(mode))
 const playback = usePlayback()
 const tab = ref<'clips' | 'preview' | 'edit'>('preview')
-const inspector = ref<'clip' | 'look' | 'output' | 'sound'>('look')
+const inspector = usePersistedSettingsTab('ranking', RANKING_INSPECTOR_TABS, 'look')
 const tabs = computed(() => [
   { id: 'clips' as const, label: t('ranking.tabs.clips'), icon: ListVideo },
   { id: 'preview' as const, label: t('ranking.tabs.preview'), icon: MonitorPlay },

@@ -304,9 +304,6 @@ async function pump(): Promise<void> {
         continue
       }
       activeId = id
-      // Elapsed starts when the queue begins processing this job (not while waiting behind others).
-      if (job.encodeStarted == null) job.encodeStarted = Date.now()
-      noteTiming(job)
       try {
         const hooks = {
           cancelled: () => job.cancelRequested || job.status === 'cancelled',
@@ -337,7 +334,7 @@ async function pump(): Promise<void> {
             job.status = status
             job.message = message
             job.stage = stageLabel(status, message)
-            // Start wall clock when this job is actively processed (preparing), not only at FFmpeg render.
+            // Elapsed starts when status leaves queued (preparing/rendering), not while waiting.
             if ((status === 'preparing' || status === 'rendering') && job.encodeStarted == null) {
               job.encodeStarted = Date.now()
             }
@@ -472,8 +469,8 @@ function view(job: Job): JobView {
     hardware: job.hardware,
     encodeFps: job.encodeFps,
     encodeSpeed: job.encodeSpeed,
-    elapsedSec: job.elapsedSec,
-    etaSec: job.etaSec,
+    elapsedSec: job.status === 'queued' ? null : job.elapsedSec,
+    etaSec: job.status === 'queued' ? null : job.etaSec,
     stage: job.stage,
   }
 }

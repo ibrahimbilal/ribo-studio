@@ -3,14 +3,17 @@ import { computed, ref } from 'vue'
 import { AUDIO_LOOPER_BITRATES, AUDIO_LOOPER_FORMATS, type AudioLooperFormat, type AudioLooperLoopMode } from '@shared/audioLooper'
 import ToggleSwitch from '../../../components/ToggleSwitch.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
+import { usePersistedSettingsTab } from '../../../composables/usePersistedSettingsTab'
 import { useI18n, type MessageKey } from '../../../i18n'
 import { formatDurationLabelI18n } from '../../../lib/formatDurationLabelI18n'
 import { useAudioLooperStore } from '../stores/audioLooper'
 
+const LOOPER_TABS = ['duration', 'loop', 'output'] as const
+
 const store = useAudioLooperStore()
 const { t } = useI18n()
 const customMinutes = ref(60)
-const inspector = ref<'duration' | 'loop' | 'output'>('duration')
+const inspector = usePersistedSettingsTab('looper', LOOPER_TABS, 'duration')
 
 const outputDurationLabel = computed(() => formatDurationLabelI18n(store.targetDurationSeconds, t))
 

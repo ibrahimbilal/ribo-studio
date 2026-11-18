@@ -31,6 +31,7 @@ Patterns observed in this repo. Prefer matching them over inventing new ones.
 ## Persistence
 
 - Project data: IndexedDB `ribo` (`idb.ts`). Color sets / some prefs: `localStorage`.
+- Per-app last settings tab: `settingsTabMemory.ts` / `usePersistedSettingsTab` (chrome-only; not project data).
 - Server disks are caches (clips, frames, outputs), not the source of truth for editor projects.
 - **New project** resets editor state only; does not cancel jobs or purge server uploads.
 

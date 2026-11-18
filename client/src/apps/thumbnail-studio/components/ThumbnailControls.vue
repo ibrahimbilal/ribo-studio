@@ -3,17 +3,20 @@ import { ANCHORS, maxBadgeMarginPx } from '@shared/thumbnailLayout'
 import { DURATION_BADGE_OPTIONS, RESOLUTION_BADGE_OPTIONS } from '@shared/thumbnailBadges'
 import { BADGE_STYLES, THUMBNAIL_OUTPUTS, type BadgeStyleId } from '@shared/thumbnailProject'
 import { Download } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n, type MessageKey } from '../../../i18n'
+import { usePersistedSettingsTab } from '../../../composables/usePersistedSettingsTab'
 import { stylePreviewSvgUrl } from '../lib/badgeAssets'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
 import SliderField from '../../../components/SliderField.vue'
 import ToggleSwitch from '../../../components/ToggleSwitch.vue'
 import { useThumbnailStore } from '../stores/thumbnail'
 
+const THUMBNAIL_TABS = ['content', 'output', 'style'] as const
+
 const store = useThumbnailStore()
 const { t } = useI18n()
-const group = ref<'content' | 'output' | 'style'>('content')
+const group = usePersistedSettingsTab('thumbnail', THUMBNAIL_TABS, 'content')
 const groupTabs = computed(() => [
   { id: 'content' as const, label: t('thumbnail.settings.tabContent') },
   { id: 'output' as const, label: t('thumbnail.settings.tabOutput') },

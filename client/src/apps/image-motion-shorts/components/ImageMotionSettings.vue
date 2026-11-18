@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { OUTPUTS, FRAME_RATES } from '@shared/frame'
 import type { MotionEasing } from '@shared/imageMotion'
 import AdvancedAudioControls from '../../../components/audio/AdvancedAudioControls.vue'
@@ -7,14 +7,17 @@ import AudioFileField from '../../../components/audio/AudioFileField.vue'
 import SettingsAccordion from '../../../components/SettingsAccordion.vue'
 import SliderField from '../../../components/SliderField.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
+import { usePersistedSettingsTab } from '../../../composables/usePersistedSettingsTab'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { useI18n } from '../../../i18n'
 import { useImageMotionStore } from '../stores/imageMotion'
 
+const IMAGE_MOTION_TABS = ['motion', 'output', 'sound'] as const
+
 const store = useImageMotionStore()
 const globalSettings = useGlobalSettingsStore()
 const { t } = useI18n()
-const tab = ref<'motion' | 'output' | 'sound'>('motion')
+const tab = usePersistedSettingsTab('image-motion', IMAGE_MOTION_TABS, 'motion')
 const tabs = computed(() => [
   { id: 'motion' as const, label: t('imageMotion.settings.motion') },
   { id: 'output' as const, label: t('imageMotion.settings.output') },

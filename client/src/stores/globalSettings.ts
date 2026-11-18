@@ -38,6 +38,7 @@ import {
 import { applyAppearance } from '../lib/appearance'
 import { applyLanguage } from '../lib/locale'
 import { APP_VERSION } from '../lib/appVersion'
+import { loadSettingsTab, saveSettingsTab } from '../lib/settingsTabMemory'
 import * as api from '../lib/api'
 import {
   exportChannelsForBackup,
@@ -47,6 +48,17 @@ import {
 } from '../apps/frame-screensaver/lib/subscribeAnimation/subscribeAnimationChannelPreference'
 
 const LEGACY_PREVIEW_RENDERER_KEY = 'ribo-screensaver-renderer'
+
+const GLOBAL_SETTINGS_CATEGORIES = [
+  'general',
+  'appearance',
+  'performance',
+  'storage',
+  'export',
+  'integrations',
+  'backup',
+  'about',
+] as const satisfies readonly GlobalSettingsCategory[]
 
 function readLegacyPreviewRenderer(): PreviewRendererMode | null {
   try {
@@ -64,7 +76,10 @@ export const useGlobalSettingsStore = defineStore('globalSettings', () => {
   const settings = ref<GlobalSettings>(structuredClone(DEFAULT_GLOBAL_SETTINGS))
   const hydrated = ref(false)
   const modalOpen = ref(false)
-  const activeCategory = ref<GlobalSettingsCategory>('general')
+  const activeCategory = ref<GlobalSettingsCategory>(
+    loadSettingsTab('global', GLOBAL_SETTINGS_CATEGORIES, 'general'),
+  )
+  watch(activeCategory, (value) => saveSettingsTab('global', value))
   const saveState = ref<SettingsSaveState>('idle')
   const saveError = ref<string | null>(null)
   let saveTimer: number | null = null

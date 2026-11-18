@@ -26,7 +26,7 @@ const emit = defineEmits<{ close: [] }>()
 
 function openSettings(): void {
   emit('close')
-  globalSettings.openModal('general')
+  globalSettings.openModal()
 }
 
 function isActive(path: string): boolean {

@@ -52,6 +52,7 @@ import { isDynamicSubscribeAnimationStyle } from '@shared/subscribeAnimationTemp
 import { defineStore } from 'pinia'
 import { storeToRefs } from 'pinia'
 import { computed, ref, toRaw, watch } from 'vue'
+import { loadSettingsTab, saveSettingsTab } from '../../../lib/settingsTabMemory'
 import * as api from '../../../lib/api'
 import * as idb from '../../../lib/idb'
 import { titleFromFileName } from '../../../lib/format'
@@ -351,7 +352,9 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   const audioUploadProgress = ref(0)
   const audioError = ref<string | null>(null)
   let audioUploadAbort: AbortController | null = null
-  const settingsInspector = ref<'content' | 'output' | 'sound' | 'style'>('content')
+  const SCREENSAVER_INSPECTOR_TABS = ['content', 'output', 'sound', 'style'] as const
+  const settingsInspector = ref(loadSettingsTab('screensaver', SCREENSAVER_INSPECTOR_TABS, 'content'))
+  watch(settingsInspector, (value) => saveSettingsTab('screensaver', value))
   /** One-shot request so the shell can switch to the Settings mobile/desktop column. */
   const shellTabRequest = ref<'source' | 'preview' | 'settings' | null>(null)
   /** True when a browser File is held (manual pick / IDB restore) — not Looper transfer. */
