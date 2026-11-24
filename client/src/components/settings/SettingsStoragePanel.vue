@@ -19,6 +19,7 @@ import {
   rebuildSubscribeAnimation,
 } from '../../apps/frame-screensaver/lib/subscribeAnimation/subscribeAnimationCachePrep'
 import { registerSubscribeChannelFromYoutubeUrl } from '../../apps/frame-screensaver/lib/subscribeAnimation/registerSubscribeChannelFromYoutubeUrl'
+import { onYoutubeChannelAvatarImgError, youtubeChannelAvatarImgSrc } from '../../lib/youtubeChannelLookup'
 import { useI18n, type MessageKey } from '../../i18n'
 import { useGlobalSettingsStore } from '../../stores/globalSettings'
 import { usePlatformStore } from '../../stores/platform'
@@ -425,10 +426,11 @@ const canManageCache = computed(() => store.storage.persistentAnimationCacheEnab
             @click="expandedChannels[channel.channelId] = !expandedChannels[channel.channelId]"
           >
             <img
-              v-if="channel.channelAvatarUrl"
-              :src="channel.channelAvatarUrl"
+              v-if="youtubeChannelAvatarImgSrc(channel.channelAvatarUrl, channel.channelId)"
+              :src="youtubeChannelAvatarImgSrc(channel.channelAvatarUrl, channel.channelId)!"
               alt=""
               class="h-8 w-8 rounded-full object-cover"
+              @error="onYoutubeChannelAvatarImgError($event, channel.channelAvatarUrl)"
             />
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-zinc-100">{{ channel.channelName || t('settingsExtra.storageUnknownChannel') }}</p>

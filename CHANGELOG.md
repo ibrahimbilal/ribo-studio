@@ -10,6 +10,17 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-11-24
+
+### Added
+
+- Screensaver project list: select projects with checkboxes, right-click for a context menu, and copy/paste export/editor settings between projects (including bulk paste).
+
+### Fixed
+
+- Subscribe animation cache uploads no longer fail at large output sizes (frame upload limit aligned with screensaver export); channel avatars load before cache frames render and display via the local avatar proxy in settings.
+- YouTube channel avatars are stored under `server/tmp/subscribe-animation-cache/` on register/refresh; UI and subscribe animation preparation load them from disk instead of waiting on YouTube on every view.
+
 ## [1.9.0] — 2026-11-18
 
 ### Added

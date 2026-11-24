@@ -485,13 +485,29 @@ export async function upsertSubscribeAnimationChannel(meta: {
   subscriberCount: string | null
   avatarContentHash: string | null
   avatarUrl: string | null
-}): Promise<void> {
+  /** When true, client uploads avatar bytes right after; server skips a redundant YouTube fetch. */
+  clientProvidesAvatar?: boolean
+}): Promise<SubscribeAnimationChannelCacheMeta> {
   const response = await fetch('/api/screensaver/subscribe-animation-cache/channels', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(meta),
   })
   if (!response.ok) throw new Error(await readError(response))
+  return (await response.json()) as SubscribeAnimationChannelCacheMeta
+}
+
+export async function uploadSubscribeChannelAvatar(
+  channelId: string,
+  blob: Blob,
+  filename = 'avatar.jpg',
+): Promise<{ contentHash: string; relativePath: string }> {
+  const body = new FormData()
+  body.append('avatar', blob, filename)
+  return sendForm<{ contentHash: string; relativePath: string }>(
+    `/api/screensaver/subscribe-animation-cache/channels/${encodeURIComponent(channelId)}/avatar`,
+    body,
+  )
 }
 
 export interface SubscribeAnimationChannelCacheMeta {

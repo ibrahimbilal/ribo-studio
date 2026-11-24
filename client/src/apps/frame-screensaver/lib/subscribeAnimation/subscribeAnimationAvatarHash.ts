@@ -1,3 +1,4 @@
+import { subscribeChannelCachedAvatarPath } from '@shared/subscribeChannelAvatar'
 import { sha256Hex } from '@shared/subscribeAnimationCacheKey'
 import { isAllowedYoutubeAvatarUrl, isYoutubeAvatarDataUrl } from '@shared/youtubeAvatar'
 
@@ -10,11 +11,29 @@ async function hashBlob(blob: Blob): Promise<string> {
 
 export async function resolveSubscribeAvatarContentHash(
   avatarUrl: string | null | undefined,
+  channelId?: string | null,
 ): Promise<string | null> {
   const url = avatarUrl?.trim() || null
   if (!url) return null
   const cached = hashCache.get(url)
   if (cached) return cached
+
+  const local = subscribeChannelCachedAvatarPath(channelId)
+  if (local) {
+    try {
+      const response = await fetch(local)
+      if (response.ok) {
+        const blob = await response.blob()
+        if (blob.size >= 32) {
+          const hash = await hashBlob(blob)
+          hashCache.set(url, hash)
+          return hash
+        }
+      }
+    } catch {
+      // Fall back to remote proxy.
+    }
+  }
 
   try {
     let blob: Blob | null = null

@@ -18,7 +18,10 @@ import {
   clearSubscribeAnimationCache,
   getCachedAnimation,
   getSubscribeAnimationCacheStats,
+  ensureSubscribeChannelAvatarStored,
+  getSubscribeChannelAvatarFile,
   getSubscribeChannelMeta,
+  getSubscribeChannelMetaHydrated,
   listMissingStaticCacheHints,
   listSubscribeAnimationCacheInventory,
   listSubscribeChannelMetas,
@@ -30,9 +33,12 @@ import { cacheRetentionMs } from '../../shared/globalSettings'
 import { getServerGlobalSettings, loadServerGlobalSettings } from './globalSettings'
 import { invalidateStorageOverviewCache } from './storageOverview'
 
+/** Match screensaver export animation PNG cap (large channel cards at 4K can exceed 12 MB/frame). */
+const SUBSCRIBE_CACHE_FRAME_FILE_BYTES = 80 * 1024 * 1024
+
 const entryUpload = multer({
   dest: incomingDir,
-  limits: { fileSize: 12 * 1024 * 1024, files: SUBSCRIBE_ANIMATION_EXPORT_FRAME_CAP + 1 },
+  limits: { fileSize: SUBSCRIBE_CACHE_FRAME_FILE_BYTES, files: SUBSCRIBE_ANIMATION_EXPORT_FRAME_CAP + 1 },
 })
 
 function messageOf(error: unknown, fallback: string): string {
@@ -95,6 +101,33 @@ export function createSubscribeAnimationCacheRouter(): Router {
     res.json({ channels: listSubscribeChannelMetas() })
   })
 
+  router.get('/subscribe-animation-cache/channels/:channelId/avatar', async (req, res) => {
+    const channelId = req.params.channelId
+    if (!isYoutubeChannelId(channelId)) {
+      res.status(400).json({ error: 'Invalid YouTube channel ID.' })
+      return
+    }
+    try {
+      let file = await getSubscribeChannelAvatarFile(channelId)
+      if (!file) {
+        const meta = await getSubscribeChannelMetaHydrated(channelId)
+        if (meta?.avatarUrl) {
+          await ensureSubscribeChannelAvatarStored(channelId, meta.avatarUrl, meta.avatarContentHash)
+          file = await getSubscribeChannelAvatarFile(channelId)
+        }
+      }
+      if (!file) {
+        res.status(404).json({ error: 'Avatar is not cached for that channel.' })
+        return
+      }
+      res.setHeader('Content-Type', file.contentType)
+      res.setHeader('Cache-Control', 'private, max-age=86400')
+      res.sendFile(file.path)
+    } catch (error) {
+      res.status(500).json({ error: messageOf(error, 'Could not load the cached avatar.') })
+    }
+  })
+
   router.get('/subscribe-animation-cache/channels/:channelId', (req, res) => {
     const channelId = req.params.channelId
     if (!isYoutubeChannelId(channelId)) {
@@ -116,15 +149,27 @@ export function createSubscribeAnimationCacheRouter(): Router {
         res.status(400).json({ error: 'Invalid YouTube channel ID.' })
         return
       }
-      const meta = await upsertSubscribeChannelMeta({
+      const avatarContentHash =
+        typeof req.body?.avatarContentHash === 'string' ? req.body.avatarContentHash : null
+      const avatarUrl = typeof req.body?.avatarUrl === 'string' ? req.body.avatarUrl.slice(0, 500) : null
+      let meta = await upsertSubscribeChannelMeta({
         channelId,
         channelName: typeof req.body?.channelName === 'string' ? req.body.channelName.slice(0, 120) : null,
         channelUrl: typeof req.body?.channelUrl === 'string' ? req.body.channelUrl.slice(0, 600) : null,
         subscriberCount: typeof req.body?.subscriberCount === 'string' ? req.body.subscriberCount.slice(0, 48) : null,
-        avatarContentHash: typeof req.body?.avatarContentHash === 'string' ? req.body.avatarContentHash : null,
-        avatarUrl: typeof req.body?.avatarUrl === 'string' ? req.body.avatarUrl.slice(0, 500) : null,
+        avatarContentHash,
+        avatarUrl,
         updatedAt: Date.now(),
       })
+      const clientProvidesAvatar = req.body?.clientProvidesAvatar === true
+      if (!clientProvidesAvatar) {
+        try {
+          await ensureSubscribeChannelAvatarStored(channelId, avatarUrl, avatarContentHash)
+          meta = getSubscribeChannelMeta(channelId) ?? meta
+        } catch {
+          // Avatar bytes are optional; metadata is still saved.
+        }
+      }
       res.json(meta)
     } catch (error) {
       res.status(400).json({ error: messageOf(error, 'Could not store channel metadata.') })

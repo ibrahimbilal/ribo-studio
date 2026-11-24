@@ -6,7 +6,11 @@ import {
   onSubscribeChannelsChanged,
   type SubscribeChannelPreference,
 } from '../apps/frame-screensaver/lib/subscribeAnimation/subscribeAnimationChannelPreference'
-import { refreshYoutubeChannel } from '../lib/youtubeChannelLookup'
+import {
+  onYoutubeChannelAvatarImgError,
+  refreshYoutubeChannel,
+  youtubeChannelAvatarImgSrc,
+} from '../lib/youtubeChannelLookup'
 import { useI18n } from '../i18n'
 import { useGlobalSettingsStore } from '../stores/globalSettings'
 import { usePlatformStore } from '../stores/platform'
@@ -43,6 +47,9 @@ onUnmounted(() => {
 })
 
 const selected = computed(() => channels.value.find((c) => c.channelId === props.modelValue) ?? null)
+const selectedAvatarSrc = computed(() =>
+  youtubeChannelAvatarImgSrc(selected.value?.channelAvatarUrl, selected.value?.channelId),
+)
 
 function onSelect(event: Event): void {
   const value = (event.target as HTMLSelectElement).value.trim()
@@ -111,12 +118,13 @@ async function refreshChannels(): Promise<void> {
   <div class="youtube-channel-selector">
     <div v-if="selected" class="youtube-channel-selector__current">
       <img
-        v-if="selected.channelAvatarUrl"
+        v-if="selectedAvatarSrc"
         class="youtube-channel-selector__avatar"
-        :src="selected.channelAvatarUrl"
+        :src="selectedAvatarSrc"
         alt=""
         width="28"
         height="28"
+        @error="onYoutubeChannelAvatarImgError($event, selected?.channelAvatarUrl)"
       />
       <span v-else class="youtube-channel-selector__avatar youtube-channel-selector__avatar--empty" aria-hidden="true" />
       <div class="min-w-0 flex-1">

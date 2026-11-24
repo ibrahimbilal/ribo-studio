@@ -1,3 +1,4 @@
+import { subscribeChannelCachedAvatarPath } from '@shared/subscribeChannelAvatar'
 import { isAllowedYoutubeAvatarUrl, isYoutubeAvatarDataUrl } from '@shared/youtubeAvatar'
 
 let loadedUrl: string | null = null
@@ -35,7 +36,16 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
   })
 }
 
-async function resolveAvatarSrc(remoteOrLegacyUrl: string, embeddedDataUrl?: string | null): Promise<string | null> {
+async function resolveAvatarSrc(
+  remoteOrLegacyUrl: string,
+  embeddedDataUrl?: string | null,
+  channelId?: string | null,
+): Promise<string | null> {
+  const local = subscribeChannelCachedAvatarPath(channelId)
+  if (local) {
+    const fromDisk = await loadImage(local)
+    if (fromDisk) return local
+  }
   if (embeddedDataUrl && isYoutubeAvatarDataUrl(embeddedDataUrl)) {
     return dataUrlToObjectUrl(embeddedDataUrl)
   }
@@ -70,9 +80,10 @@ export function clearSubscribeChannelAvatarCache(): void {
 async function loadAvatarForSettingsKey(
   settingsKey: string,
   embeddedDataUrl?: string | null,
+  channelId?: string | null,
 ): Promise<HTMLImageElement | null> {
   revokeLoadedBlobUrl()
-  const src = await resolveAvatarSrc(settingsKey, embeddedDataUrl)
+  const src = await resolveAvatarSrc(settingsKey, embeddedDataUrl, channelId)
   if (!src) return null
   loadedBlobUrl = src.startsWith('blob:') ? src : null
   return loadImage(src)
@@ -82,6 +93,7 @@ async function loadAvatarForSettingsKey(
 export async function ingestSubscribeChannelAvatar(
   settingsKey: string | null | undefined,
   avatarDataUrl: string | null | undefined,
+  channelId?: string | null,
 ): Promise<void> {
   const key = settingsKey?.trim() || null
   if (!key) {
@@ -95,20 +107,23 @@ export async function ingestSubscribeChannelAvatar(
   }
   loadedUrl = key
   loadedImage = null
-  loadPromise = loadAvatarForSettingsKey(key, avatarDataUrl)
+  loadPromise = loadAvatarForSettingsKey(key, avatarDataUrl, channelId)
   loadedImage = await loadPromise
   loadPromise = null
 }
 
-export async function preloadSubscribeChannelAvatar(url: string | null | undefined): Promise<void> {
+export async function preloadSubscribeChannelAvatar(
+  url: string | null | undefined,
+  channelId?: string | null,
+): Promise<void> {
   const next = url?.trim() || null
   if (!next) {
     clearSubscribeChannelAvatarCache()
     return
   }
   if (isYoutubeAvatarDataUrl(next)) {
-    await ingestSubscribeChannelAvatar('legacy-data-url', next)
+    await ingestSubscribeChannelAvatar('legacy-data-url', next, channelId)
     return
   }
-  await ingestSubscribeChannelAvatar(next, null)
+  await ingestSubscribeChannelAvatar(next, null, channelId)
 }

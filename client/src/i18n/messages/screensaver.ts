@@ -1,6 +1,7 @@
 /** Frame Screensaver editor strings (merged into `en.screensaver` separately). */
 export const screensaver = {
   restoring: 'Restoring saved project…',
+  restoreFailed: 'The saved screensaver projects could not be restored.',
   tabs: {
     source: 'Source',
     preview: 'Preview',
@@ -208,7 +209,20 @@ export const screensaver = {
     downloadAria: 'Download video',
     retryAria: 'Retry render',
     deleteAria: 'Delete project',
+    selectAria: 'Select {name}',
     downloadAll: 'Download all',
+    contextMenu: {
+      copySettings: 'Copy settings',
+      pasteSettings: 'Paste settings',
+      duplicateMany: 'Duplicate {n} projects',
+      pasteMany: 'Paste settings into {n} projects',
+      deleteMany: 'Delete {n} projects',
+      renameMany: 'Rename {n} projects',
+      thumbnailMany: 'Create thumbnail for {n} projects',
+      imageMotionMany: 'Send {n} to Image Motion',
+      deselectProject: 'Deselect this project',
+      deselectAll: 'Deselect all',
+    },
     upload: {
       uploading: 'Uploading {percent}%',
       failed: 'Upload failed',
@@ -240,11 +254,15 @@ export const screensaver = {
   dialogs: {
     rename: {
       title: 'Rename project',
+      titleMany: 'Rename projects',
       name: 'Name',
+      bulkHint: 'Each project is renamed with a number, for example “{example}”.',
     },
     delete: {
       title: 'Delete project',
       body: 'Delete “{name}”? The project is removed from this browser. A render that is still running is left alone.',
+      titleMany: 'Delete projects',
+      bodyMany: 'Delete {n} selected projects? Projects that are still rendering are skipped.',
     },
     deleteAll: {
       title: 'Delete all projects',

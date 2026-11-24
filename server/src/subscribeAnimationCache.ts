@@ -23,6 +23,8 @@ import {
   type SubscribeAnimationStyle,
 } from '../../shared/screensaverSubscribeAnimation'
 import { isYoutubeChannelId } from '../../shared/youtubeChannelId'
+import { isAllowedYoutubeAvatarUrl } from '../../shared/youtubeAvatar'
+import { fetchYoutubeAvatarDataUrl } from './youtubeAvatar'
 import { tmpDir } from './storage'
 
 export const subscribeAnimationCacheDir = path.join(tmpDir, 'subscribe-animation-cache')
@@ -280,6 +282,31 @@ export function getSubscribeChannelMeta(channelId: string): SubscribeAnimationCh
   return { ...found, fromCache: true }
 }
 
+async function hydrateChannelMetaFromDisk(channelId: string): Promise<SubscribeAnimationChannelCacheMeta | null> {
+  if (!isYoutubeChannelId(channelId)) return null
+  const cached = channels.get(channelId)
+  if (cached) return cached
+  const channelJson = path.join(channelDir(channelId), 'channel.json')
+  try {
+    const raw = await readFile(channelJson, 'utf8')
+    const parsed = JSON.parse(raw) as SubscribeAnimationChannelCacheMeta
+    if (!isYoutubeChannelId(parsed.channelId)) return null
+    channels.set(parsed.channelId, parsed)
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export async function getSubscribeChannelMetaHydrated(
+  channelId: string,
+): Promise<SubscribeAnimationChannelCacheMeta | undefined> {
+  const fromRegistry = getSubscribeChannelMeta(channelId)
+  if (fromRegistry) return fromRegistry
+  const fromDisk = await hydrateChannelMetaFromDisk(channelId)
+  return fromDisk ? { ...fromDisk, fromCache: true } : undefined
+}
+
 export function listSubscribeChannelMetas(): SubscribeAnimationChannelCacheMeta[] {
   return [...channels.values()]
     .map((channel) => ({ ...channel, fromCache: true }))
@@ -306,13 +333,94 @@ export async function storeChannelAvatar(
     await writeFile(tmp, bytes)
     await rename(tmp, dest)
   }
-  const existing = channels.get(channelId)
-  if (existing) {
-    channels.set(channelId, { ...existing, avatarContentHash: contentHash, updatedAt: Date.now() })
-    await writeFile(path.join(channelDir(channelId), 'channel.json'), JSON.stringify(channels.get(channelId), null, 2))
-    await saveRegistry()
+  let existing = channels.get(channelId) ?? (await hydrateChannelMetaFromDisk(channelId))
+  if (!existing) {
+    existing = {
+      channelId,
+      channelName: null,
+      channelUrl: null,
+      subscriberCount: null,
+      avatarContentHash: null,
+      avatarUrl: null,
+      updatedAt: Date.now(),
+    }
   }
+  const next = { ...existing, avatarContentHash: contentHash, updatedAt: Date.now() }
+  channels.set(channelId, next)
+  await writeFile(path.join(channelDir(channelId), 'channel.json'), JSON.stringify(next, null, 2))
+  await saveRegistry()
   return { contentHash, relativePath: `assets/${fileName}` }
+}
+
+const AVATAR_FILE_EXTS = ['.jpg', '.jpeg', '.png', '.webp'] as const
+
+async function resolveStoredAvatarPath(channelId: string, contentHash: string): Promise<string | null> {
+  const dir = path.join(channelDir(channelId), 'assets')
+  for (const ext of AVATAR_FILE_EXTS) {
+    const fileName = `${contentHash}${ext === '.jpeg' ? '.jpg' : ext}`
+    const candidate = path.join(dir, fileName)
+    try {
+      await stat(candidate)
+      return candidate
+    } catch {
+      // Try next extension.
+    }
+  }
+  return null
+}
+
+async function findAnyStoredAvatarPath(channelId: string): Promise<string | null> {
+  const dir = path.join(channelDir(channelId), 'assets')
+  try {
+    const names = await readdir(dir)
+    const match = names.find((name) => /\.(jpg|jpeg|png|webp)$/i.test(name))
+    return match ? path.join(dir, match) : null
+  } catch {
+    return null
+  }
+}
+
+function avatarContentTypeForPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.png') return 'image/png'
+  if (ext === '.webp') return 'image/webp'
+  return 'image/jpeg'
+}
+
+export async function getSubscribeChannelAvatarFile(
+  channelId: string,
+): Promise<{ path: string; contentType: string } | null> {
+  if (!isYoutubeChannelId(channelId)) return null
+  await hydrateChannelMetaFromDisk(channelId)
+  const meta = channels.get(channelId)
+  const hash = meta?.avatarContentHash ?? null
+  const filePath =
+    (hash ? await resolveStoredAvatarPath(channelId, hash) : null) ??
+    (await findAnyStoredAvatarPath(channelId))
+  if (!filePath) return null
+  return { path: filePath, contentType: avatarContentTypeForPath(filePath) }
+}
+
+/** Fetch from YouTube once when missing; served later from `server/tmp/subscribe-animation-cache/`. */
+export async function ensureSubscribeChannelAvatarStored(
+  channelId: string,
+  avatarUrl: string | null | undefined,
+  avatarContentHash?: string | null,
+): Promise<void> {
+  if (!isYoutubeChannelId(channelId)) return
+  await hydrateChannelMetaFromDisk(channelId)
+  const meta = channels.get(channelId)
+  const hash = avatarContentHash ?? meta?.avatarContentHash
+  if (hash && (await resolveStoredAvatarPath(channelId, hash))) return
+  const remote = avatarUrl?.trim() || meta?.avatarUrl?.trim() || null
+  if (!remote || !isAllowedYoutubeAvatarUrl(remote)) return
+  const dataUrl = await fetchYoutubeAvatarDataUrl(remote)
+  if (!dataUrl) return
+  const match = /^data:(image\/[^;]+);base64,(.+)$/i.exec(dataUrl)
+  if (!match) return
+  const mime = match[1].toLowerCase()
+  const ext = mime.includes('png') ? '.png' : mime.includes('webp') ? '.webp' : '.jpg'
+  await storeChannelAvatar(channelId, Buffer.from(match[2], 'base64'), ext)
 }
 
 export async function validateCachedAnimation(cacheKey: string): Promise<StoredSubscribeAnimationCacheEntry | null> {

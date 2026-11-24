@@ -18,6 +18,8 @@ import {
   retainSubscribeAnimationCache,
   setSubscribeAnimationCacheMaxBytes,
   subscribeAnimationCacheDir,
+  getSubscribeChannelAvatarFile,
+  storeChannelAvatar,
   upsertSubscribeChannelMeta,
   validateCachedAnimation,
 } from './subscribeAnimationCache'
@@ -42,6 +44,28 @@ describe('subscribe animation persistent cache', () => {
 
   after(async () => {
     await clearSubscribeAnimationCache({ scope: 'all' })
+  })
+
+  it('persists channel avatars under subscribe-animation-cache', async () => {
+    const channelId = 'UCyyyyyyyyyyyyyyyyyyyyyy'
+    await upsertSubscribeChannelMeta({
+      channelId,
+      channelName: 'Avatar test',
+      channelUrl: `https://www.youtube.com/channel/${channelId}`,
+      subscriberCount: null,
+      avatarContentHash: null,
+      avatarUrl: null,
+      updatedAt: Date.now(),
+    })
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    const stored = await storeChannelAvatar(channelId, png, '.png')
+    assert.equal(stored.contentHash.length, 64)
+    const file = await getSubscribeChannelAvatarFile(channelId)
+    assert.ok(file)
+    assert.equal(file!.contentType, 'image/png')
   })
 
   it('stores static and dynamic entries under separate trees and reuses by key', async () => {

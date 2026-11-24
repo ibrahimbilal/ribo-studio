@@ -13,10 +13,12 @@ import {
   type SubscribeAnimationCacheKeyPayload,
 } from '@shared/subscribeAnimationCacheKey'
 import type { SubscribeAnimationCachePrepStatus } from '@shared/subscribeAnimationCache'
-import { staticSubscribeAnimationStyles } from '@shared/subscribeAnimationTemplates'
+import { isDynamicSubscribeAnimationStyle, staticSubscribeAnimationStyles } from '@shared/subscribeAnimationTemplates'
+import { isYoutubeChannelId } from '@shared/youtubeChannelId'
 import * as api from '../../../../lib/api'
 import { useGlobalSettingsStore } from '../../../../stores/globalSettings'
 import { resolveSubscribeAvatarContentHash } from './subscribeAnimationAvatarHash'
+import { preloadSubscribeChannelAvatar } from './subscribeAnimationChannelAvatar'
 import { renderSubscribeAnimationFrames } from './subscribeAnimationExportFrames'
 import { subscribeAnimationLayout } from './subscribeAnimationLayout'
 
@@ -76,7 +78,10 @@ export async function resolveCurrentSubscribeCacheKey(
   settings: SubscribeAnimationSettings,
   outputWidth: number,
 ): Promise<{ key: string; payload: SubscribeAnimationCacheKeyPayload; avatarContentHash: string | null }> {
-  const avatarContentHash = await resolveSubscribeAvatarContentHash(settings.channelAvatarUrl)
+  const avatarContentHash = await resolveSubscribeAvatarContentHash(
+    settings.channelAvatarUrl,
+    settings.channelId,
+  )
   const resolved = await resolveSubscribeAnimationCacheKey(
     cacheKeyInputFromSettings(settings, outputWidth, avatarContentHash),
   )
@@ -115,6 +120,10 @@ async function renderAndStore(
   onProgress?: (done: number, total: number) => void,
   signal?: AbortSignal,
 ): Promise<string> {
+  if (isDynamicSubscribeAnimationStyle(settings.style) && !isYoutubeChannelId(settings.channelId)) {
+    throw new Error('Register a YouTube channel before preparing the channel card animation cache.')
+  }
+  await preloadSubscribeChannelAvatar(settings.channelAvatarUrl, settings.channelId)
   const { key, payload } = await resolveCurrentSubscribeCacheKey(settings, outputWidth)
   const existing = await api.fetchSubscribeAnimationCacheStatus(key)
   if (existing.ready) {

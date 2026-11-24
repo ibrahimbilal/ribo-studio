@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MAX_DURATION_SECONDS, MIN_DURATION_SECONDS } from '@shared/screensaver'
-import { Copy, Download, FileOutput, FolderOutput, ImagePlay, ImagePlus, Info, Music, Pencil, RotateCcw, Trash2 } from '@lucide/vue'
+import { Download, FileOutput, FolderOutput, Info, Music, RotateCcw, Trash2 } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { formatBytes, formatClock } from '../../../lib/format'
 import { formatDurationLabelI18n } from '../../../lib/formatDurationLabelI18n'
@@ -22,15 +22,17 @@ import {
 import type { ScreensaverProjectStatus } from '../lib/screensaverProjectModel'
 import { useI18n } from '../../../i18n'
 import { S } from '../lib/screensaverI18n'
+import { bulkRenameNames } from '../lib/bulkProjectNames'
 import { createThumbnailFromScreensaver } from '../lib/createThumbnail'
 import { sendScreensaverImageToImageMotion } from '../lib/sendToImageMotion'
 import { useScreensaverStore } from '../stores/screensaver'
+import ScreensaverProjectContextMenu from './ScreensaverProjectContextMenu.vue'
 
 const store = useScreensaverStore()
 const { t } = useI18n()
-const renameId = ref<string | null>(null)
+const renameTargetIds = ref<string[]>([])
 const renameValue = ref('')
-const deleteId = ref<string | null>(null)
+const deleteTargetIds = ref<string[]>([])
 const deleteAllOpen = ref(false)
 const downloadingAll = ref(false)
 const exportAllOpen = ref(false)
@@ -39,8 +41,41 @@ const exportAllEligible = ref<ExportAllDecision[]>([])
 const exportAllSkipped = ref<Extract<ExportAllDecision, { kind: 'skipped' }>[]>([])
 const exportAllSelectedIds = ref<string[]>([])
 const infoTip = ref<{ id: string; kind: 'source' | 'audio'; x: number; y: number; above: boolean } | null>(null)
+const cardSelectedIds = ref<string[]>([])
+const contextMenu = ref<{ projectId: string; x: number; y: number } | null>(null)
 
-const deleteTarget = computed(() => store.projects.find((item) => item.id === deleteId.value) ?? null)
+const actionTargetIds = computed(() => {
+  if (cardSelectedIds.value.length > 0) return [...cardSelectedIds.value]
+  const id = contextMenu.value?.projectId
+  return id ? [id] : []
+})
+const pasteTargetIds = computed(() => actionTargetIds.value)
+const imageHandoffTargetIds = computed(() =>
+  actionTargetIds.value.filter((id) => {
+    const project = store.projects.find((item) => item.id === id)
+    return project ? canImageHandoff(project) : false
+  }),
+)
+const deletableTargetIds = computed(() =>
+  actionTargetIds.value.filter((id) => !store.projects.find((item) => item.id === id)?.live),
+)
+const contextMenuImageHandoff = computed(() => imageHandoffTargetIds.value.length > 0)
+const contextCanDelete = computed(() => deletableTargetIds.value.length > 0)
+const contextCanDeselectProject = computed(() => {
+  const id = contextMenu.value?.projectId
+  return Boolean(id && cardSelectedIds.value.includes(id))
+})
+const contextShowDeselectAll = computed(() => cardSelectedIds.value.length > 0)
+const contextCanDeselectAll = computed(() => cardSelectedIds.value.length > 1)
+
+const deleteDialogSingle = computed(() =>
+  deleteTargetIds.value.length === 1
+    ? (store.projects.find((item) => item.id === deleteTargetIds.value[0]) ?? null)
+    : null,
+)
+const deleteDialogDeletableCount = computed(
+  () => deleteTargetIds.value.filter((id) => !store.projects.find((item) => item.id === id)?.live).length,
+)
 const downloadableCount = computed(
   () =>
     store.projects.filter(
@@ -189,34 +224,56 @@ function hideInfoTip() {
   infoTip.value = null
 }
 
-function startRename(id: string, name: string) {
-  renameId.value = id
-  renameValue.value = name
+function openRenameDialog(ids: string[]) {
+  if (!ids.length) return
+  renameTargetIds.value = [...ids]
+  if (ids.length === 1) {
+    const project = store.projects.find((item) => item.id === ids[0])
+    renameValue.value = project?.name ?? ''
+  } else {
+    renameValue.value = ''
+  }
 }
 
 function closeRename() {
-  renameId.value = null
+  renameTargetIds.value = []
 }
 
 async function confirmRename() {
-  if (!renameId.value) return
-  await store.renameProject(renameId.value, renameValue.value)
-  renameId.value = null
+  const ids = renameTargetIds.value
+  if (!ids.length) return
+  const names = bulkRenameNames(renameValue.value, ids.length)
+  if (!names.length) return
+  for (let index = 0; index < ids.length; index += 1) {
+    await store.renameProject(ids[index]!, names[index]!)
+  }
+  renameTargetIds.value = []
 }
 
-function startDelete(id: string) {
-  deleteId.value = id
+function openDeleteDialog(ids: string[]) {
+  deleteTargetIds.value = [...ids]
 }
 
 function closeDelete() {
-  deleteId.value = null
+  deleteTargetIds.value = []
 }
 
 async function confirmDelete() {
-  if (!deleteId.value) return
-  const id = deleteId.value
-  deleteId.value = null
-  await store.deleteProject(id)
+  const ids = deleteTargetIds.value.filter((id) => !store.projects.find((item) => item.id === id)?.live)
+  if (!ids.length) {
+    deleteTargetIds.value = []
+    return
+  }
+  for (const id of ids) {
+    await store.deleteProject(id)
+  }
+  cardSelectedIds.value = cardSelectedIds.value.filter((id) => !ids.includes(id))
+  deleteTargetIds.value = []
+}
+
+function pruneSelection() {
+  const existing = new Set(store.projects.map((item) => item.id))
+  cardSelectedIds.value = cardSelectedIds.value.filter((id) => existing.has(id))
 }
 
 function closeDeleteAll() {
@@ -298,6 +355,82 @@ async function openSoundSettingsFor(id: string) {
   if (!(await ensureProjectOpen(id))) return
   store.openSoundSettings()
 }
+
+function onCardCheckboxChange(projectId: string, checked: boolean) {
+  cardSelectedIds.value = checked
+    ? [...new Set([...cardSelectedIds.value, projectId])]
+    : cardSelectedIds.value.filter((id) => id !== projectId)
+}
+
+function onProjectContextMenu(event: MouseEvent, projectId: string) {
+  event.preventDefault()
+  hideInfoTip()
+  if (!cardSelectedIds.value.includes(projectId)) {
+    cardSelectedIds.value = [projectId]
+  }
+  contextMenu.value = { projectId, x: event.clientX, y: event.clientY }
+}
+
+function closeContextMenu() {
+  contextMenu.value = null
+}
+
+async function contextCopySettings() {
+  const id = contextMenu.value?.projectId
+  if (!id) return
+  await store.copyProjectSettings(id)
+}
+
+async function contextPasteSettings() {
+  if (pasteTargetIds.value.length === 0) return
+  await store.pasteProjectSettings(pasteTargetIds.value)
+}
+
+function contextRename() {
+  openRenameDialog(actionTargetIds.value)
+}
+
+function contextDelete() {
+  openDeleteDialog(actionTargetIds.value)
+}
+
+async function contextDuplicate() {
+  const ids = actionTargetIds.value
+  if (!ids.length) return
+  let lastCopyId: string | null = null
+  let copied = 0
+  for (const id of ids) {
+    const copyId = await store.duplicateProject(id, { openAfter: false })
+    if (copyId) {
+      lastCopyId = copyId
+      copied += 1
+    }
+  }
+  if (copied === 1 && lastCopyId) await store.openProject(lastCopyId)
+  pruneSelection()
+}
+
+async function contextCreateThumbnail() {
+  for (const id of imageHandoffTargetIds.value) {
+    await createThumbnailFor(id)
+  }
+}
+
+async function contextSendToImageMotion() {
+  for (const id of imageHandoffTargetIds.value) {
+    await sendToImageMotionFor(id)
+  }
+}
+
+function contextDeselectProject() {
+  const id = contextMenu.value?.projectId
+  if (!id) return
+  cardSelectedIds.value = cardSelectedIds.value.filter((item) => item !== id)
+}
+
+function contextDeselectAll() {
+  cardSelectedIds.value = []
+}
 </script>
 
 <template>
@@ -339,10 +472,12 @@ async function openSoundSettingsFor(id: string) {
         :class="[
           project.id === store.projectId ? 'border-zinc-200' : 'border-zinc-800',
           project.downloadedUnchanged ? 'opacity-50' : 'opacity-100',
+          cardSelectedIds.includes(project.id) ? 'ring-1 ring-inset ring-brand/40' : '',
         ]"
         :data-project-id="project.id"
         :aria-current="project.id === store.projectId ? 'true' : undefined"
         @click="store.openProject(project.id)"
+        @contextmenu="onProjectContextMenu($event, project.id)"
       >
         <div class="flex gap-2">
           <div class="h-14 w-24 shrink-0 overflow-hidden rounded bg-zinc-900">
@@ -375,7 +510,13 @@ async function openSoundSettingsFor(id: string) {
         <p v-if="project.outputMissing" class="mt-1 text-xs text-amber-200">{{ t(S('projects.outputMissing')) }}</p>
         <p v-if="project.render.status === 'failed' && project.render.error" class="mt-1 text-xs text-red-300">{{ project.render.error }}</p>
 
-        <div class="mt-2 flex" @click.stop>
+        <div class="mt-2 flex items-center" @click.stop>
+          <AppCheckbox
+            class="me-0.5 shrink-0"
+            :checked="cardSelectedIds.includes(project.id)"
+            :aria-label="t(S('projects.selectAria'), { name: project.name })"
+            @change="(checked) => onCardCheckboxChange(project.id, checked)"
+          />
           <button
             class="icon-action"
             :class="uploadIconClass(project.upload.state)"
@@ -404,46 +545,8 @@ async function openSoundSettingsFor(id: string) {
             <Music :size="16" />
           </button>
           <button
-            class="icon-action"
-            type="button"
-            :aria-label="t(S('dialogs.rename.title'))"
-            :title="t('common.rename')"
-            @click="startRename(project.id, project.name)"
-          >
-            <Pencil :size="16" />
-          </button>
-          <button
-            class="icon-action"
-            type="button"
-            :aria-label="t(S('projects.duplicateAria'))"
-            :title="t('common.duplicate')"
-            @click="store.duplicateProject(project.id)"
-          >
-            <Copy :size="16" />
-          </button>
-          <button
-            v-if="canImageHandoff(project)"
-            class="icon-action"
-            type="button"
-            :aria-label="t(S('projects.createThumbnailAria'))"
-            :title="t(S('projects.createThumbnailTitle'))"
-            @click="createThumbnailFor(project.id)"
-          >
-            <ImagePlus :size="16" />
-          </button>
-          <button
-            v-if="canImageHandoff(project)"
-            class="icon-action"
-            type="button"
-            :aria-label="t(S('sendToImageMotion.aria'))"
-            :title="t(S('sendToImageMotion.title'))"
-            @click="sendToImageMotionFor(project.id)"
-          >
-            <ImagePlay :size="16" />
-          </button>
-          <button
             v-if="project.render.outputUrl && !project.outputMissing"
-            class="icon-action"
+            class="icon-action ms-auto"
             type="button"
             :aria-label="t(S('projects.downloadAria'))"
             :title="t('common.download')"
@@ -454,22 +557,13 @@ async function openSoundSettingsFor(id: string) {
           <button
             v-if="project.render.status === 'failed'"
             class="icon-action"
+            :class="{ 'ms-auto': !project.render.outputUrl || project.outputMissing }"
             type="button"
             :aria-label="t(S('projects.retryAria'))"
             :title="t('common.retry')"
             @click="store.retryProject(project.id)"
           >
             <RotateCcw :size="16" />
-          </button>
-          <button
-            class="icon-action icon-action--danger ms-auto"
-            type="button"
-            :aria-label="t(S('projects.deleteAria'))"
-            :title="t('common.delete')"
-            :disabled="project.live"
-            @click="startDelete(project.id)"
-          >
-            <Trash2 :size="16" />
           </button>
         </div>
       </article>
@@ -486,6 +580,31 @@ async function openSoundSettingsFor(id: string) {
         {{ t(S('projects.downloadAll')) }}
       </button>
     </div>
+
+    <ScreensaverProjectContextMenu
+      :open="contextMenu !== null"
+      :x="contextMenu?.x ?? 0"
+      :y="contextMenu?.y ?? 0"
+      :selection-count="actionTargetIds.length"
+      :image-handoff-count="imageHandoffTargetIds.length"
+      :delete-count="deletableTargetIds.length"
+      :can-paste="store.hasCopiedProjectSettings && pasteTargetIds.length > 0"
+      :can-delete="contextCanDelete"
+      :can-image-handoff="contextMenuImageHandoff"
+      :can-deselect-project="contextCanDeselectProject"
+      :show-deselect-all="contextShowDeselectAll"
+      :can-deselect-all="contextCanDeselectAll"
+      @close="closeContextMenu"
+      @copy-settings="contextCopySettings"
+      @paste-settings="contextPasteSettings"
+      @duplicate="contextDuplicate"
+      @create-thumbnail="contextCreateThumbnail"
+      @send-to-image-motion="contextSendToImageMotion"
+      @rename="contextRename"
+      @delete="contextDelete"
+      @deselect-project="contextDeselectProject"
+      @deselect-all="contextDeselectAll"
+    />
 
     <Teleport to="body">
       <div
@@ -512,20 +631,36 @@ async function openSoundSettingsFor(id: string) {
       </div>
     </Teleport>
 
-    <AppDialog :open="renameId !== null" :title="t(S('dialogs.rename.title'))" @cancel="closeRename">
+    <AppDialog
+      :open="renameTargetIds.length > 0"
+      :title="renameTargetIds.length > 1 ? t(S('dialogs.rename.titleMany')) : t(S('dialogs.rename.title'))"
+      @cancel="closeRename"
+    >
       <label class="block">
         <span class="section-label mb-1 block">{{ t(S('dialogs.rename.name')) }}</span>
         <input v-model="renameValue" class="field text-sm" type="text" maxlength="80" @keydown.enter.prevent="confirmRename" />
       </label>
+      <p v-if="renameTargetIds.length > 1" class="mt-2 text-xs text-zinc-400">
+        {{ t(S('dialogs.rename.bulkHint'), { example: bulkRenameNames(renameValue || 'Name', 2)[1] ?? 'Name (2)' }) }}
+      </p>
       <template #actions>
         <button class="btn btn-ghost cursor-pointer" type="button" @click="closeRename">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary cursor-pointer" type="button" @click="confirmRename">{{ t('common.save') }}</button>
       </template>
     </AppDialog>
 
-    <AppDialog :open="deleteTarget !== null" :title="t(S('dialogs.delete.title'))" @cancel="closeDelete">
+    <AppDialog
+      :open="deleteTargetIds.length > 0"
+      :title="deleteTargetIds.length > 1 ? t(S('dialogs.delete.titleMany')) : t(S('dialogs.delete.title'))"
+      @cancel="closeDelete"
+    >
       <p class="text-sm text-zinc-300">
-        {{ t(S('dialogs.delete.body'), { name: deleteTarget?.name ?? '' }) }}
+        <template v-if="deleteDialogSingle">
+          {{ t(S('dialogs.delete.body'), { name: deleteDialogSingle.name }) }}
+        </template>
+        <template v-else>
+          {{ t(S('dialogs.delete.bodyMany'), { n: deleteDialogDeletableCount }) }}
+        </template>
       </p>
       <template #actions>
         <button class="btn btn-ghost cursor-pointer" type="button" @click="closeDelete">{{ t('common.cancel') }}</button>

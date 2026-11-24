@@ -127,6 +127,12 @@ import {
   subscribeCacheStatus,
 } from '../lib/subscribeAnimation/subscribeAnimationCachePrep'
 import type { SavedScreensaverProject } from '../types'
+import {
+  applySettingsSnapshot,
+  extractSettingsSnapshot,
+  getCopiedProjectSettings,
+  setCopiedProjectSettings,
+} from '../lib/copyProjectSettings'
 
 function loadHtmlImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -147,12 +153,24 @@ let audioFile: File | null = null
 let metaTimer = 0
 let applyingProject = false
 let libraryReady = false
+let initPromise: Promise<void> | null = null
 const exportFingerprints = new Map<string, string>()
 const editStamps = new Map<string, string>()
 
 function editStamp(project: SavedScreensaverProject): string {
   const { updatedAt: _updatedAt, serverId: _serverId, ...rest } = project
   return JSON.stringify(rest)
+}
+
+function newScreensaverId(): string {
+  if (typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID()
+    } catch {
+      // Non-secure contexts (some HTTP origins) reject randomUUID.
+    }
+  }
+  return `ss-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
 }
 
 interface ScreensaverProjectSummary {
@@ -1034,18 +1052,28 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     return true
   }
 
-  async function init() {
-    if (hydrated.value) {
-      const pending = takePendingScreensaverProject()
-      if (pending) await openProject(pending)
-      return
+  async function bootstrapEmptyProject(): Promise<void> {
+    const now = Date.now()
+    if (!projectId.value) {
+      projectId.value = newScreensaverId()
+      createdAt.value = now
+      updatedAt.value = now
     }
+    projectRender.value = draftRender()
+    resetToDefaults()
+    await persistMeta()
+    await projectLibrary.saveScreensaverRenderState(projectId.value, projectRender.value).catch(() => undefined)
+    await projectLibrary.saveScreensaverActiveId(projectId.value).catch(() => undefined)
+  }
+
+  async function restoreScreensaverLibrary(): Promise<void> {
     if (pageWasReloaded()) {
       exportQueue.cancelAll()
       exportQueue.clearFinished()
     }
     await platform.refreshServer()
     void loadEncoders()
+    let hadSavedProjects = false
     try {
       const library = await projectLibrary.loadScreensaverLibrary()
       sourceIds.value = [...library.sourceIds]
@@ -1053,32 +1081,23 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       projects.value = library.projects
         .filter((project) => project.id)
         .map((project) => summaryFrom(project, library.renders.get(project.id!) ?? draftRender()))
+      hadSavedProjects = projects.value.length > 0
       let id = library.activeId
       if (!id || !projects.value.some((item) => item.id === id)) {
         id = [...projects.value].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id ?? null
       }
       if (!id) {
-        const now = Date.now()
-        projectId.value = crypto.randomUUID()
-        createdAt.value = now
-        updatedAt.value = now
-        projectRender.value = draftRender()
-        resetToDefaults()
-        await persistMeta()
-        await projectLibrary.saveScreensaverRenderState(projectId.value, projectRender.value)
-        await projectLibrary.saveScreensaverActiveId(projectId.value)
+        await bootstrapEmptyProject()
       } else {
-        await loadProjectIntoEditor(id)
+        const loaded = await loadProjectIntoEditor(id)
+        if (!loaded) await bootstrapEmptyProject()
       }
       await refreshStoredRenders()
     } catch {
-      toast('The saved screensaver projects could not be restored.')
-      if (!projectId.value) {
-        projectId.value = crypto.randomUUID()
-        createdAt.value = Date.now()
-        updatedAt.value = createdAt.value
-        resetToDefaults()
+      if (hadSavedProjects) {
+        toast(screensaverTranslate(globalSettings.general.language, 'restoreFailed'))
       }
+      if (!projectId.value) await bootstrapEmptyProject()
     } finally {
       const pending = takePendingScreensaverProject()
       libraryReady = true
@@ -1091,6 +1110,21 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       void prepareDefaultStaticAnimations(SUBSCRIBE_ANIMATION_STATIC_CACHE_WIDTH).catch(() => undefined)
       void refreshSubscribeCacheStats()
       void hydrateSubscribeChannel()
+    }
+  }
+
+  async function init() {
+    if (hydrated.value) {
+      const pending = takePendingScreensaverProject()
+      if (pending) await openProject(pending)
+      return
+    }
+    if (initPromise) return initPromise
+    initPromise = restoreScreensaverLibrary()
+    try {
+      await initPromise
+    } finally {
+      initPromise = null
     }
   }
 
@@ -2053,7 +2087,10 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       // Keep the selected localStorage channel as-is.
     }
     refreshSubscribeChannelOptions()
-    await preloadSubscribeChannelAvatar(subscribeAnimation.value.channelAvatarUrl)
+    await preloadSubscribeChannelAvatar(
+      subscribeAnimation.value.channelAvatarUrl,
+      subscribeAnimation.value.channelId,
+    )
     await refreshSubscribeCacheKey()
     void ensureSelectedSubscribeAnimationPrepared(8)
   }
@@ -2219,7 +2256,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     if (!pref) return
     const next = applyChannelPreferenceToSettings(subscribeAnimation.value, pref)
     subscribeAnimation.value = next
-    void preloadSubscribeChannelAvatar(next.channelAvatarUrl)
+    void preloadSubscribeChannelAvatar(next.channelAvatarUrl, next.channelId)
     void refreshSubscribeCacheKey().then(() => {
       if (next.enabled && next.style === 'channel-card') void ensureSelectedSubscribeAnimationPrepared(8)
     })
@@ -2228,7 +2265,7 @@ export const useScreensaverStore = defineStore('screensaver', () => {
   watch(
     () => subscribeAnimation.value.channelAvatarUrl,
     (url) => {
-      void preloadSubscribeChannelAvatar(url)
+      void preloadSubscribeChannelAvatar(url, subscribeAnimation.value.channelId)
     },
   )
 
@@ -2512,7 +2549,10 @@ export const useScreensaverStore = defineStore('screensaver', () => {
 
           let animationFrameBlobs: Blob[] | null = null
           if (animationEnabled) {
-            await preloadSubscribeChannelAvatar(snapshotAnimSettings.channelAvatarUrl)
+            await preloadSubscribeChannelAvatar(
+              snapshotAnimSettings.channelAvatarUrl,
+              snapshotAnimSettings.channelId,
+            )
             reportPrepare(
               { composition: 1, animation: 0.05, upload: 0 },
               'Resolving subscribe animation cache.',
@@ -2949,12 +2989,103 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     if (summary) upsertSummary({ ...summary, name: nextName, updatedAt: updated.updatedAt })
   }
 
-  async function duplicateProject(id: string): Promise<void> {
+  const copiedSettingsRevision = ref(0)
+  const hasCopiedProjectSettings = computed(() => {
+    copiedSettingsRevision.value
+    return getCopiedProjectSettings() != null
+  })
+
+  function applyPastedSettingsToEditor(saved: SavedScreensaverProject) {
+    applyingProject = true
+    try {
+      mode.value = saved.mode
+      outputWidth.value = saved.outputWidth
+      outputHeight.value = saved.outputHeight
+      fps.value = saved.fps
+      durationSeconds.value = saved.durationSeconds
+      durationPresetKey.value = saved.durationPresetKey
+      fit.value = saved.fit
+      loopType.value = saved.loopType
+      crossfadeSeconds.value = saved.crossfadeSeconds
+      audioMode.value = saved.audioMode
+      audioVolume.value = saved.audioVolume
+      audioFadeIn.value = saved.audioFadeIn
+      audioFadeOut.value = saved.audioFadeOut
+      loopAudio.value = saved.loopAudio
+      backgroundColor.value = saved.backgroundColor
+      composition.value = saved.composition
+        ? clampComposition(saved.composition)
+        : compositionForFit(saved.fit, saved.width, saved.height, saved.outputWidth, saved.outputHeight, saved.backgroundColor)
+      subscribeAnimation.value = saved.subscribeAnimation
+        ? sanitizeSubscribeAnimation(saved.subscribeAnimation)
+        : defaultSubscribeAnimationWithPreference()
+      if (subscribeAnimation.value.channelId) rememberSubscribeChannelFromSettings(subscribeAnimation.value)
+      history.value = [cloneComposition(composition.value)]
+      historyIndex.value = 0
+      invalidateCompletedExport()
+    } finally {
+      applyingProject = false
+    }
+    void syncFrameImage(composition.value.frameId)
+    void ensureSelectedSubscribeAnimationPrepared(5)
+  }
+
+  async function copyProjectSettings(id: string): Promise<void> {
     if (id === projectId.value) await flushPersist()
     const saved = await projectLibrary.loadScreensaverProjectRecord(id)
     if (!saved?.id) {
       toast('That screensaver project is no longer available.')
       return
+    }
+    const snapshot = extractSettingsSnapshot(saved)
+    setCopiedProjectSettings(snapshot)
+    copiedSettingsRevision.value += 1
+    toast('Project settings copied.', 'success')
+  }
+
+  async function pasteProjectSettings(targetIds: readonly string[]): Promise<void> {
+    const snapshot = getCopiedProjectSettings()
+    if (!snapshot || targetIds.length === 0) return
+    const uniqueIds = [...new Set(targetIds)]
+    let applied = 0
+    for (const id of uniqueIds) {
+      if (id === projectId.value) await flushPersist()
+      const saved = await projectLibrary.loadScreensaverProjectRecord(id)
+      if (!saved?.id) continue
+      const updated = applySettingsSnapshot(saved, snapshot)
+      const now = Date.now()
+      updated.updatedAt = now
+      updated.configFingerprint = fingerprintForSaved(
+        updated,
+        id === projectId.value && updated.audioMode === 'upload' ? audioFile : null,
+      )
+      await projectLibrary.saveScreensaverProjectRecord(updated)
+      const summary = projects.value.find((item) => item.id === id)
+      const render = summary?.render ?? (await projectLibrary.loadScreensaverRenderState(id)) ?? draftRender()
+      upsertSummary(summaryFrom(updated, render))
+      if (id === projectId.value) {
+        applyPastedSettingsToEditor(updated)
+        await persistMeta()
+      }
+      applied += 1
+    }
+    if (applied === 0) {
+      toast('No projects received the pasted settings.')
+      return
+    }
+    toast(
+      applied === 1 ? 'Settings pasted into 1 project.' : `Settings pasted into ${applied} projects.`,
+      'success',
+    )
+  }
+
+  async function duplicateProject(id: string, options?: { openAfter?: boolean }): Promise<string | null> {
+    const openAfter = options?.openAfter !== false
+    if (id === projectId.value) await flushPersist()
+    const saved = await projectLibrary.loadScreensaverProjectRecord(id)
+    if (!saved?.id) {
+      toast('That screensaver project is no longer available.')
+      return null
     }
     const copyId = crypto.randomUUID()
     const now = Date.now()
@@ -2981,7 +3112,8 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     const render = draftRender()
     await projectLibrary.saveScreensaverRenderState(copyId, render)
     upsertSummary(summaryFrom(payload, render))
-    await openProject(copyId)
+    if (openAfter) await openProject(copyId)
+    return copyId
   }
 
   async function deleteProject(id: string): Promise<void> {
@@ -3278,6 +3410,9 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     openProject,
     renameProject,
     duplicateProject,
+    copyProjectSettings,
+    pasteProjectSettings,
+    hasCopiedProjectSettings,
     deleteProject,
     deleteAllProjects,
     downloadProjectOutput,

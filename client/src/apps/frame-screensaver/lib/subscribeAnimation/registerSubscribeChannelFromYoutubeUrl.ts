@@ -4,8 +4,8 @@ import {
   type SubscribeAnimationSettings,
 } from '@shared/screensaverSubscribeAnimation'
 import * as api from '../../../../lib/api'
+import { persistYoutubeChannelMetaToServer } from '../../../../lib/youtubeChannelLookup'
 import { ingestSubscribeChannelAvatar } from './subscribeAnimationChannelAvatar'
-import { resolveSubscribeAvatarContentHash } from './subscribeAnimationAvatarHash'
 import {
   type SubscribeChannelPreference,
   upsertSubscribeChannelPreference,
@@ -39,24 +39,9 @@ export async function registerSubscribeChannelFromYoutubeUrl(
   if (!target) throw new Error('Paste a YouTube channel or video link first.')
 
   const lookup = await api.lookupYoutubeChannel(target)
-  await ingestSubscribeChannelAvatar(lookup.avatarUrl, lookup.avatarDataUrl)
-  const avatarContentHash = await resolveSubscribeAvatarContentHash(lookup.avatarUrl)
+  await ingestSubscribeChannelAvatar(lookup.avatarUrl, lookup.avatarDataUrl, lookup.channelId)
+  await persistYoutubeChannelMetaToServer(lookup)
   const channelCardTheme = options?.channelCardTheme === 'dark' ? 'dark' : 'light'
-
-  if (lookup.channelId) {
-    try {
-      await api.upsertSubscribeAnimationChannel({
-        channelId: lookup.channelId,
-        channelName: lookup.channelName,
-        channelUrl: lookup.channelUrl,
-        subscriberCount: lookup.subscriberCount,
-        avatarContentHash,
-        avatarUrl: lookup.avatarUrl,
-      })
-    } catch {
-      // Channel metadata cache is best-effort.
-    }
-  }
 
   const settings: RegisteredSubscribeChannel['settings'] = {
     channelUrl: lookup.channelUrl ?? target,

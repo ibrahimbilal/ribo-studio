@@ -10,7 +10,12 @@ import {
   type SubscribeChannelPreference,
 } from '../../apps/frame-screensaver/lib/subscribeAnimation/subscribeAnimationChannelPreference'
 import * as api from '../../lib/api'
-import { registerYoutubeChannel, refreshYoutubeChannel } from '../../lib/youtubeChannelLookup'
+import {
+  onYoutubeChannelAvatarImgError,
+  registerYoutubeChannel,
+  refreshYoutubeChannel,
+  youtubeChannelAvatarImgSrc,
+} from '../../lib/youtubeChannelLookup'
 import { findProjectsReferencingChannel } from '../../lib/youtubeChannelProjectRefs'
 import { useI18n } from '../../i18n'
 import { useGlobalSettingsStore } from '../../stores/globalSettings'
@@ -208,12 +213,13 @@ const ffprobePath = computed(() => engines.value?.enginePaths?.ffprobe ?? null)
         class="relative flex items-start gap-3 rounded-lg border border-white/5 bg-inset/60 px-3 py-2"
       >
         <img
-          v-if="channel.channelAvatarUrl"
+          v-if="youtubeChannelAvatarImgSrc(channel.channelAvatarUrl, channel.channelId)"
           class="mt-0.5 h-9 w-9 rounded-full object-cover"
-          :src="channel.channelAvatarUrl"
+          :src="youtubeChannelAvatarImgSrc(channel.channelAvatarUrl, channel.channelId)!"
           alt=""
           width="36"
           height="36"
+          @error="onYoutubeChannelAvatarImgError($event, channel.channelAvatarUrl)"
         />
         <span v-else class="mt-0.5 grid h-9 w-9 place-items-center rounded-full bg-ghost text-xs text-zinc-500">?</span>
         <div class="min-w-0 flex-1">

@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.9.0**).
+Version source of truth: root `package.json` (currently **1.10.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,10 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.10.0** (2026-11-24) — Screensaver project selection + context menu copy/paste settings; subscribe-animation cache upload limit + durable channel avatars on disk.
+- 2026-11-24 — Screensaver project list: per-card selection checkboxes, right-click context menu, copy/paste project settings (bulk paste) via `copyProjectSettings.ts`, `ScreensaverProjectContextMenu.vue`, store `copyProjectSettings` / `pasteProjectSettings`.
+- 2026-11-24 — Subscribe animation cache entry upload: multer per-frame cap 80 MB (was 12 MB); preload channel avatar before `renderSubscribeAnimationFrames`; settings UI avatars use `/api/youtube-channel-avatar` proxy (`youtubeChannelAvatarImgSrc` in `youtubeChannelLookup.ts`).
+- 2026-11-24 — Channel avatars persisted to `subscribe-animation-cache/dynamic/<channelId>/assets/` on lookup (`storeChannelAvatar`, `GET …/channels/:id/avatar`, `ensureSubscribeChannelAvatarStored`); client upload from lookup `avatarDataUrl` + local path helper `shared/subscribeChannelAvatar.ts`.
 - Release **v1.9.0** (2026-11-18) — Persist last-visited settings tab per app + Global Settings; export elapsed starts when preparing/rendering (not while queued).
 - 2026-11-18 — Export elapsed starts on queued → preparing/rendering (not during client wait/upload or server queue wait) (`exportQueueRunner.ts`, `jobs.ts`).
 - 2026-11-18 — Persist last-visited settings inspector tab per app + Global Settings category (`settingsTabMemory.ts`, `usePersistedSettingsTab`; Ranking/Image Motion/Screensaver/Thumbnails/Looper + `globalSettings`; sidebar/drawer open last category).

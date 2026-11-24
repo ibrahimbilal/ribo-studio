@@ -5,6 +5,7 @@ import {
   type SubscribeAnimationSettings,
 } from '@shared/screensaverSubscribeAnimation'
 import { renderSubscribeAnimationAt } from './renderSubscribeAnimation'
+import { preloadSubscribeChannelAvatar } from './subscribeAnimationChannelAvatar'
 import { subscribeAnimationLayout } from './subscribeAnimationLayout'
 
 const BATCH_SIZE = 10
@@ -23,6 +24,7 @@ export async function renderSubscribeAnimationFrames(
   outputWidth: number,
   onProgress?: (done: number, total: number) => void,
 ): Promise<Blob[]> {
+  await preloadSubscribeChannelAvatar(settings.channelAvatarUrl, settings.channelId)
   const layout = subscribeAnimationLayout(settings, outputWidth)
   const total = subscribeAnimationFrameCount(settings.durationSec)
   const canvas = document.createElement('canvas')
