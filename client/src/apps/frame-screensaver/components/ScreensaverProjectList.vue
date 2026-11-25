@@ -61,8 +61,12 @@ const contextCanDeselectProject = computed(() => {
   const id = contextMenu.value?.projectId
   return Boolean(id && cardSelectedIds.value.includes(id))
 })
-const contextShowDeselectAll = computed(() => cardSelectedIds.value.length > 0)
-const contextCanDeselectAll = computed(() => cardSelectedIds.value.length > 1)
+const contextShowSelectAll = computed(() => store.projects.length > 1 && cardSelectedIds.value.length > 0)
+const contextAllItemsSelected = computed(
+  () =>
+    store.projects.length > 0 &&
+    cardSelectedIds.value.length === store.projects.length,
+)
 
 const deleteDialogSingle = computed(() =>
   deleteTargetIds.value.length === 1
@@ -420,8 +424,12 @@ function contextDeselectProject() {
   cardSelectedIds.value = cardSelectedIds.value.filter((item) => item !== id)
 }
 
+function contextSelectAll() {
+  cardSelectedIds.value = selectAllProjectIds(store.projects.map((item) => item.id))
+}
+
 function contextDeselectAll() {
-  cardSelectedIds.value = []
+  cardSelectedIds.value = deselectAllProjectIds()
 }
 </script>
 
@@ -592,8 +600,8 @@ function contextDeselectAll() {
       :can-paste="store.hasCopiedProjectSettings && pasteTargetIds.length > 0"
       :can-image-handoff="contextMenuImageHandoff"
       :can-deselect-project="contextCanDeselectProject"
-      :show-deselect-all="contextShowDeselectAll"
-      :can-deselect-all="contextCanDeselectAll"
+      :show-select-all="contextShowSelectAll"
+      :all-items-selected="contextAllItemsSelected"
       @close="closeContextMenu"
       @copy-settings="contextCopySettings"
       @paste-settings="contextPasteSettings"
@@ -602,6 +610,7 @@ function contextDeselectAll() {
       @send-to-image-motion="contextSendToImageMotion"
       @rename="contextRename"
       @deselect-project="contextDeselectProject"
+      @select-all="contextSelectAll"
       @deselect-all="contextDeselectAll"
     />
 

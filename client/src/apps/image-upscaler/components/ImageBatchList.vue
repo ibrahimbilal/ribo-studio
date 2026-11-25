@@ -7,6 +7,7 @@ import AppDialog from '../../../components/ui/AppDialog.vue'
 import { useI18n } from '../../../i18n'
 import { audioFormatLabel } from '../../../lib/media'
 import { bulkRenameNames } from '../../frame-screensaver/lib/bulkProjectNames'
+import { selectAllProjectIds } from '../../../lib/multiSelect'
 import { useImageUpscalerStore } from '../stores/imageUpscaler'
 import type { LocalUpscaleItem } from '../types'
 import ImageBatchContextMenu from './ImageBatchContextMenu.vue'
@@ -34,8 +35,10 @@ const contextCanDeselectItem = computed(() => {
   const id = contextMenu.value?.itemId
   return Boolean(id && cardSelectedIds.value.includes(id))
 })
-const contextShowDeselectAll = computed(() => cardSelectedIds.value.length > 0)
-const contextCanDeselectAll = computed(() => cardSelectedIds.value.length > 1)
+const contextShowSelectAll = computed(() => store.items.length > 1 && cardSelectedIds.value.length > 0)
+const contextAllItemsSelected = computed(
+  () => store.items.length > 0 && cardSelectedIds.value.length === store.items.length,
+)
 const contextCanDownload = computed(() =>
   actionTargetIds.value.every((id) => {
     const item = store.items.find((entry) => entry.localId === id)
@@ -218,6 +221,10 @@ function contextDeselectItem() {
   cardSelectedIds.value = cardSelectedIds.value.filter((item) => item !== id)
 }
 
+function contextSelectAll() {
+  cardSelectedIds.value = selectAllProjectIds(store.items.map((item) => item.localId))
+}
+
 function contextDeselectAll() {
   cardSelectedIds.value = []
 }
@@ -367,8 +374,8 @@ async function confirmDeleteAll() {
       :can-download="contextCanDownload"
       :can-send-to-screensaver="contextCanSendToScreensaver"
       :can-deselect-item="contextCanDeselectItem"
-      :show-deselect-all="contextShowDeselectAll"
-      :can-deselect-all="contextCanDeselectAll"
+      :show-select-all="contextShowSelectAll"
+      :all-items-selected="contextAllItemsSelected"
       @close="closeContextMenu"
       @copy-settings="contextCopySettings"
       @paste-settings="contextPasteSettings"
@@ -378,6 +385,7 @@ async function confirmDeleteAll() {
       @send-to-screensaver="contextSendToScreensaver"
       @remove="contextRemove"
       @deselect-item="contextDeselectItem"
+      @select-all="contextSelectAll"
       @deselect-all="contextDeselectAll"
     />
 

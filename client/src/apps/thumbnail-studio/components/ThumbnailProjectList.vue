@@ -7,6 +7,7 @@ import { audioFormatLabel } from '../../../lib/media'
 import AppCheckbox from '../../../components/ui/AppCheckbox.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
 import { bulkRenameNames } from '../../frame-screensaver/lib/bulkProjectNames'
+import { selectAllProjectIds } from '../../../lib/multiSelect'
 import ThumbnailProjectContextMenu from './ThumbnailProjectContextMenu.vue'
 import { useThumbnailStore } from '../stores/thumbnail'
 
@@ -31,8 +32,12 @@ const contextCanDeselectProject = computed(() => {
   const id = contextMenu.value?.projectId
   return Boolean(id && cardSelectedIds.value.includes(id))
 })
-const contextShowDeselectAll = computed(() => cardSelectedIds.value.length > 0)
-const contextCanDeselectAll = computed(() => cardSelectedIds.value.length > 1)
+const contextShowSelectAll = computed(() => store.projects.length > 1 && cardSelectedIds.value.length > 0)
+const contextAllItemsSelected = computed(
+  () =>
+    store.projects.length > 0 &&
+    cardSelectedIds.value.length === store.projects.length,
+)
 
 const deleteDialogSingle = computed(() =>
   deleteTargetIds.value.length === 1
@@ -199,6 +204,10 @@ function contextDeselectProject() {
   cardSelectedIds.value = cardSelectedIds.value.filter((item) => item !== id)
 }
 
+function contextSelectAll() {
+  cardSelectedIds.value = selectAllProjectIds(store.projects.map((item) => item.id))
+}
+
 function contextDeselectAll() {
   cardSelectedIds.value = []
 }
@@ -352,8 +361,8 @@ async function downloadAll() {
       :selection-count="actionTargetIds.length"
       :can-paste="store.hasCopiedProjectSettings && pasteTargetIds.length > 0"
       :can-deselect-project="contextCanDeselectProject"
-      :show-deselect-all="contextShowDeselectAll"
-      :can-deselect-all="contextCanDeselectAll"
+      :show-select-all="contextShowSelectAll"
+      :all-items-selected="contextAllItemsSelected"
       @close="closeContextMenu"
       @copy-settings="contextCopySettings"
       @paste-settings="contextPasteSettings"
@@ -362,6 +371,7 @@ async function downloadAll() {
       @download="contextDownload"
       @delete="contextDelete"
       @deselect-project="contextDeselectProject"
+      @select-all="contextSelectAll"
       @deselect-all="contextDeselectAll"
     />
 

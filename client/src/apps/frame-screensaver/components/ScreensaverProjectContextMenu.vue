@@ -16,8 +16,8 @@ const props = defineProps<{
   canPaste: boolean
   canImageHandoff: boolean
   canDeselectProject: boolean
-  showDeselectAll: boolean
-  canDeselectAll: boolean
+  showSelectAll: boolean
+  allItemsSelected: boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +29,7 @@ const emit = defineEmits<{
   sendToImageMotion: []
   rename: []
   deselectProject: []
+  selectAll: []
   deselectAll: []
 }>()
 
@@ -86,7 +87,7 @@ function chooseAndClose(event: () => void) {
       :icon="Pencil"
       @select="chooseAndClose(() => emit('rename'))"
     />
-    <template v-if="canDeselectProject || showDeselectAll">
+    <template v-if="canDeselectProject || showSelectAll">
       <AppStudioContextMenuSeparator />
       <AppStudioContextMenuItem
         v-if="canDeselectProject"
@@ -96,12 +97,17 @@ function chooseAndClose(event: () => void) {
         @select="chooseAndClose(() => emit('deselectProject'))"
       />
       <AppStudioContextMenuItem
-        v-if="showDeselectAll"
-        :label="t(S('projects.contextMenu.deselectAll'))"
+        v-if="showSelectAll"
+        :label="
+          allItemsSelected
+            ? t(S('projects.contextMenu.deselectAll'))
+            : t(S('projects.contextMenu.selectAll'))
+        "
         :icon="SquareCheckBig"
-        :disabled="!canDeselectAll"
         muted
-        @select="chooseAndClose(() => canDeselectAll && emit('deselectAll'))"
+        @select="
+          chooseAndClose(() => emit(allItemsSelected ? 'deselectAll' : 'selectAll'))
+        "
       />
     </template>
   </AppStudioContextMenu>

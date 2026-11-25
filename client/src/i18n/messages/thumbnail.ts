@@ -57,6 +57,7 @@ export const thumbnail = {
       renameMany: 'Rename {n} projects',
       deleteMany: 'Delete {n} projects',
       deselectProject: 'Deselect this project',
+      selectAll: 'Select all',
       deselectAll: 'Deselect all',
     },
   },

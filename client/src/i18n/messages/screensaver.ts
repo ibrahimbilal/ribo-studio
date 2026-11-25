@@ -221,6 +221,7 @@ export const screensaver = {
       thumbnailMany: 'Create thumbnail for {n} projects',
       imageMotionMany: 'Send {n} to Image Motion',
       deselectProject: 'Deselect this project',
+      selectAll: 'Select all',
       deselectAll: 'Deselect all',
     },
     upload: {

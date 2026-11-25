@@ -57,6 +57,7 @@ export const upscaler = {
       renameMany: 'Rename {n} images',
       removeMany: 'Remove {n} images',
       deselectItem: 'Deselect this image',
+      selectAll: 'Select all',
       deselectAll: 'Deselect all',
     },
   },

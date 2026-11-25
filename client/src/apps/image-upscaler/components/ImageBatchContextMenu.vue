@@ -15,8 +15,8 @@ const props = defineProps<{
   canDownload: boolean
   canSendToScreensaver: boolean
   canDeselectItem: boolean
-  showDeselectAll: boolean
-  canDeselectAll: boolean
+  showSelectAll: boolean
+  allItemsSelected: boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +29,7 @@ const emit = defineEmits<{
   sendToScreensaver: []
   remove: []
   deselectItem: []
+  selectAll: []
   deselectAll: []
 }>()
 
@@ -84,7 +85,7 @@ function chooseAndClose(event: () => void) {
       danger
       @select="chooseAndClose(() => emit('remove'))"
     />
-    <template v-if="canDeselectItem || showDeselectAll">
+    <template v-if="canDeselectItem || showSelectAll">
       <AppStudioContextMenuSeparator />
       <AppStudioContextMenuItem
         v-if="canDeselectItem"
@@ -94,12 +95,17 @@ function chooseAndClose(event: () => void) {
         @select="chooseAndClose(() => emit('deselectItem'))"
       />
       <AppStudioContextMenuItem
-        v-if="showDeselectAll"
-        :label="t('upscaler.batch.contextMenu.deselectAll')"
+        v-if="showSelectAll"
+        :label="
+          allItemsSelected
+            ? t('upscaler.batch.contextMenu.deselectAll')
+            : t('upscaler.batch.contextMenu.selectAll')
+        "
         :icon="SquareCheckBig"
-        :disabled="!canDeselectAll"
         muted
-        @select="chooseAndClose(() => canDeselectAll && emit('deselectAll'))"
+        @select="
+          chooseAndClose(() => emit(allItemsSelected ? 'deselectAll' : 'selectAll'))
+        "
       />
     </template>
   </AppStudioContextMenu>
