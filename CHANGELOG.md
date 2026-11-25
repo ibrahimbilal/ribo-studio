@@ -10,6 +10,11 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Added
+
+- Thumbnail Studio: frame picker (bundled and uploaded PNGs, shared with Screensaver), composition toolbar on the preview canvas (fit, crop, zoom, undo), and project cards aligned with Screensaver (checkboxes and status pills).
+- Shared project-card context menu (`AppStudioContextMenu`) used by Screensaver and Thumbnails; Thumbnail cards support right-click actions and multi-select.
+
 ## [1.10.0] — 2026-11-24
 
 ### Added

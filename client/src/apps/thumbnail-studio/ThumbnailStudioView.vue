@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Image as ImageIcon, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from '../../i18n'
 import AppDialog from '../../components/ui/AppDialog.vue'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
-import ThumbnailCanvas from './components/ThumbnailCanvas.vue'
+import ThumbnailEditorCanvas from './components/ThumbnailEditorCanvas.vue'
 import ThumbnailControls from './components/ThumbnailControls.vue'
 import ThumbnailMediaPanel from './components/ThumbnailMediaPanel.vue'
 import ThumbnailProjectList from './components/ThumbnailProjectList.vue'
@@ -19,9 +19,27 @@ const tabs = computed(() => [
   { id: 'settings' as const, label: t('thumbnail.tabSettings'), icon: SlidersHorizontal },
 ])
 
+function onKey(event: KeyboardEvent) {
+  const target = event.target
+  if (target instanceof HTMLElement) {
+    const tag = target.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return
+  }
+  const meta = event.ctrlKey || event.metaKey
+  if (!meta || event.key.toLowerCase() !== 'z') return
+  event.preventDefault()
+  if (event.shiftKey) store.redo()
+  else store.undo()
+}
+
 onMounted(() => {
-  void store.init().then(() => store.consumeStoredTransfer())
+  void store.init().then(() => {
+    void store.loadFrames()
+    void store.consumeStoredTransfer()
+  })
+  window.addEventListener('keydown', onKey)
 })
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
@@ -49,12 +67,16 @@ onMounted(() => {
     </aside>
 
     <div
-      class="studio-stage flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-1"
+      class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden"
       :class="tab === 'preview' ? 'flex' : 'hidden lg:flex'"
     >
-      <ThumbnailCanvas class="min-h-0 flex-1" />
+      <div class="studio-stage flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden p-3">
+        <ThumbnailEditorCanvas class="flex min-h-0 w-full min-w-0 flex-1 flex-col" />
+      </div>
     </div>
-    <ThumbnailControls :class="tab === 'settings' ? 'flex max-h-none flex-1' : 'hidden lg:flex'" />
+    <ThumbnailControls
+      :class="tab === 'settings' ? 'flex max-h-none min-h-0 flex-1' : 'hidden min-h-0 flex-1 lg:flex'"
+    />
     <div v-if="!store.hydrated" class="scrim">
       {{ t('thumbnail.restoring') }}
     </div>

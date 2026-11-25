@@ -17,6 +17,7 @@ import {
   resetBadgePosition,
   syncPresetBadgeCoords,
   thumbnailDownloadFilename,
+  THUMBNAIL_CANVAS_COLOR,
 } from '@shared/thumbnailProject'
 import { documentFromTransfer, validateThumbnailTransfer, type ThumbnailTransferPayload } from '@shared/thumbnailTransfer'
 import { defineStore } from 'pinia'
@@ -31,6 +32,17 @@ import { translate } from '../../../i18n'
 import { thumbnailExportFingerprint } from '../../../lib/exportFingerprint'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { type FileStatusBoxStatus } from '../../../lib/fileStatusBox'
+import { compositionForFit } from '@shared/screensaverComposition'
+import { createThumbnailEditorSlice } from './thumbnailEditorSlice'
+import {
+  applyThumbnailSettingsSnapshot,
+  extractThumbnailSettingsSnapshot,
+  frameIdFromSnapshot,
+  getCopiedThumbnailSettings,
+  setCopiedThumbnailSettings,
+} from '../lib/copyProjectSettings'
+import { frameImageUrl } from '../../frame-screensaver/lib/frameImageUrl'
+import { isBuiltinFrameId, NONE_FRAME_ID } from '@shared/screensaverFrames'
 
 const bitmaps = new Map<string, ImageBitmap>()
 const LEGACY_KEYS = new Set(['presets', 'preset-default', 'active'])
@@ -62,6 +74,16 @@ interface ThumbnailProjectSummary {
 function editStamp(document: ThumbnailDocument): string {
   const { updatedAt: _updatedAt, ...rest } = document
   return JSON.stringify(rest)
+}
+
+function initialImageComposition(
+  exportWidth: number,
+  exportHeight: number,
+  width: number,
+  height: number,
+  fit: 'contain' | 'cover',
+) {
+  return compositionForFit(fit, width, height, exportWidth, exportHeight, THUMBNAIL_CANVAS_COLOR)
 }
 
 function exportLabel(document: ThumbnailDocument): string {
@@ -239,6 +261,7 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
     await refreshImageAssetMeta()
     await refreshPreviewUrl(project.id, project.image.assetId)
     seedEditStamp()
+    editor.onProjectLoaded()
     applyingProject = false
   }
 
@@ -694,7 +717,7 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
       next.image = {
         assetId: asset.id,
         frameAssetId: null,
-        composition: null,
+        composition: initialImageComposition(doc.value.export.width, doc.value.export.height, asset.width, asset.height, 'cover'),
         fit: 'cover',
         crop: fullNormCrop(),
         sourceWidth: asset.width,
@@ -755,7 +778,7 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
     next.image = {
       assetId: asset.id,
       frameAssetId: null,
-      composition: null,
+      composition: initialImageComposition(next.export.width, next.export.height, asset.width, asset.height, 'cover'),
       fit: 'cover',
       crop: fullNormCrop(),
       sourceWidth: asset.width,
@@ -1116,6 +1139,118 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
     return { byId }
   }
 
+  let editor!: ReturnType<typeof createThumbnailEditorSlice>
+  editor = createThumbnailEditorSlice({
+    doc,
+    hasImage,
+    hydrated,
+    edit,
+    scheduleSave,
+    toast: (message, tone) => platform.toast(message, tone),
+    refreshObjectUrl: async () => {
+      await editor.setObjectUrlFromAsset(doc.value.image.assetId)
+    },
+  })
+
+  const copiedSettingsRevision = ref(0)
+  const hasCopiedProjectSettings = computed(() => {
+    copiedSettingsRevision.value
+    return getCopiedThumbnailSettings() != null
+  })
+
+  async function syncFrameAssetForProject(projectId: string, frameId: string): Promise<string | null> {
+    if (!frameId || frameId === NONE_FRAME_ID) return null
+    try {
+      const response = await fetch(frameImageUrl(frameId))
+      if (!response.ok) return null
+      const blob = await response.blob()
+      const name = isBuiltinFrameId(frameId) ? `frame-${frameId}` : `frame-${frameId.slice(0, 8)}.png`
+      const asset = await storeImageBlob(blob, name, projectId)
+      return asset.id
+    } catch {
+      return null
+    }
+  }
+
+  function applyPastedSettingsToEditor(updated: ThumbnailDocument): void {
+    applyingProject = true
+    doc.value = clone(updated)
+    savedAssetIds = assetIdsInDocument(updated)
+    bitmapKey = ''
+    void syncBitmaps().then(() => {
+      editor.onProjectLoaded()
+      seedEditStamp()
+      applyingProject = false
+    })
+  }
+
+  async function copyProjectSettings(id: string): Promise<void> {
+    if (id === doc.value.id) await flushSave()
+    const saved =
+      id === doc.value.id && hasImage.value
+        ? clone(doc.value)
+        : await projectLibrary.loadThumbnailProjectRecord(id)
+    if (!saved?.image.assetId) {
+      platform.toast('That thumbnail project is no longer available.')
+      return
+    }
+    setCopiedThumbnailSettings(extractThumbnailSettingsSnapshot(saved))
+    copiedSettingsRevision.value += 1
+    platform.toast('Project settings copied.', 'success')
+  }
+
+  async function pasteProjectSettings(targetIds: readonly string[]): Promise<void> {
+    const snapshot = getCopiedThumbnailSettings()
+    if (!snapshot || targetIds.length === 0) return
+    const uniqueIds = [...new Set(targetIds)]
+    let applied = 0
+    for (const id of uniqueIds) {
+      if (id === doc.value.id) await flushSave()
+      const saved =
+        id === doc.value.id && hasImage.value
+          ? clone(doc.value)
+          : await projectLibrary.loadThumbnailProjectRecord(id)
+      if (!saved?.image.assetId) continue
+      const previousIds = assetIdsInDocument(saved)
+      let updated = applyThumbnailSettingsSnapshot(saved, snapshot)
+      const frameId = frameIdFromSnapshot(snapshot)
+      if (frameId === NONE_FRAME_ID) {
+        updated.image.frameAssetId = null
+      } else {
+        const frameAssetId = await syncFrameAssetForProject(id, frameId)
+        updated.image.frameAssetId = frameAssetId
+      }
+      updated.updatedAt = Date.now()
+      const fingerprint = thumbnailExportFingerprint(updated)
+      const prevMeta = projectMetaById.value[id] ?? { downloadedFingerprint: null, configFingerprint: '' }
+      const meta: projectLibrary.ThumbnailProjectMeta = {
+        downloadedFingerprint: prevMeta.downloadedFingerprint,
+        configFingerprint: fingerprint,
+      }
+      await projectLibrary.saveThumbnailProjectRecord(updated)
+      await projectLibrary.saveThumbnailProjectMeta(id, meta)
+      projectMetaById.value = { ...projectMetaById.value, [id]: meta }
+      await syncProjectAssets(id, previousIds, assetIdsInDocument(updated))
+      const fileName =
+        id === doc.value.id
+          ? (imageFileName.value ?? '')
+          : ((await getImageAsset(saved.image.assetId!))?.name ?? '')
+      upsertSummary(summaryFrom(updated, meta, fileName))
+      if (id === doc.value.id) {
+        applyPastedSettingsToEditor(updated)
+      }
+      applied += 1
+    }
+    if (applied === 0) {
+      platform.toast('No projects received the pasted settings.')
+      return
+    }
+    platform.toast(
+      applied === 1 ? 'Settings pasted into 1 project.' : `Settings pasted into ${applied} projects.`,
+      'success',
+    )
+  }
+
   async function syncBitmaps(): Promise<void> {
     const ids = assetIdsInDocument(doc.value)
     const key = ids.slice().sort().join('|')
@@ -1163,6 +1298,9 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
     duplicateProject,
     deleteProject,
     deleteAllProjects,
+    copyProjectSettings,
+    pasteProjectSettings,
+    hasCopiedProjectSettings,
     downloadProject,
     downloadAllProjects,
     applyScreensaverTransfer,
@@ -1191,6 +1329,7 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
     setJpegQuality,
     download,
     renderAssets,
+    ...editor,
   }
 })
 
