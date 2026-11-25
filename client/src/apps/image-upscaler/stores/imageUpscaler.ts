@@ -14,13 +14,20 @@ import {
   type UpscaleOptions,
   type UpscalerCapabilities,
 } from '@shared/imageUpscaler'
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { translate, type MessageKey, type MessageParams } from '../../../i18n'
 import { sniffImageMime } from '../../../lib/media'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { usePlatformStore } from '../../../stores/platform'
 import { useScreensaverStore } from '../../frame-screensaver/stores/screensaver'
+import {
+  copyUpscaleBatchSettings,
+  duplicateUpscaleBatchItem,
+  pasteUpscaleBatchSettings,
+  renameUpscaleBatchItem,
+} from '../lib/batchItemActions'
+import { hasCopiedUpscaleSettings as hasSessionCopiedUpscaleSettings } from '../lib/copyUpscaleSettings'
 import { readLocalImage } from '../lib/localPreview'
 import { sendFileToScreensaver } from '../lib/sendToScreensaver'
 import {
@@ -59,7 +66,13 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
   /** Bumped on every regenerate so comparison images remount and bypass browser cache. */
   const outputGeneration = ref(0)
   const formatFromSource = ref(true)
+  const copiedSettingsRevision = ref(0)
   let pollTimer = 0
+
+  const hasCopiedUpscaleSettings = computed(() => {
+    copiedSettingsRevision.value
+    return hasSessionCopiedUpscaleSettings()
+  })
 
   const selected = computed(() => items.value.find((item) => item.localId === selectedId.value) ?? null)
   const completedCount = computed(() => items.value.filter((item) => item.status === 'completed').length)
@@ -194,6 +207,41 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
 
   function selectItem(localId: string): void {
     if (items.value.some((item) => item.localId === localId)) selectedId.value = localId
+  }
+
+  function batchSlice() {
+    return { items: items.value, processing: processing.value }
+  }
+
+  function renameItem(localId: string, name: string): void {
+    renameUpscaleBatchItem(batchSlice(), localId, name)
+  }
+
+  async function duplicateItem(localId: string): Promise<void> {
+    await duplicateUpscaleBatchItem(batchSlice(), localId, t, (message, kind) => platform.toast(message, kind))
+  }
+
+  function copyUpscaleSettings(): void {
+    copyUpscaleBatchSettings(
+      settings.value,
+      formatFromSource.value,
+      () => {
+        copiedSettingsRevision.value += 1
+      },
+      t,
+      (message, kind) => platform.toast(message, kind),
+    )
+  }
+
+  function pasteUpscaleSettings(): void {
+    pasteUpscaleBatchSettings(
+      (options, fromSource) => {
+        settings.value = options
+        formatFromSource.value = fromSource
+      },
+      t,
+      (message, kind) => platform.toast(message, kind),
+    )
   }
 
   function setPreset(id: ResolutionPresetId): void {
@@ -479,9 +527,14 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
     downloadableCount,
     confirmSendId,
     formatFromSource,
+    hasCopiedUpscaleSettings,
     limits: DEFAULT_UPSCALE_LIMITS,
     addFiles,
     removeItem,
+    renameItem,
+    duplicateItem,
+    copyUpscaleSettings,
+    pasteUpscaleSettings,
     clearFiles,
     selectItem,
     setPreset,
@@ -499,3 +552,7 @@ export const useImageUpscalerStore = defineStore('image-upscaler', () => {
     newProject,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useImageUpscalerStore, import.meta.hot))
+}
