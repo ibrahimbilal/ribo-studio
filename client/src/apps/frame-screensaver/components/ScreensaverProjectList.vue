@@ -56,11 +56,7 @@ const imageHandoffTargetIds = computed(() =>
     return project ? canImageHandoff(project) : false
   }),
 )
-const deletableTargetIds = computed(() =>
-  actionTargetIds.value.filter((id) => !store.projects.find((item) => item.id === id)?.live),
-)
 const contextMenuImageHandoff = computed(() => imageHandoffTargetIds.value.length > 0)
-const contextCanDelete = computed(() => deletableTargetIds.value.length > 0)
 const contextCanDeselectProject = computed(() => {
   const id = contextMenu.value?.projectId
   return Boolean(id && cardSelectedIds.value.includes(id))
@@ -390,10 +386,6 @@ function contextRename() {
   openRenameDialog(actionTargetIds.value)
 }
 
-function contextDelete() {
-  openDeleteDialog(actionTargetIds.value)
-}
-
 async function contextDuplicate() {
   const ids = actionTargetIds.value
   if (!ids.length) return
@@ -468,7 +460,7 @@ function contextDeselectAll() {
       <article
         v-for="project in store.projects"
         :key="project.id"
-        class="cursor-pointer rounded-lg border bg-inset p-2 transition-opacity"
+        class="relative cursor-pointer rounded-lg border bg-inset p-2 transition-opacity"
         :class="[
           project.id === store.projectId ? 'border-zinc-200' : 'border-zinc-800',
           project.downloadedUnchanged ? 'opacity-50' : 'opacity-100',
@@ -479,6 +471,13 @@ function contextDeselectAll() {
         @click="store.openProject(project.id)"
         @contextmenu="onProjectContextMenu($event, project.id)"
       >
+        <div class="absolute start-2 top-2 z-10" @click.stop>
+          <AppCheckbox
+            :checked="cardSelectedIds.includes(project.id)"
+            :aria-label="t(S('projects.selectAria'), { name: project.name })"
+            @change="(checked) => onCardCheckboxChange(project.id, checked)"
+          />
+        </div>
         <div class="flex gap-2">
           <div class="h-14 w-24 shrink-0 overflow-hidden rounded bg-zinc-900">
             <img v-if="project.thumbnail" :src="project.thumbnail" alt="" class="h-full w-full object-cover" />
@@ -511,12 +510,6 @@ function contextDeselectAll() {
         <p v-if="project.render.status === 'failed' && project.render.error" class="mt-1 text-xs text-red-300">{{ project.render.error }}</p>
 
         <div class="mt-2 flex items-center" @click.stop>
-          <AppCheckbox
-            class="me-0.5 shrink-0"
-            :checked="cardSelectedIds.includes(project.id)"
-            :aria-label="t(S('projects.selectAria'), { name: project.name })"
-            @change="(checked) => onCardCheckboxChange(project.id, checked)"
-          />
           <button
             class="icon-action"
             :class="uploadIconClass(project.upload.state)"
@@ -546,7 +539,7 @@ function contextDeselectAll() {
           </button>
           <button
             v-if="project.render.outputUrl && !project.outputMissing"
-            class="icon-action ms-auto"
+            class="icon-action"
             type="button"
             :aria-label="t(S('projects.downloadAria'))"
             :title="t('common.download')"
@@ -557,13 +550,22 @@ function contextDeselectAll() {
           <button
             v-if="project.render.status === 'failed'"
             class="icon-action"
-            :class="{ 'ms-auto': !project.render.outputUrl || project.outputMissing }"
             type="button"
             :aria-label="t(S('projects.retryAria'))"
             :title="t('common.retry')"
             @click="store.retryProject(project.id)"
           >
             <RotateCcw :size="16" />
+          </button>
+          <button
+            class="icon-action icon-action--danger ms-auto"
+            type="button"
+            :aria-label="t(S('projects.deleteAria'))"
+            :title="t('common.delete')"
+            :disabled="project.live"
+            @click="openDeleteDialog([project.id])"
+          >
+            <Trash2 :size="16" />
           </button>
         </div>
       </article>
@@ -587,9 +589,7 @@ function contextDeselectAll() {
       :y="contextMenu?.y ?? 0"
       :selection-count="actionTargetIds.length"
       :image-handoff-count="imageHandoffTargetIds.length"
-      :delete-count="deletableTargetIds.length"
       :can-paste="store.hasCopiedProjectSettings && pasteTargetIds.length > 0"
-      :can-delete="contextCanDelete"
       :can-image-handoff="contextMenuImageHandoff"
       :can-deselect-project="contextCanDeselectProject"
       :show-deselect-all="contextShowDeselectAll"
@@ -601,7 +601,6 @@ function contextDeselectAll() {
       @create-thumbnail="contextCreateThumbnail"
       @send-to-image-motion="contextSendToImageMotion"
       @rename="contextRename"
-      @delete="contextDelete"
       @deselect-project="contextDeselectProject"
       @deselect-all="contextDeselectAll"
     />

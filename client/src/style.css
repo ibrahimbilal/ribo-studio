@@ -772,8 +772,7 @@ input[type='color'] {
 
   .app-checkbox {
     position: relative;
-    display: inline-flex;
-    flex-shrink: 0;
+    display: block;
     cursor: pointer;
   }
 
@@ -792,8 +791,9 @@ input[type='color'] {
   }
 
   .app-checkbox__box {
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     box-sizing: border-box;
     width: 1.125rem;
     height: 1.125rem;

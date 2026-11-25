@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ClipboardPaste, Copy, ImagePlay, ImagePlus, Files, Pencil, Square, SquareCheckBig, Trash2 } from '@lucide/vue'
+import { ClipboardPaste, Copy, ImagePlay, ImagePlus, Files, Pencil, Square, SquareCheckBig } from '@lucide/vue'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from '../../../i18n'
 import { S } from '../lib/screensaverI18n'
@@ -10,9 +10,7 @@ const props = defineProps<{
   y: number
   selectionCount: number
   imageHandoffCount: number
-  deleteCount: number
   canPaste: boolean
-  canDelete: boolean
   canImageHandoff: boolean
   canDeselectProject: boolean
   showDeselectAll: boolean
@@ -27,7 +25,6 @@ const emit = defineEmits<{
   createThumbnail: []
   sendToImageMotion: []
   rename: []
-  delete: []
   deselectProject: []
   deselectAll: []
 }>()
@@ -190,19 +187,6 @@ function chooseAndClose(event: () => void) {
         <Pencil :size="14" aria-hidden="true" />
         {{
           multi ? t(S('projects.contextMenu.renameMany'), { n: selectionCount }) : t(S('dialogs.rename.title'))
-        }}
-      </button>
-      <button
-        class="flex w-full items-center gap-2 px-3 py-1.5 text-start text-xs hover:bg-white/5"
-        :class="canDelete ? 'cursor-pointer text-red-300' : 'cursor-not-allowed text-zinc-500'"
-        type="button"
-        role="menuitem"
-        :disabled="!canDelete"
-        @click="chooseAndClose(() => canDelete && emit('delete'))"
-      >
-        <Trash2 :size="14" aria-hidden="true" />
-        {{
-          deleteCount > 1 ? t(S('projects.contextMenu.deleteMany'), { n: deleteCount }) : t('common.delete')
         }}
       </button>
       <template v-if="canDeselectProject || showDeselectAll">
