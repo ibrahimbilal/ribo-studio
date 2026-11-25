@@ -9,6 +9,7 @@ Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
 Changes since the current `package.json` version. User-facing bullets also belong under **Unreleased** in root `CHANGELOG.md`. On release, the release-manager skill / `npm run release:*` promotes the root changelog; then summarize or clear this section as appropriate.
 
+- 2026-11-25 — Screensaver and Thumbnail **Download all** bundles ready outputs into one ZIP (`storedZip.ts`, `downloadAllProjectOutputs`, `downloadAllProjects`); Image Upscaler unchanged (server ZIP).
 - 2026-11-25 — Thumbnail Studio: Screensaver-style frame picker (bundled + uploaded PNGs), composition canvas toolbar (fit/crop/undo), and project cards with checkboxes + status pills (`ThumbnailControls.vue`, `ThumbnailEditorCanvas.vue`, `ThumbnailProjectList.vue`, `thumbnailEditorSlice.ts`).
 - 2026-11-25 — Shared studio project card context menu shell (`AppStudioContextMenu*.vue`); Screensaver menu refactored; Thumbnail project list right-click menu with bulk duplicate/download/rename/delete.
 - 2026-11-25 — Thumbnail copy/paste project settings (badges, export, composition, frame) via `copyProjectSettings.ts` and store `copyProjectSettings` / `pasteProjectSettings`.

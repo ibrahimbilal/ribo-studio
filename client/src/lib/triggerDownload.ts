@@ -7,3 +7,12 @@ export function triggerDownload(url: string, filename: string): void {
   link.click()
   link.remove()
 }
+
+export function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  try {
+    triggerDownload(url, filename)
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+}

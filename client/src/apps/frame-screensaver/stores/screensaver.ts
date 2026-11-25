@@ -69,7 +69,9 @@ import { idleExport, isActiveExportPhase, pickDisplayExportState } from '../../.
 import { useManagedExportJobs } from '../../../lib/managedExportJobs'
 import { pageWasReloaded } from '../../../lib/pageNavigation'
 import { buildExportDownloadName } from '../../../lib/exportFilename'
-import { triggerDownload } from '../../../lib/triggerDownload'
+import { triggerBlobDownload, triggerDownload } from '../../../lib/triggerDownload'
+import { buildStoredZipBlob } from '../../../lib/storedZip'
+import { uniqueZipEntryNames } from '../../../lib/uniqueZipEntryNames'
 import { usePlatformStore } from '../../../stores/platform'
 import type { ExportState } from '../../../types'
 import {
@@ -3203,6 +3205,37 @@ export const useScreensaverStore = defineStore('screensaver', () => {
     await projectLibrary.saveScreensaverRenderState(projectId.value, projectRender.value).catch(() => undefined)
   }
 
+  async function fetchProjectOutputBlob(
+    id: string,
+  ): Promise<{ blob: Blob; filename: string } | null> {
+    const summary = projects.value.find((item) => item.id === id)
+    const render = id === projectId.value ? projectRender.value : summary?.render
+    if (!render?.outputUrl || render.outputMissing) return null
+    if (render.jobId) {
+      try {
+        const job = await api.fetchJob(render.jobId)
+        if (!job || job.status !== 'done') {
+          const missing = { ...render, outputMissing: true }
+          if (summary) upsertSummary({ ...summary, render: missing })
+          if (id === projectId.value) projectRender.value = missing
+          void projectLibrary.saveScreensaverRenderState(id, missing).catch(() => undefined)
+          return null
+        }
+      } catch {
+        return null
+      }
+    }
+    try {
+      const response = await fetch(render.outputUrl)
+      if (!response.ok) return null
+      const blob = await response.blob()
+      const filename = render.outputFilename || `${summary?.name || name.value || 'screensaver'}.mp4`
+      return { blob, filename }
+    } catch {
+      return null
+    }
+  }
+
   async function downloadAllProjectOutputs(): Promise<void> {
     const ready = projectCards.value.filter(
       (item) =>
@@ -3215,12 +3248,33 @@ export const useScreensaverStore = defineStore('screensaver', () => {
       toast('No rendered videos are ready to download.', 'info')
       return
     }
-    let count = 0
+    const pending: { name: string; data: Uint8Array; id: string }[] = []
     for (const item of ready) {
-      if (await downloadProjectOutput(item.id)) count++
+      const fetched = await fetchProjectOutputBlob(item.id)
+      if (!fetched) continue
+      pending.push({
+        name: fetched.filename,
+        data: new Uint8Array(await fetched.blob.arrayBuffer()),
+        id: item.id,
+      })
     }
-    if (count > 0) toast(`Downloaded ${count} video${count === 1 ? '' : 's'}.`, 'success')
-    else if (ready.length) toast('Could not download any videos.', 'info')
+    if (!pending.length) {
+      toast('Could not download any videos.', 'info')
+      return
+    }
+    const names = uniqueZipEntryNames(pending.map((entry) => entry.name))
+    const zip = buildStoredZipBlob(
+      pending.map((entry, index) => ({
+        name: names[index] ?? entry.name,
+        data: entry.data,
+      })),
+    )
+    triggerBlobDownload(zip, 'screensaver-projects.zip')
+    for (const entry of pending) {
+      await markProjectDownloaded(entry.id)
+    }
+    const count = pending.length
+    toast(`Downloaded ZIP with ${count} video${count === 1 ? '' : 's'}.`, 'success')
   }
 
   async function downloadProjectOutput(id: string): Promise<boolean> {

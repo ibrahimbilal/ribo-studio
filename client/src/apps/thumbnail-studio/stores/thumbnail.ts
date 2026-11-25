@@ -43,6 +43,9 @@ import {
 } from '../lib/copyProjectSettings'
 import { frameImageUrl } from '../../frame-screensaver/lib/frameImageUrl'
 import { isBuiltinFrameId, NONE_FRAME_ID } from '@shared/screensaverFrames'
+import { buildStoredZipBlob } from '../../../lib/storedZip'
+import { triggerBlobDownload } from '../../../lib/triggerDownload'
+import { uniqueZipEntryNames } from '../../../lib/uniqueZipEntryNames'
 
 const bitmaps = new Map<string, ImageBitmap>()
 const LEGACY_KEYS = new Set(['presets', 'preset-default', 'active'])
@@ -1004,11 +1007,14 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
     }
   }
 
-  async function downloadStoredProject(thumbnail: ThumbnailDocument, allowDuplicate = true): Promise<void> {
+  async function exportStoredProjectBlob(
+    thumbnail: ThumbnailDocument,
+    allowDuplicate = true,
+  ): Promise<{ blob: Blob; filename: string; fingerprint: string } | null> {
     const fingerprint = thumbnailExportFingerprint(thumbnail)
     if (!allowDuplicate) {
       const meta = projectMetaById.value[thumbnail.id] ?? (await projectLibrary.loadThumbnailProjectMeta(thumbnail.id))
-      if (meta.downloadedFingerprint && meta.downloadedFingerprint === fingerprint) return
+      if (meta.downloadedFingerprint && meta.downloadedFingerprint === fingerprint) return null
     }
     let assets: ThumbnailRenderAssets
     let ownedAssets = false
@@ -1021,16 +1027,17 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
     }
     try {
       const blob = await exportThumbnailBlob(thumbnail, assets)
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = thumbnailDownloadFilename(thumbnail)
-      link.click()
-      URL.revokeObjectURL(url)
-      await markDownloaded(thumbnail.id, fingerprint)
+      return { blob, filename: thumbnailDownloadFilename(thumbnail), fingerprint }
     } finally {
       if (ownedAssets) closeOwnedRenderAssets(assets)
     }
+  }
+
+  async function downloadStoredProject(thumbnail: ThumbnailDocument, allowDuplicate = true): Promise<void> {
+    const exported = await exportStoredProjectBlob(thumbnail, allowDuplicate)
+    if (!exported) return
+    triggerBlobDownload(exported.blob, exported.filename)
+    await markDownloaded(thumbnail.id, exported.fingerprint)
   }
 
   async function download(): Promise<void> {
@@ -1114,20 +1121,41 @@ export const useThumbnailStore = defineStore('thumbnail', () => {
     }
     if (exporting.value) return
     exporting.value = true
-    let count = 0
     try {
+      const pending: { name: string; data: Uint8Array; id: string; fingerprint: string }[] = []
       for (const item of items) {
         const saved = item.id === doc.value.id ? clone(doc.value) : await projectLibrary.loadThumbnailProjectRecord(item.id)
         if (!saved?.image.assetId) continue
         try {
-          await downloadStoredProject(saved, false)
-          count++
+          const exported = await exportStoredProjectBlob(saved, false)
+          if (!exported) continue
+          pending.push({
+            name: exported.filename,
+            data: new Uint8Array(await exported.blob.arrayBuffer()),
+            id: saved.id,
+            fingerprint: exported.fingerprint,
+          })
         } catch {
           /* try remaining */
         }
       }
-      if (count > 0) platform.toast(`Downloaded ${count} thumbnail${count === 1 ? '' : 's'}.`, 'success')
-      else platform.toast('Could not download any thumbnails.', 'info')
+      if (!pending.length) {
+        platform.toast('Could not download any thumbnails.', 'info')
+        return
+      }
+      const names = uniqueZipEntryNames(pending.map((entry) => entry.name))
+      const zip = buildStoredZipBlob(
+        pending.map((entry, index) => ({
+          name: names[index] ?? entry.name,
+          data: entry.data,
+        })),
+      )
+      triggerBlobDownload(zip, 'thumbnail-projects.zip')
+      for (const entry of pending) {
+        await markDownloaded(entry.id, entry.fingerprint)
+      }
+      const count = pending.length
+      platform.toast(`Downloaded ZIP with ${count} thumbnail${count === 1 ? '' : 's'}.`, 'success')
     } finally {
       exporting.value = false
     }

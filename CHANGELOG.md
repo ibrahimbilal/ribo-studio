@@ -10,6 +10,10 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- Screensaver and Thumbnails: **Download all** saves a single ZIP instead of multiple separate files.
+
 ### Added
 
 - Thumbnail Studio: frame picker (bundled and uploaded PNGs, shared with Screensaver), composition toolbar on the preview canvas (fit, crop, zoom, undo), and project cards aligned with Screensaver (checkboxes and status pills).
