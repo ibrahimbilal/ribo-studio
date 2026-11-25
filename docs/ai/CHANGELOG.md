@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.10.0**).
+Version source of truth: root `package.json` (currently **1.11.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -9,15 +9,16 @@ Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
 Changes since the current `package.json` version. User-facing bullets also belong under **Unreleased** in root `CHANGELOG.md`. On release, the release-manager skill / `npm run release:*` promotes the root changelog; then summarize or clear this section as appropriate.
 
-- 2026-11-25 — Screensaver and Thumbnail **Download all** bundles ready outputs into one ZIP (`storedZip.ts`, `downloadAllProjectOutputs`, `downloadAllProjects`); Image Upscaler unchanged (server ZIP).
-- 2026-11-25 — Thumbnail Studio: Screensaver-style frame picker (bundled + uploaded PNGs), composition canvas toolbar (fit/crop/undo), and project cards with checkboxes + status pills (`ThumbnailControls.vue`, `ThumbnailEditorCanvas.vue`, `ThumbnailProjectList.vue`, `thumbnailEditorSlice.ts`).
-- 2026-11-25 — Shared studio project card context menu shell (`AppStudioContextMenu*.vue`); Screensaver menu refactored; Thumbnail project list right-click menu with bulk duplicate/download/rename/delete.
-- 2026-11-25 — Thumbnail copy/paste project settings (badges, export, composition, frame) via `copyProjectSettings.ts` and store `copyProjectSettings` / `pasteProjectSettings`.
-
 ## History
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.11.0** (2026-11-26) — Thumbnail Studio aligned with Screensaver (frames, composition toolbar, project cards); shared context menus + select all; Upscaler batch context menu; Download all ZIP for Screensaver/Thumbnails.
+- 2026-11-25 — Screensaver and Thumbnail **Download all** bundles ready outputs into one ZIP (`storedZip.ts`, `downloadAllProjectOutputs`, `downloadAllProjects`); Image Upscaler unchanged (server ZIP).
+- 2026-11-25 — Thumbnail Studio: Screensaver-style frame picker (bundled + uploaded PNGs), composition canvas toolbar (fit/crop/undo), and project cards with checkboxes + status pills (`ThumbnailControls.vue`, `ThumbnailEditorCanvas.vue`, `ThumbnailProjectList.vue`, `thumbnailEditorSlice.ts`).
+- 2026-11-25 — Shared studio project card context menu shell (`AppStudioContextMenu*.vue`); Screensaver menu refactored; Thumbnail project list right-click menu with bulk duplicate/download/rename/delete; Select all / Deselect all on Screensaver, Thumbnail, and Upscaler menus.
+- 2026-11-25 — Thumbnail copy/paste project settings (badges, export, composition, frame) via `copyProjectSettings.ts` and store `copyProjectSettings` / `pasteProjectSettings`.
+- 2026-11-25 — Image Upscaler batch context menu + source info + copy/paste upscale settings (`ImageBatchContextMenu.vue`, `batchItemActions.ts`, `copyUpscaleSettings.ts`).
 - Release **v1.10.0** (2026-11-24) — Screensaver project selection + context menu copy/paste settings; subscribe-animation cache upload limit + durable channel avatars on disk.
 - 2026-11-24 — Screensaver project list: per-card selection checkboxes, right-click context menu, copy/paste project settings (bulk paste) via `copyProjectSettings.ts`, `ScreensaverProjectContextMenu.vue`, store `copyProjectSettings` / `pasteProjectSettings`.
 - 2026-11-24 — Subscribe animation cache entry upload: multer per-frame cap 80 MB (was 12 MB); preload channel avatar before `renderSubscribeAnimationFrames`; settings UI avatars use `/api/youtube-channel-avatar` proxy (`youtubeChannelAvatarImgSrc` in `youtubeChannelLookup.ts`).

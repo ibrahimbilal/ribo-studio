@@ -65,6 +65,9 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Looper → Screensaver | `client/.../audio-looper/lib/sendToScreensaver.ts`, `sendToScreensaverSelection.ts`, `LooperSendToScreensaver.vue`, `POST /api/screensaver/audio/from-looper-plan`, `POST /api/screensaver/audio/:id/clone-order` |
 | Screensaver Export All | `client/.../frame-screensaver/lib/exportAllPlan.ts`, `ScreensaverProjectList.vue`, store `exportAllProjects` |
 | Screensaver copy/paste settings | `client/.../frame-screensaver/lib/copyProjectSettings.ts`, `ScreensaverProjectContextMenu.vue` |
+| Thumbnail composition / frames | `client/.../thumbnail-studio/components/ThumbnailEditorCanvas.vue`, `ThumbnailControls.vue`, `stores/thumbnailEditorSlice.ts` |
+| Studio project context menus | `client/src/components/ui/AppStudioContextMenu*.vue` |
+| Download-all ZIP (Screensaver/Thumbnails) | `client/src/lib/storedZip.ts` |
 | Shared UI look | `client/src/style.css`, `client/src/components/ui/` |
 | New app route | `router.ts`, `navigation.ts`, new `client/src/apps/<name>/` |
 

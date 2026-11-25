@@ -10,14 +10,18 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
-### Changed
-
-- Screensaver and Thumbnails: **Download all** saves a single ZIP instead of multiple separate files.
+## [1.11.0] — 2026-11-26
 
 ### Added
 
 - Thumbnail Studio: frame picker (bundled and uploaded PNGs, shared with Screensaver), composition toolbar on the preview canvas (fit, crop, zoom, undo), and project cards aligned with Screensaver (checkboxes and status pills).
-- Shared project-card context menu (`AppStudioContextMenu`) used by Screensaver and Thumbnails; Thumbnail cards support right-click actions and multi-select.
+- Shared project-card context menu (`AppStudioContextMenu`) used by Screensaver and Thumbnails; Thumbnail cards support right-click actions, multi-select, and copy/paste project settings.
+- Image Upscaler: batch context menu with select-all / deselect-all, source info, and copy/paste upscale settings.
+- Screensaver and Thumbnail project context menus: **Select all** / **Deselect all**.
+
+### Changed
+
+- Screensaver and Thumbnails: **Download all** saves a single ZIP instead of multiple separate files.
 
 ## [1.10.0] — 2026-11-24
 
