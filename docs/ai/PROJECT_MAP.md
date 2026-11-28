@@ -67,6 +67,7 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Screensaver copy/paste settings | `client/.../frame-screensaver/lib/copyProjectSettings.ts`, `ScreensaverProjectContextMenu.vue` |
 | Thumbnail composition / frames | `client/.../thumbnail-studio/components/ThumbnailEditorCanvas.vue`, `ThumbnailControls.vue`, `stores/thumbnailEditorSlice.ts` |
 | Studio project context menus | `client/src/components/ui/AppStudioContextMenu*.vue` |
+| Shared frame picker | `client/src/components/ui/AppFramePickerList.vue`, `client/src/apps/frame-screensaver/lib/defaultFrames.ts`, `client/src/assets/frames/` |
 | Download-all ZIP (Screensaver/Thumbnails) | `client/src/lib/storedZip.ts` |
 | Shared UI look | `client/src/style.css`, `client/src/components/ui/` |
 | New app route | `router.ts`, `navigation.ts`, new `client/src/apps/<name>/` |

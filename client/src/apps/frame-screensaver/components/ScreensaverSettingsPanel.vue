@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Eye, RotateCcw, SquareSplitHorizontal, Trash2, X } from '@lucide/vue'
+import { Eye, RotateCcw, SquareSplitHorizontal } from '@lucide/vue'
 import { ADJUSTMENT_FIELDS } from '@shared/screensaverAdjust'
-import { FRAME_FILE_LIMIT } from '@shared/screensaverFrames'
 import { DURATION_PRESETS, SCREENSAVER_OUTPUTS } from '@shared/screensaver'
 import {
   SUBSCRIBE_ANIMATION_DURATION_SEC,
@@ -24,8 +23,8 @@ import {
 } from '@shared/screensaverSubscribeAnimation'
 import AdvancedAudioControls from '../../../components/audio/AdvancedAudioControls.vue'
 import AudioFileField from '../../../components/audio/AudioFileField.vue'
-import FileDropZone from '../../../components/FileDropZone.vue'
 import SettingsAccordion from '../../../components/SettingsAccordion.vue'
+import AppFramePickerList from '../../../components/ui/AppFramePickerList.vue'
 import YoutubeChannelSelector from '../../../components/YoutubeChannelSelector.vue'
 import AppRadio from '../../../components/ui/AppRadio.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
@@ -33,7 +32,6 @@ import SliderField from '../../../components/SliderField.vue'
 import ToggleSwitch from '../../../components/ToggleSwitch.vue'
 import { useScreensaverStore } from '../stores/screensaver'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
-import { DEFAULT_FRAMES } from '../lib/defaultFrames'
 import type { SubscribeAnimationPosition } from '@shared/screensaverSubscribeAnimation'
 import { useI18n } from '../../../i18n'
 import { S } from '../lib/screensaverI18n'
@@ -96,22 +94,17 @@ function onSubscribeChannelSelect(channelId: string) {
 }
 
 const customMinutes = defineModel<number>('customMinutes', { default: 60 })
-const frameLimitMb = FRAME_FILE_LIMIT / (1024 * 1024)
 const fpsOptions = computed(() =>
   store.effectiveRenderingMode === 'optimized-cfr' ? store.SCREENSAVER_CFR_FPS : store.SCREENSAVER_FPS,
 )
 
-function onFrameFiles(files: File[]) {
-  if (files.length > 0) void store.uploadFrames(files)
-}
-
-function clearSelectedFrame(frameId: string): void {
-  if (store.composition.frameId !== frameId) return
+function onFrameSelect(frameId: string): void {
   store.selectFrame(frameId)
 }
 
-function removeUploadedFrame(frameId: string): void {
-  void store.removeFrame(frameId)
+function onFrameClearSelection(frameId: string): void {
+  if (store.composition.frameId !== frameId) return
+  store.selectFrame(frameId)
 }
 
 function onAudioFiles(files: File[]) {
@@ -329,77 +322,15 @@ const inspectorTabs = computed(() => [
             </div>
           </SettingsAccordion>
           <SettingsAccordion v-show="store.settingsInspector === 'content'" :title="t(S('settings.frames.accordion'))" :open="false">
-            <div v-if="DEFAULT_FRAMES.length > 0" class="grid grid-cols-2 gap-2">
-              <div v-for="frame in DEFAULT_FRAMES" :key="frame.id" class="group/frame relative">
-                <button
-                  class="block w-full cursor-pointer overflow-hidden rounded-md border bg-inset"
-                  :class="store.composition.frameId === frame.id ? 'border-brand ring-1 ring-brand' : 'border-zinc-700 hover:border-zinc-500'"
-                  type="button"
-                  :aria-pressed="store.composition.frameId === frame.id"
-                  :title="frame.name"
-                  @click="store.selectFrame(frame.id)"
-                >
-                  <img
-                    :src="frame.thumbUrl"
-                    :alt="frame.name"
-                    width="150"
-                    loading="lazy"
-                    decoding="async"
-                    class="aspect-video w-full object-contain"
-                  />
-                </button>
-                <button
-                  v-if="store.composition.frameId === frame.id"
-                  class="absolute inset-0 flex cursor-pointer items-center justify-center rounded-md bg-black/55 opacity-0 transition-opacity duration-150 group-hover/frame:opacity-100"
-                  type="button"
-                  :aria-label="t(S('settings.frames.removeFromPreview'), { name: frame.name })"
-                  :title="t(S('settings.frames.remove'), { name: frame.name })"
-                  @click.stop="clearSelectedFrame(frame.id)"
-                >
-                  <X :size="22" class="text-white drop-shadow" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-            <FileDropZone
-              class="mt-3"
-              compact
-              accept="image/png,.png"
-              multiple
-              :disabled="store.frameUploading"
-              :label="t(S('settings.frames.uploadLabel'))"
-              :drop-label="t(S('settings.frames.uploadDrop'))"
-              :busy-label="t(S('settings.frames.uploadBusy'))"
-              :hint="t(S('settings.frames.uploadHint'), { mb: frameLimitMb })"
-              @files="onFrameFiles"
+            <AppFramePickerList
+              :selected-frame-id="store.composition.frameId"
+              :uploaded-frames="store.frames"
+              :uploading="store.frameUploading"
+              @select="onFrameSelect"
+              @clear-selection="onFrameClearSelection"
+              @remove-uploaded="(id) => void store.removeFrame(id)"
+              @upload="(files) => void store.uploadFrames(files)"
             />
-            <p v-if="store.frames.length === 0" class="mt-2 text-xs text-zinc-500">
-              {{ t(S('settings.frames.emptyHint')) }}
-            </p>
-            <div v-else class="mt-3 grid grid-cols-2 gap-2">
-              <div v-for="frame in store.frames" :key="frame.id" class="group/frame relative min-w-0">
-                <button
-                  class="block w-full cursor-pointer overflow-hidden rounded-md border bg-inset"
-                  :class="store.composition.frameId === frame.id ? 'border-brand ring-1 ring-brand' : 'border-zinc-700 hover:border-zinc-500'"
-                  type="button"
-                  :aria-pressed="store.composition.frameId === frame.id"
-                  :title="frame.name"
-                  @click="store.selectFrame(frame.id)"
-                >
-                  <img :src="`/api/screensaver/frames/${frame.id}`" :alt="frame.name" class="aspect-video w-full object-contain" />
-                </button>
-                <p class="mt-1 truncate px-0.5 text-xs font-semibold text-zinc-200" :title="frame.name">{{ frame.name }}</p>
-                <button
-                  v-if="store.composition.frameId === frame.id"
-                  class="absolute inset-0 flex cursor-pointer items-center justify-center rounded-md bg-black/55 opacity-0 transition-opacity duration-150 group-hover/frame:opacity-100"
-                  type="button"
-                  :aria-label="t(S('settings.frames.remove'), { name: frame.name })"
-                  :title="t(S('settings.frames.remove'), { name: frame.name })"
-                  @click.stop="removeUploadedFrame(frame.id)"
-                >
-                  <Trash2 :size="20" class="text-white drop-shadow" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
           </SettingsAccordion>
 
           <SettingsAccordion v-show="store.settingsInspector === 'output'" :title="t(S('settings.duration.accordion'))" :open="true">

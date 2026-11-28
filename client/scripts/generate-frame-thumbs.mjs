@@ -13,7 +13,9 @@ const thumbsDir = join(root, 'thumbs')
 
 if (!existsSync(thumbsDir)) mkdirSync(thumbsDir, { recursive: true })
 
-const sources = readdirSync(root).filter((name) => /^frame-\d+\.png$/i.test(name))
+const sources = readdirSync(root).filter(
+  (name) => /^frame-.+\.png$/i.test(name) && name !== 'frame.png',
+)
 if (sources.length === 0) {
   console.error('No frame-*.png files found in', root)
   process.exit(1)

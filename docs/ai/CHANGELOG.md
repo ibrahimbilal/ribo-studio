@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.11.0**).
+Version source of truth: root `package.json` (currently **1.12.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,9 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.12.0** (2026-11-28) — Expanded named bundled frame pack; shared `AppFramePickerList`; Thumbnail badge settings component split.
+- 2026-11-28 — Bundled frames: replace `frame-1`…`frame-13` with named `frame-*.png` assets + thumbs; `defaultFrames` labels from slug; thumb generator accepts any `frame-*.png` (`client/src/assets/frames/`, `generate-frame-thumbs.mjs`).
+- 2026-11-28 — Shared frame picker `AppFramePickerList.vue` wired from Screensaver Settings and Thumbnail Controls; `ThumbnailBadgeSettings.vue` extracted from Thumbnail Controls.
 - Release **v1.11.0** (2026-11-26) — Thumbnail Studio aligned with Screensaver (frames, composition toolbar, project cards); shared context menus + select all; Upscaler batch context menu; Download all ZIP for Screensaver/Thumbnails.
 - 2026-11-25 — Screensaver and Thumbnail **Download all** bundles ready outputs into one ZIP (`storedZip.ts`, `downloadAllProjectOutputs`, `downloadAllProjects`); Image Upscaler unchanged (server ZIP).
 - 2026-11-25 — Thumbnail Studio: Screensaver-style frame picker (bundled + uploaded PNGs), composition canvas toolbar (fit/crop/undo), and project cards with checkboxes + status pills (`ThumbnailControls.vue`, `ThumbnailEditorCanvas.vue`, `ThumbnailProjectList.vue`, `thumbnailEditorSlice.ts`).

@@ -10,6 +10,17 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-11-28
+
+### Added
+
+- Expanded bundled decorative frame pack for Screensaver and Thumbnail Studio (named styles such as museum classic, baroque, oak, and gallery edges), replacing the previous numbered set.
+- Shared frame picker UI (`AppFramePickerList`) used by Screensaver Settings and Thumbnail Controls.
+
+### Changed
+
+- Thumbnail badge settings extracted into `ThumbnailBadgeSettings` for clearer settings layout.
+
 ## [1.11.0] — 2026-11-26
 
 ### Added

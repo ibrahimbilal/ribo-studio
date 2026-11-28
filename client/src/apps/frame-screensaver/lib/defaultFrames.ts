@@ -28,7 +28,8 @@ function idFromBase(base: string): string {
 }
 
 function labelFromBase(base: string): string {
-  return base.replace(/-/g, ' ')
+  const slug = base.replace(/^frame-\d+-/, '').replace(/^frame-/, '')
+  return slug.replace(/-/g, ' ')
 }
 
 function thumbUrlForBase(base: string): string {
