@@ -9,6 +9,7 @@ import ImageComparison from './components/ImageComparison.vue'
 import ImagePreview from './components/ImagePreview.vue'
 import ImageUploader from './components/ImageUploader.vue'
 import UpscaleProgress from './components/UpscaleProgress.vue'
+import UpscaleEngineRail from './components/UpscaleEngineRail.vue'
 import UpscaleSettings from './components/UpscaleSettings.vue'
 import { useImageUpscaler } from './composables/useImageUpscaler'
 
@@ -31,7 +32,8 @@ watch(hasImages, (has) => {
 </script>
 
 <template>
-  <div class="relative flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
+  <div class="relative flex h-full min-h-0 min-w-0 overflow-hidden">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
     <AppMobileTabs v-model="tab" :items="tabs" />
 
     <aside
@@ -92,8 +94,9 @@ watch(hasImages, (has) => {
       class="studio-panel flex min-h-0 w-full shrink-0 flex-col lg:h-full lg:w-[360px] lg:max-w-[360px] lg:flex-none"
       :class="tab === 'settings' ? 'max-h-none flex-1' : 'hidden lg:flex'"
     >
-      <div class="shrink-0 border-b border-zinc-800">
-        <h2 class="px-4 py-4 text-sm font-bold text-zinc-100">{{ t('upscaler.settingsTitle') }}</h2>
+      <div class="shrink-0 border-b border-zinc-800 pb-0 lg:border-b-0">
+        <h2 class="px-4 pb-3 pt-4 text-sm font-bold text-zinc-100">{{ t('upscaler.settingsTitle') }}</h2>
+        <UpscaleEngineRail variant="bar" />
       </div>
       <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <UpscaleSettings />
@@ -105,6 +108,13 @@ watch(hasImages, (has) => {
         </button>
         <button v-if="store.processing" class="btn btn-danger cursor-pointer" type="button" @click="store.cancel()">{{ t('common.cancel') }}</button>
       </div>
+    </aside>
+    </div>
+
+    <aside
+      class="relative z-30 hidden h-full w-16 shrink-0 flex-col overflow-visible border-s border-white/5 studio-shell lg:flex"
+    >
+      <UpscaleEngineRail variant="rail" />
     </aside>
 
     <AppDialog

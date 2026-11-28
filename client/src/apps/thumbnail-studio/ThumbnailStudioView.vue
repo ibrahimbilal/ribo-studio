@@ -1,18 +1,28 @@
 <script setup lang="ts">
-import { Image as ImageIcon, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
+import { FileOutput, Image as ImageIcon, Layers, MonitorPlay, Paintbrush, SlidersHorizontal } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from '../../i18n'
 import AppDialog from '../../components/ui/AppDialog.vue'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
+import AppSettingsTabs from '../../components/ui/AppSettingsTabs.vue'
+import { usePersistedSettingsTab } from '../../composables/usePersistedSettingsTab'
 import ThumbnailEditorCanvas from './components/ThumbnailEditorCanvas.vue'
 import ThumbnailControls from './components/ThumbnailControls.vue'
 import ThumbnailMediaPanel from './components/ThumbnailMediaPanel.vue'
 import ThumbnailProjectList from './components/ThumbnailProjectList.vue'
 import { useThumbnailStore } from './stores/thumbnail'
 
+const THUMBNAIL_INSPECTOR_TABS = ['content', 'output', 'style'] as const
+
 const store = useThumbnailStore()
 const { t } = useI18n()
 const tab = ref<'source' | 'preview' | 'settings'>('preview')
+const inspector = usePersistedSettingsTab('thumbnail', THUMBNAIL_INSPECTOR_TABS, 'content')
+const inspectorTabs = computed(() => [
+  { id: 'content' as const, label: t('thumbnail.settings.tabContent'), icon: Layers },
+  { id: 'output' as const, label: t('thumbnail.settings.tabOutput'), icon: FileOutput },
+  { id: 'style' as const, label: t('thumbnail.settings.tabStyle'), icon: Paintbrush },
+])
 const tabs = computed(() => [
   { id: 'source' as const, label: t('thumbnail.tabSource'), icon: ImageIcon },
   { id: 'preview' as const, label: t('thumbnail.tabPreview'), icon: MonitorPlay },
@@ -43,7 +53,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="relative flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
+  <div class="relative flex h-full min-h-0 min-w-0 overflow-hidden">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
     <AppMobileTabs v-model="tab" :items="tabs" />
 
     <aside
@@ -75,8 +86,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </div>
     </div>
     <ThumbnailControls
+      v-model="inspector"
+      :inspector-tabs="inspectorTabs"
       :class="tab === 'settings' ? 'flex max-h-none min-h-0 flex-1' : 'hidden min-h-0 flex-1 lg:flex'"
     />
+    </div>
+    <AppSettingsTabs v-model="inspector" :items="inspectorTabs" variant="rail" />
     <div v-if="!store.hydrated" class="scrim">
       {{ t('thumbnail.restoring') }}
     </div>

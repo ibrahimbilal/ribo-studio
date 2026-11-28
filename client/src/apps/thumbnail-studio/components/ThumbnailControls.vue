@@ -6,14 +6,14 @@ import SettingsAccordion from '../../../components/SettingsAccordion.vue'
 import AppFramePickerList from '../../../components/ui/AppFramePickerList.vue'
 import { S } from '../../frame-screensaver/lib/screensaverI18n'
 import { useI18n } from '../../../i18n'
-import { usePersistedSettingsTab } from '../../../composables/usePersistedSettingsTab'
+import type { Component } from 'vue'
 import { stylePreviewSvgUrl } from '../lib/badgeAssets'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
 import SliderField from '../../../components/SliderField.vue'
 import ThumbnailBadgeSettings from './ThumbnailBadgeSettings.vue'
 import { useThumbnailStore } from '../stores/thumbnail'
 
-const THUMBNAIL_TABS = ['content', 'output', 'style'] as const
+type ThumbnailInspectorTab = 'content' | 'output' | 'style'
 
 const store = useThumbnailStore()
 const { t } = useI18n()
@@ -29,12 +29,11 @@ function onFrameClearSelection(frameId: string): void {
   if (store.composition.frameId !== frameId) return
   void store.selectFrame(frameId)
 }
-const group = usePersistedSettingsTab('thumbnail', THUMBNAIL_TABS, 'content')
-const groupTabs = computed(() => [
-  { id: 'content' as const, label: t('thumbnail.settings.tabContent') },
-  { id: 'output' as const, label: t('thumbnail.settings.tabOutput') },
-  { id: 'style' as const, label: t('thumbnail.settings.tabStyle') },
-])
+const group = defineModel<ThumbnailInspectorTab>({ required: true })
+
+defineProps<{
+  inspectorTabs: Array<{ id: ThumbnailInspectorTab; label: string; icon: Component }>
+}>()
 
 const badges = computed(() => [
   { id: 'resolution' as const, title: t('thumbnail.settings.resolutionBadge') },
@@ -60,11 +59,11 @@ function onExportSize(event: Event): void {
 
 <template>
   <aside class="studio-panel flex h-full min-h-0 w-full shrink-0 flex-col lg:w-[360px] lg:max-w-[360px] lg:flex-none">
-    <div class="shrink-0 border-b border-zinc-800">
-      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">{{ t('thumbnail.settings.title') }}</h2>
-      <AppSettingsTabs v-model="group" :items="groupTabs" />
+    <div class="shrink-0 border-b border-zinc-800 px-4 pb-0 pt-4 lg:border-b-0 lg:pb-3">
+      <h2 class="text-sm font-bold text-zinc-100">{{ t('thumbnail.settings.title') }}</h2>
+      <AppSettingsTabs v-model="group" :items="inspectorTabs" variant="bar" />
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
       <Transition name="settings-pane" mode="out-in">
         <div v-if="group === 'content'" key="content">
           <SettingsAccordion :title="t(S('settings.frames.accordion'))" :open="false">

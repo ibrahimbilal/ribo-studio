@@ -37,7 +37,7 @@ async function confirmDeleteAll() {
 </script>
 
 <template>
-  <aside class="flex h-full min-h-0 flex-col bg-sidebar">
+  <aside class="flex h-full min-h-0 flex-col">
     <div class="space-y-3 border-b border-zinc-800 p-4">
       <label class="block">
         <span class="section-label mb-1 block">{{ t('imageMotion.library.project') }}</span>

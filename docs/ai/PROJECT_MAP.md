@@ -69,6 +69,8 @@ Router: `client/src/app/router.ts`. Nav: `client/src/app/navigation.ts`.
 | Studio project context menus | `client/src/components/ui/AppStudioContextMenu*.vue` |
 | Shared frame picker | `client/src/components/ui/AppFramePickerList.vue`, `client/src/apps/frame-screensaver/lib/defaultFrames.ts`, `client/src/assets/frames/` |
 | Download-all ZIP (Screensaver/Thumbnails) | `client/src/lib/storedZip.ts` |
+| Settings inspector tabs / rails | `client/src/components/ui/AppSettingsTabs.vue` |
+| Upscaler engine rail | `client/src/apps/image-upscaler/components/UpscaleEngineRail.vue` |
 | Shared UI look | `client/src/style.css`, `client/src/components/ui/` |
 | New app route | `router.ts`, `navigation.ts`, new `client/src/apps/<name>/` |
 

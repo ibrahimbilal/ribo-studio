@@ -13,7 +13,6 @@ Tailwind utilities come from `@theme`:
 | `--color-brand` | `bg-brand`, `text-brand` | Primary actions and active navigation |
 | `--color-app` | `bg-app` | Application background |
 | `--color-chrome` | `bg-chrome` | Sidebar, drawer, export rails |
-| `--color-sidebar` | `bg-sidebar` | Editor side panels |
 | `--color-elevated` | `bg-elevated` | Cards and dialogs |
 | `--color-elevated-hover` | `hover:bg-elevated-hover` | Dashboard card hover |
 | `--color-inset` | `bg-inset` | Fields and rows inside a card |
@@ -59,7 +58,7 @@ Motion tokens: `--ease-out-soft`, `--duration-fast` / `--duration-base` / `--dur
 | `AppDialog` | Modal title, body slot, actions slot. Escape and the backdrop emit `cancel`. | What cancel and confirm do |
 | `GlobalSettingsModal` (+ `components/settings/*`) | Application-wide settings shell with category nav | Preference logic lives in `stores/globalSettings.ts` |
 | `AppMobileTabs` | Settings / Preview / Clips rows. `v-model` is the tab id. `hide-from` is `lg` or `xl`. | Which panels that id shows |
-| `AppSettingsTabs` | Settings strip (Shorts: Clip / Style / Output / Sound). `v-model` is the tab id; optional `cols` `3` or `4`. | Which panels that id shows; wrap pane content in `Transition name="settings-pane"` |
+| `AppSettingsTabs` | Inspector tabs: `variant="rail"` is a full-height chrome column **outside** the settings panel (parent view); `variant="bar"` is the compact text strip inside the panel header on smaller breakpoints. Items need `id`, `label`, and Lucide `icon`. Rail tooltips open to the left. Props: `rail-from` `lg` \| `xl`. | Parent view owns rail + persisted tab; settings body gets `v-model` and optional `variant="bar"` in the header |
 | `AppExportAction` | Primary export button, blocker text, optional hint, extra slot | Store handler, queue label, CPU fallback, status copy |
 | `AppExportStatusPanel` | Export progress card: percent, bar, stat rows; collapsed rail in-flow, open state floats over the studio | Which rows, progress, and tone to pass; when it is allowed to show |
 | `AppEmptyState` | Title and short guidance when nothing is loaded | When the empty state is allowed to show |

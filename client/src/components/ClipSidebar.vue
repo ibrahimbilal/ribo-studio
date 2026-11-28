@@ -98,7 +98,7 @@ function kept(duration: number, start: number, end: number): string {
 
 <template>
   <aside
-    class="flex min-h-0 flex-col border-zinc-800 bg-sidebar xl:border-e"
+    class="flex min-h-0 flex-col border-zinc-800 xl:border-e"
     @dragenter.prevent="onFileDragEnter"
     @dragover.prevent
     @dragleave.prevent="onFileDragLeave"

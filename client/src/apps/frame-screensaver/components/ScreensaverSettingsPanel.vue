@@ -28,6 +28,7 @@ import AppFramePickerList from '../../../components/ui/AppFramePickerList.vue'
 import YoutubeChannelSelector from '../../../components/YoutubeChannelSelector.vue'
 import AppRadio from '../../../components/ui/AppRadio.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
+import type { SettingsTabItem } from '../../../components/ui/AppSettingsTabs.vue'
 import SliderField from '../../../components/SliderField.vue'
 import ToggleSwitch from '../../../components/ToggleSwitch.vue'
 import { useScreensaverStore } from '../stores/screensaver'
@@ -41,6 +42,10 @@ import { SUBSCRIBE_STYLE_I18N } from '../lib/subscribeStyleI18n'
 const store = useScreensaverStore()
 const globalSettings = useGlobalSettingsStore()
 const { t } = useI18n()
+
+defineProps<{
+  inspectorTabs: SettingsTabItem<'content' | 'output' | 'sound' | 'style'>[]
+}>()
 
 const POSITION_I18N: Record<SubscribeAnimationPosition, string> = {
   'bottom-left': 'settings.subscribe.positions.bottomLeft',
@@ -164,21 +169,15 @@ function onCustomMinutes() {
   store.setCustomDurationMinutes(customMinutes.value)
 }
 
-const inspectorTabs = computed(() => [
-  { id: 'content' as const, label: t(S('settings.inspector.content')) },
-  { id: 'output' as const, label: t(S('settings.inspector.output')) },
-  { id: 'sound' as const, label: t(S('settings.inspector.sound')) },
-  { id: 'style' as const, label: t(S('settings.inspector.style')) },
-])
 </script>
 
 <template>
   <div class="flex h-full min-h-0 flex-col">
-    <div class="shrink-0 border-b border-zinc-800">
-      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">{{ t(S('settings.title')) }}</h2>
-      <AppSettingsTabs v-model="store.settingsInspector" :items="inspectorTabs" :cols="4" />
+    <div class="shrink-0 border-b border-zinc-800 px-4 pb-0 pt-4 lg:border-b-0 lg:pb-3">
+      <h2 class="text-sm font-bold text-zinc-100">{{ t(S('settings.title')) }}</h2>
+      <AppSettingsTabs v-model="store.settingsInspector" :items="inspectorTabs" variant="bar" />
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
       <Transition name="settings-pane" mode="out-in">
         <div :key="store.settingsInspector">
           <SettingsAccordion v-show="store.settingsInspector === 'content'" :title="t(S('settings.subscribe.accordion'))" :open="true">

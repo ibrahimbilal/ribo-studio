@@ -107,6 +107,10 @@ export const upscaler = {
       'The finished file uses this size, in the same format as the upload. JPEG is written at quality 100.',
     factorAutoHint:
       'Auto picks a uniform factor up to 4×. AI Lite always infers at native 4×, then resizes to the effective factor.',
+    factorResultLabel: 'Output size',
+    factorResultScale: '{scale}×',
+    factorResultScaleAuto: '{scale}× auto',
+    factorResultPickImage: 'Select an image to preview output dimensions.',
     scaleAuto: 'Auto',
   },
   toast: {

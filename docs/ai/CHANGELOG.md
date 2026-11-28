@@ -1,7 +1,7 @@
 # Changelog (agent notes)
 
 Detailed dated development notes for Ribo Studio agents.
-Version source of truth: root `package.json` (currently **1.12.0**).
+Version source of truth: root `package.json` (currently **1.13.0**).
 User-facing Keep a Changelog: root [`CHANGELOG.md`](../../CHANGELOG.md).
 Releases: `.cursor/rules/versioning.mdc` + `.cursor/skills/release-manager/`.
 
@@ -13,6 +13,9 @@ Changes since the current `package.json` version. User-facing bullets also belon
 
 Dated notes for work included in current and earlier builds. Explicit package bumps use a `Release **vX.Y.Z**` line.
 
+- Release **v1.13.0** (2026-11-28) — Desktop icon settings rails across apps; Upscaler engine rail + scale result dimensions; Shorts mode rail; `@lucide/vue` bump.
+- 2026-11-28 — `AppSettingsTabs` gains `rail` / `bar` / `responsive` variants with icons; studio views host a right-edge rail (Ranking/Image Motion, Screensaver, Thumbnails, Looper); ShortsModeBar rail; Global Settings modal alignment.
+- 2026-11-28 — Image Upscaler: `UpscaleEngineRail.vue`; settings show resolved export dimensions for selected image; engine picker removed from settings body.
 - Release **v1.12.0** (2026-11-28) — Expanded named bundled frame pack; shared `AppFramePickerList`; Thumbnail badge settings component split.
 - 2026-11-28 — Bundled frames: replace `frame-1`…`frame-13` with named `frame-*.png` assets + thumbs; `defaultFrames` labels from slug; thumb generator accepts any `frame-*.png` (`client/src/assets/frames/`, `generate-frame-thumbs.mjs`).
 - 2026-11-28 — Shared frame picker `AppFramePickerList.vue` wired from Screensaver Settings and Thumbnail Controls; `ThumbnailBadgeSettings.vue` extracted from Thumbnail Controls.

@@ -1,19 +1,23 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
 import { computed, ref } from 'vue'
 import { AUDIO_LOOPER_BITRATES, AUDIO_LOOPER_FORMATS, type AudioLooperFormat, type AudioLooperLoopMode } from '@shared/audioLooper'
 import ToggleSwitch from '../../../components/ToggleSwitch.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
-import { usePersistedSettingsTab } from '../../../composables/usePersistedSettingsTab'
 import { useI18n, type MessageKey } from '../../../i18n'
 import { formatDurationLabelI18n } from '../../../lib/formatDurationLabelI18n'
 import { useAudioLooperStore } from '../stores/audioLooper'
 
-const LOOPER_TABS = ['duration', 'loop', 'output'] as const
+type LooperInspectorTab = 'duration' | 'loop' | 'output'
 
 const store = useAudioLooperStore()
 const { t } = useI18n()
 const customMinutes = ref(60)
-const inspector = usePersistedSettingsTab('looper', LOOPER_TABS, 'duration')
+const inspector = defineModel<LooperInspectorTab>({ required: true })
+
+defineProps<{
+  inspectorTabs: Array<{ id: LooperInspectorTab; label: string; icon: Component }>
+}>()
 
 const outputDurationLabel = computed(() => formatDurationLabelI18n(store.targetDurationSeconds, t))
 
@@ -27,12 +31,6 @@ const DURATION_PRESET_I18N: Record<number, MessageKey> = {
   [10 * 60 * 60]: 'looper.presets.h10',
   [12 * 60 * 60]: 'looper.presets.h12',
 }
-
-const inspectorTabs = computed(() => [
-  { id: 'duration' as const, label: t('looper.settings.tabDuration') },
-  { id: 'loop' as const, label: t('looper.settings.tabLoop') },
-  { id: 'output' as const, label: t('looper.settings.tabOutput') },
-])
 
 function presetLabel(seconds: number, fallback: string): string {
   const key = DURATION_PRESET_I18N[seconds]
@@ -58,11 +56,11 @@ function setBitrate(value: string): void {
 
 <template>
   <div class="flex h-full min-h-0 flex-col">
-    <div class="shrink-0 border-b border-zinc-800">
-      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">{{ t('looper.settings.title') }}</h2>
-      <AppSettingsTabs v-model="inspector" :items="inspectorTabs" />
+    <div class="shrink-0 border-b border-zinc-800 px-4 pb-0 pt-4 lg:border-b-0 lg:pb-3">
+      <h2 class="text-sm font-bold text-zinc-100">{{ t('looper.settings.title') }}</h2>
+      <AppSettingsTabs v-model="inspector" :items="inspectorTabs" variant="bar" />
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4">
       <Transition name="settings-pane" mode="out-in">
         <div v-if="inspector === 'duration'" key="duration" class="space-y-3">
           <div class="grid grid-cols-2 gap-2">

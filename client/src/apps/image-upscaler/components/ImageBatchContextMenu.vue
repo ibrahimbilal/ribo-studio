@@ -40,6 +40,11 @@ function chooseAndClose(event: () => void) {
   event()
   emit('close')
 }
+
+function toggleSelectAll(): void {
+  if (props.allItemsSelected) emit('deselectAll')
+  else emit('selectAll')
+}
 </script>
 
 <template>
@@ -103,9 +108,7 @@ function chooseAndClose(event: () => void) {
         "
         :icon="SquareCheckBig"
         muted
-        @select="
-          chooseAndClose(() => emit(allItemsSelected ? 'deselectAll' : 'selectAll'))
-        "
+        @select="chooseAndClose(toggleSelectAll)"
       />
     </template>
   </AppStudioContextMenu>

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { AudioLines, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
+import { AudioLines, Clock, FileOutput, MonitorPlay, Repeat, SlidersHorizontal } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from '../../i18n'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
+import AppSettingsTabs from '../../components/ui/AppSettingsTabs.vue'
+import { usePersistedSettingsTab } from '../../composables/usePersistedSettingsTab'
 import AppStudioExportBar from '../../components/ui/AppStudioExportBar.vue'
 import LooperExportBar from './components/LooperExportBar.vue'
 import LooperPreview from './components/LooperPreview.vue'
@@ -11,8 +13,16 @@ import LooperSettings from './components/LooperSettings.vue'
 import LooperSourcePanel from './components/LooperSourcePanel.vue'
 import { useAudioLooperStore } from './stores/audioLooper'
 
+const LOOPER_INSPECTOR_TABS = ['duration', 'loop', 'output'] as const
+
 const store = useAudioLooperStore()
 const { t } = useI18n()
+const inspector = usePersistedSettingsTab('looper', LOOPER_INSPECTOR_TABS, 'duration')
+const inspectorTabs = computed(() => [
+  { id: 'duration' as const, label: t('looper.settings.tabDuration'), icon: Clock },
+  { id: 'loop' as const, label: t('looper.settings.tabLoop'), icon: Repeat },
+  { id: 'output' as const, label: t('looper.settings.tabOutput'), icon: FileOutput },
+])
 const hasSource = computed(() => store.hasSource)
 const tab = ref<'source' | 'preview' | 'settings'>(store.hasSource ? 'preview' : 'source')
 const tabs = computed(() => [
@@ -28,7 +38,8 @@ watch(hasSource, (has) => {
 </script>
 
 <template>
-  <div class="relative flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
+  <div class="relative flex h-full min-h-0 overflow-hidden">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
     <AppMobileTabs v-model="tab" :items="tabs" />
 
     <aside
@@ -60,7 +71,9 @@ watch(hasSource, (has) => {
       class="studio-panel flex min-h-0 w-full shrink-0 flex-col lg:h-full lg:w-[360px] lg:max-w-[360px] lg:flex-none"
       :class="tab === 'settings' ? 'max-h-none flex-1' : 'hidden lg:flex'"
     >
-      <LooperSettings class="min-h-0 flex-1" />
+      <LooperSettings v-model="inspector" :inspector-tabs="inspectorTabs" class="min-h-0 flex-1" />
     </aside>
+    </div>
+    <AppSettingsTabs v-model="inspector" :items="inspectorTabs" variant="rail" />
   </div>
 </template>

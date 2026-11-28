@@ -96,7 +96,7 @@ function setTitleHideAfterEnabled(enabled: boolean) {
 </script>
 
 <template>
-  <aside class="min-h-0 overflow-y-auto border-zinc-800 bg-sidebar">
+  <aside class="min-h-0 overflow-y-auto border-zinc-800">
     <SettingsAccordion v-show="showLook" :title="t('ranking.style.presets')" open>
         <div class="grid grid-cols-2 gap-2">
           <button

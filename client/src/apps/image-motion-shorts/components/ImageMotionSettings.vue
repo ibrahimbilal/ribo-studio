@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
 import { computed } from 'vue'
 import { OUTPUTS, FRAME_RATES } from '@shared/frame'
 import type { MotionEasing } from '@shared/imageMotion'
@@ -7,22 +8,20 @@ import AudioFileField from '../../../components/audio/AudioFileField.vue'
 import SettingsAccordion from '../../../components/SettingsAccordion.vue'
 import SliderField from '../../../components/SliderField.vue'
 import AppSettingsTabs from '../../../components/ui/AppSettingsTabs.vue'
-import { usePersistedSettingsTab } from '../../../composables/usePersistedSettingsTab'
 import { useGlobalSettingsStore } from '../../../stores/globalSettings'
 import { useI18n } from '../../../i18n'
 import { useImageMotionStore } from '../stores/imageMotion'
 
-const IMAGE_MOTION_TABS = ['motion', 'output', 'sound'] as const
+type ImageMotionInspectorTab = 'motion' | 'output' | 'sound'
 
 const store = useImageMotionStore()
 const globalSettings = useGlobalSettingsStore()
 const { t } = useI18n()
-const tab = usePersistedSettingsTab('image-motion', IMAGE_MOTION_TABS, 'motion')
-const tabs = computed(() => [
-  { id: 'motion' as const, label: t('imageMotion.settings.motion') },
-  { id: 'output' as const, label: t('imageMotion.settings.output') },
-  { id: 'sound' as const, label: t('imageMotion.settings.sound') },
-])
+const tab = defineModel<ImageMotionInspectorTab>({ required: true })
+
+defineProps<{
+  inspectorTabs: Array<{ id: ImageMotionInspectorTab; label: string; icon: Component }>
+}>()
 
 const selectedSegment = computed(() => store.selectedSegment)
 const motion = computed(() => selectedSegment.value?.motion)
@@ -44,11 +43,11 @@ const start = computed({
 
 <template>
   <div class="flex h-full min-h-0 flex-col">
-    <div class="shrink-0 border-b border-zinc-800">
-      <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">{{ t('imageMotion.settings.title') }}</h2>
-      <AppSettingsTabs v-model="tab" :items="tabs" :cols="3" />
+    <div class="shrink-0 border-b border-zinc-800 px-4 pb-0 pt-4 xl:border-b-0 xl:pb-3">
+      <h2 class="text-sm font-bold text-zinc-100">{{ t('imageMotion.settings.title') }}</h2>
+      <AppSettingsTabs v-model="tab" :items="inspectorTabs" variant="bar" />
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
       <Transition name="settings-pane" mode="out-in">
         <div :key="tab">
           <div v-if="tab === 'motion' && !selectedSegment" class="px-4 py-8 text-center text-sm text-zinc-500">

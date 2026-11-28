@@ -2,6 +2,7 @@
 import { Image as ImageIcon, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
+import type { Component } from 'vue'
 import AppStudioExportBar from '../../components/ui/AppStudioExportBar.vue'
 import ImageMediaLibrary from './components/ImageMediaLibrary.vue'
 import ImageMotionExportAction from './components/ImageMotionExportAction.vue'
@@ -14,10 +15,17 @@ import { useI18n } from '../../i18n'
 import { formatClock } from '../../lib/format'
 import { useImageMotionStore } from './stores/imageMotion'
 
+type ImageMotionInspectorTab = 'motion' | 'output' | 'sound'
+
 const store = useImageMotionStore()
 const { t } = useI18n()
 const playback = useImageMotionPlayback()
 const tab = ref<'source' | 'preview' | 'settings'>('preview')
+const inspector = defineModel<ImageMotionInspectorTab>({ required: true })
+
+defineProps<{
+  inspectorTabs: Array<{ id: ImageMotionInspectorTab; label: string; icon: Component }>
+}>()
 const tabs = computed(() => [
   { id: 'source' as const, label: t('imageMotion.tabs.images'), icon: ImageIcon },
   { id: 'preview' as const, label: t('imageMotion.tabs.preview'), icon: MonitorPlay },
@@ -60,7 +68,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+  <div class="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0">
     <AppMobileTabs v-model="tab" :items="tabs" hide-from="xl" />
 
     <div class="flex min-h-0 min-w-0 flex-1 gap-3 overflow-hidden">
@@ -80,7 +88,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="studio-panel flex min-h-0 flex-col overflow-hidden xl:flex" :class="tab === 'settings' ? 'flex' : 'hidden'">
-          <ImageMotionSettings class="min-h-0 flex-1" />
+          <ImageMotionSettings v-model="inspector" :inspector-tabs="inspectorTabs" class="min-h-0 flex-1" />
         </div>
       </div>
       <div class="hidden xl:contents">

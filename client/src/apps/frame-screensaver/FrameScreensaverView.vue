@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Image as ImageIcon, ImagePlay, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
+import { FileOutput, Image as ImageIcon, ImagePlay, Layers, MonitorPlay, Paintbrush, SlidersHorizontal, Volume2 } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
+import AppSettingsTabs from '../../components/ui/AppSettingsTabs.vue'
 import AppStudioExportBar from '../../components/ui/AppStudioExportBar.vue'
 import CreateThumbnailAction from '../../components/CreateThumbnailAction.vue'
 import { createThumbnailFromScreensaver } from './lib/createThumbnail'
@@ -29,6 +30,18 @@ const tabs = computed(() => [
   { id: 'preview' as const, label: t(S('tabs.preview')), icon: MonitorPlay },
   { id: 'settings' as const, label: t(S('tabs.settings')), icon: SlidersHorizontal },
 ])
+const inspectorTabs = computed(() => [
+  { id: 'content' as const, label: t(S('settings.inspector.content')), icon: Layers },
+  { id: 'output' as const, label: t(S('settings.inspector.output')), icon: FileOutput },
+  { id: 'sound' as const, label: t(S('settings.inspector.sound')), icon: Volume2 },
+  { id: 'style' as const, label: t(S('settings.inspector.style')), icon: Paintbrush },
+])
+const settingsInspector = computed({
+  get: () => store.settingsInspector,
+  set: (value) => {
+    store.settingsInspector = value
+  },
+})
 const canThumbnail = computed(() => (store.mediaKind === 'image' && Boolean(store.objectUrl)) || Boolean(store.thumbnail?.startsWith('data:')))
 const canSendToImageMotion = computed(() => store.mediaKind === 'image' && Boolean(store.objectUrl))
 
@@ -64,7 +77,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="relative flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
+  <div class="relative flex h-full min-h-0 overflow-hidden">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
     <AppMobileTabs v-model="tab" :items="tabs" />
 
     <aside
@@ -117,12 +131,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       class="studio-panel flex min-h-0 w-full shrink-0 flex-col lg:h-full lg:w-[360px] lg:max-w-[360px] lg:flex-none"
       :class="tab === 'settings' ? 'max-h-none flex-1' : 'hidden lg:flex'"
     >
-      <ScreensaverSettingsPanel v-model:custom-minutes="customMinutes" class="min-h-0 flex-1" />
+      <ScreensaverSettingsPanel
+        v-model:custom-minutes="customMinutes"
+        :inspector-tabs="inspectorTabs"
+        class="min-h-0 flex-1"
+      />
     </aside>
 
     <div class="hidden lg:contents">
       <ScreensaverExportDetails />
     </div>
+    </div>
+    <AppSettingsTabs v-model="settingsInspector" :items="inspectorTabs" variant="rail" />
 
     <div v-if="!store.hydrated" class="scrim">
       {{ t(S('restoring')) }}

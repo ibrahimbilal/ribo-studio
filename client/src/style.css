@@ -9,7 +9,6 @@
   --color-brand-surface: #132d52;
   --color-app: #101114;
   --color-chrome: #0c0d10;
-  --color-sidebar: #16181d;
   --color-elevated: #14161c;
   --color-elevated-hover: #181b24;
   --color-inset: #101114;
@@ -54,7 +53,6 @@
 html[data-theme='light'] {
   --color-app: #f3f4f6;
   --color-chrome: #ffffff;
-  --color-sidebar: #ffffff;
   --color-elevated: #ffffff;
   --color-elevated-hover: #f9fafb;
   --color-inset: #f3f4f6;
@@ -496,27 +494,29 @@ input[type='color'] {
     display: grid;
     min-height: 0;
     flex: 1;
-    grid-template-columns: 12.5rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 3.25rem;
+    overflow: visible;
   }
 
   .global-settings-modal__nav {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: var(--density-gap);
-    border-inline-end: 1px solid var(--color-line);
-    padding: 0.75rem;
+    border-inline-start: 1px solid var(--color-line);
+    padding: 0.5rem 0.35rem;
     overflow-y: auto;
+    overflow-x: visible;
   }
 
   .global-settings-modal__nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    border-radius: 0.55rem;
-    padding: var(--density-nav-pad);
-    text-align: start;
-    font-size: 0.8125rem;
-    font-weight: 600;
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    border-radius: 0.65rem;
     color: var(--color-muted);
     cursor: pointer;
   }
@@ -527,8 +527,8 @@ input[type='color'] {
   }
 
   .global-settings-modal__nav-item--active {
-    background: color-mix(in srgb, var(--color-brand) 22%, transparent);
-    color: var(--color-ink);
+    background: var(--color-brand);
+    color: var(--color-brand-on);
   }
 
   .appearance-theme-grid {
@@ -633,14 +633,16 @@ input[type='color'] {
 
   @media (max-width: 720px) {
     .global-settings-modal__body {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) auto;
     }
 
     .global-settings-modal__nav {
       flex-direction: row;
       flex-wrap: wrap;
-      border-inline-end: 0;
-      border-bottom: 1px solid rgb(255 255 255 / 0.06);
+      justify-content: center;
+      border-inline-start: 0;
+      border-top: 1px solid rgb(255 255 255 / 0.06);
     }
   }
 
@@ -1274,7 +1276,7 @@ html[dir='rtl'] .notif-panel-enter {
 }
 
 .card-reorder-placeholder {
-  background: color-mix(in srgb, var(--color-ink) 7%, var(--color-sidebar)) !important;
+  background: color-mix(in srgb, var(--color-ink) 7%, transparent) !important;
   border-color: transparent !important;
   box-shadow: none !important;
 }

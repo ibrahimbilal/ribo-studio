@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ListVideo, MonitorPlay, SlidersHorizontal } from '@lucide/vue'
+import {
+  CircleSpeedLines,
+  FileOutput,
+  Film,
+  ListVideo,
+  MonitorPlay,
+  Paintbrush,
+  SlidersHorizontal,
+  Volume2,
+} from '@lucide/vue'
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import AppMobileTabs from '../../components/ui/AppMobileTabs.vue'
 import AppSettingsTabs from '../../components/ui/AppSettingsTabs.vue'
@@ -20,6 +29,7 @@ import ShortsModeBar from '../image-motion-shorts/components/ShortsModeBar.vue'
 import { loadShortsMode, saveShortsMode, type ShortsEditorMode } from '../image-motion-shorts/lib/shortsMode'
 
 const RANKING_INSPECTOR_TABS = ['clip', 'look', 'output', 'sound'] as const
+const IMAGE_MOTION_INSPECTOR_TABS = ['motion', 'output', 'sound'] as const
 
 const store = useProjectStore()
 const { t } = useI18n()
@@ -28,16 +38,22 @@ watch(editorMode, (mode) => saveShortsMode(mode))
 const playback = usePlayback()
 const tab = ref<'clips' | 'preview' | 'edit'>('preview')
 const inspector = usePersistedSettingsTab('ranking', RANKING_INSPECTOR_TABS, 'look')
+const imageMotionInspector = usePersistedSettingsTab('image-motion', IMAGE_MOTION_INSPECTOR_TABS, 'motion')
 const tabs = computed(() => [
   { id: 'clips' as const, label: t('ranking.tabs.clips'), icon: ListVideo },
   { id: 'preview' as const, label: t('ranking.tabs.preview'), icon: MonitorPlay },
   { id: 'edit' as const, label: t('ranking.tabs.edit'), icon: SlidersHorizontal },
 ])
 const inspectorTabs = computed(() => [
-  { id: 'clip' as const, label: t('ranking.inspector.clip') },
-  { id: 'look' as const, label: t('ranking.inspector.look') },
-  { id: 'sound' as const, label: t('ranking.inspector.sound') },
-  { id: 'output' as const, label: t('ranking.inspector.output') },
+  { id: 'clip' as const, label: t('ranking.inspector.clip'), icon: Film },
+  { id: 'look' as const, label: t('ranking.inspector.look'), icon: Paintbrush },
+  { id: 'sound' as const, label: t('ranking.inspector.sound'), icon: Volume2 },
+  { id: 'output' as const, label: t('ranking.inspector.output'), icon: FileOutput },
+])
+const imageMotionInspectorTabs = computed(() => [
+  { id: 'motion' as const, label: t('imageMotion.settings.motion'), icon: CircleSpeedLines },
+  { id: 'output' as const, label: t('imageMotion.settings.output'), icon: FileOutput },
+  { id: 'sound' as const, label: t('imageMotion.settings.sound'), icon: Volume2 },
 ])
 
 function styleFocus(): 'look' | 'sound' | 'output' {
@@ -86,10 +102,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative flex h-full min-h-0 flex-col gap-2 overflow-hidden p-3 text-zinc-100">
-    <ShortsModeBar v-model="editorMode" />
-    <ImageMotionShortsView v-if="editorMode === 'image-motion'" class="min-h-0 flex-1" />
-    <template v-else>
+  <div class="relative flex h-full min-h-0 overflow-hidden text-zinc-100">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <ShortsModeBar v-model="editorMode" variant="bar" rail-from="xl" />
+      <ImageMotionShortsView
+        v-if="editorMode === 'image-motion'"
+        v-model="imageMotionInspector"
+        :inspector-tabs="imageMotionInspectorTabs"
+        class="min-h-0 flex-1"
+      />
+      <template v-else>
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden p-3">
     <AppMobileTabs v-model="tab" :items="tabs" hide-from="xl" />
 
     <div class="flex min-h-0 min-w-0 flex-1 gap-3 overflow-hidden">
@@ -113,20 +136,19 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="studio-panel flex min-h-0 flex-col overflow-hidden xl:flex" :class="tab === 'edit' ? 'flex' : 'hidden'">
-          <div class="shrink-0 border-b border-zinc-800">
-            <h2 class="px-4 pt-4 text-sm font-bold text-zinc-100">{{ t('ranking.settingsTitle') }}</h2>
-            <AppSettingsTabs v-model="inspector" :items="inspectorTabs" :cols="4" />
+          <div class="shrink-0 border-b border-zinc-800 px-4 pb-0 pt-4 xl:border-b-0 xl:pb-3">
+            <h2 class="text-sm font-bold text-zinc-100">{{ t('ranking.settingsTitle') }}</h2>
+            <AppSettingsTabs v-model="inspector" :items="inspectorTabs" variant="bar" />
           </div>
-          <div class="min-h-0 flex-1 overflow-y-auto">
+          <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
             <Transition name="settings-pane" mode="out-in">
-              <div v-if="inspector === 'clip'" key="clip" class="h-full w-full">
+              <div v-if="inspector === 'clip'" key="clip" class="w-full">
                 <SelectedClipPanel class="h-full w-full" />
                 <p v-if="!store.selectedClip" class="px-4 pb-4 mt-3 text-xs text-zinc-500">{{ t('ranking.selectClipHint') }}</p>
               </div>
               <StylePanel
                 v-else
                 :key="inspector"
-                class="h-full w-full"
                 :focus="styleFocus()"
               />
             </Transition>
@@ -137,10 +159,35 @@ onBeforeUnmount(() => {
         <RankingExportDetails />
       </div>
     </div>
+    </div>
 
     <div v-if="!store.hydrated" class="scrim">
       {{ t('ranking.restoringProject') }}
     </div>
-    </template>
+      </template>
+    </div>
+
+    <aside
+      class="relative z-30 hidden h-full w-16 shrink-0 flex-col overflow-visible border-s border-white/5 studio-shell xl:flex"
+    >
+      <ShortsModeBar v-model="editorMode" variant="rail" rail-from="xl" />
+      <div class="mx-2 border-t border-white/5" aria-hidden="true" />
+      <AppSettingsTabs
+        v-if="editorMode === 'ranking'"
+        v-model="inspector"
+        :items="inspectorTabs"
+        variant="rail"
+        rail-from="xl"
+        embedded
+      />
+      <AppSettingsTabs
+        v-else
+        v-model="imageMotionInspector"
+        :items="imageMotionInspectorTabs"
+        variant="rail"
+        rail-from="xl"
+        embedded
+      />
+    </aside>
   </div>
 </template>

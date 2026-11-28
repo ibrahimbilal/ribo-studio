@@ -114,20 +114,6 @@ onBeforeUnmount(() => {
           </header>
 
           <div class="global-settings-modal__body">
-            <nav class="global-settings-modal__nav" :aria-label="t('settings.categoriesNav')">
-              <button
-                v-for="item in categories"
-                :key="item.id"
-                class="global-settings-modal__nav-item"
-                type="button"
-                :class="{ 'global-settings-modal__nav-item--active': store.activeCategory === item.id }"
-                :aria-current="store.activeCategory === item.id ? 'page' : undefined"
-                @click="store.setCategory(item.id)"
-              >
-                <component :is="item.icon" :size="16" class="shrink-0" />
-                <span>{{ item.label }}</span>
-              </button>
-            </nav>
             <div class="global-settings-modal__content">
               <SettingsGeneralPanel v-if="store.activeCategory === 'general'" />
               <SettingsAppearancePanel v-else-if="store.activeCategory === 'appearance'" />
@@ -138,6 +124,26 @@ onBeforeUnmount(() => {
               <SettingsBackupPanel v-else-if="store.activeCategory === 'backup'" />
               <SettingsAboutPanel v-else />
             </div>
+            <nav class="global-settings-modal__nav" :aria-label="t('settings.categoriesNav')">
+              <button
+                v-for="item in categories"
+                :key="item.id"
+                class="global-settings-modal__nav-item group focus-ring"
+                type="button"
+                :class="{ 'global-settings-modal__nav-item--active': store.activeCategory === item.id }"
+                :aria-current="store.activeCategory === item.id ? 'page' : undefined"
+                :aria-label="item.label"
+                @click="store.setCategory(item.id)"
+              >
+                <component :is="item.icon" :size="18" class="shrink-0" />
+                <span
+                  class="pointer-events-none absolute end-[calc(100%+0.5rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+                  role="tooltip"
+                >
+                  {{ item.label }}
+                </span>
+              </button>
+            </nav>
           </div>
         </div>
       </div>

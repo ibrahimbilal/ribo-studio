@@ -52,7 +52,7 @@ function onTitleColor(event: Event) {
 </script>
 
 <template>
-  <aside v-if="store.selectedClip" class="flex min-h-0 flex-col border-zinc-800 bg-sidebar xl:border-e">
+  <aside v-if="store.selectedClip" class="flex min-h-0 flex-col border-zinc-800 xl:border-e">
     <div class="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
       <p class="section-label">{{ t('ranking.selectedClip.title') }}</p>
       <button class="text-zinc-400 cursor-pointer" type="button" :aria-label="t('ranking.selectedClip.close')" :title="t('common.close')" @click="store.closeSelectedPanel">

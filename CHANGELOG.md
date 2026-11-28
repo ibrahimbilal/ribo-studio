@@ -10,6 +10,18 @@ Detailed agent-oriented development notes: `docs/ai/CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-11-28
+
+### Added
+
+- Desktop settings **icon rails** across studio apps (Shorts Ranking / Image Motion, Screensaver, Thumbnails, Audio Looper, Image Upscaler) via `AppSettingsTabs` rail mode; Shorts mode switch also uses a vertical icon rail.
+- Image Upscaler: engine chooser moved to a dedicated rail (`UpscaleEngineRail`); Scale Factor shows the resolved source → output size for the selected image.
+
+### Changed
+
+- Settings inspector tabs support bar/rail/responsive variants with icons; Global Settings and editor panels use the shared pattern.
+- Lucide icons package updated (`@lucide/vue`).
+
 ## [1.12.0] — 2026-11-28
 
 ### Added
